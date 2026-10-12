@@ -6,7 +6,6 @@
  */
 import Anthropic from '@anthropic-ai/sdk';
 import type { ModelId } from '../state';
-import { obj } from './schema';
 
 export interface ModelInfo {
   id: ModelId;
@@ -44,6 +43,8 @@ export interface JsonCall {
   maxTokens?: number;
   effort?: Effort;
   signal?: AbortSignal;
+  /** 收到回應就回報用量（即使之後因格式或截斷而失敗，也已經計費） */
+  onUsage?: (input: number, output: number) => void;
 }
 
 export interface JsonResult<T> {
@@ -68,7 +69,8 @@ export async function callJSON<T>(req: JsonCall): Promise<JsonResult<T>> {
     res = await client(req.apiKey).messages.create(
       {
         model: req.model,
-        max_tokens: req.maxTokens ?? 1500,
+        // 這是上限不是用量；模型思考的 token 也算在內，所以給寬一點
+        max_tokens: req.maxTokens ?? 4000,
         system: req.system,
         messages: req.messages,
         output_config: {
@@ -81,6 +83,7 @@ export async function callJSON<T>(req: JsonCall): Promise<JsonResult<T>> {
   } catch (e) {
     throw toTutorError(e);
   }
+  req.onUsage?.(res.usage.input_tokens, res.usage.output_tokens);
   if (res.stop_reason === 'refusal') throw new TutorError('這個請求被模型拒絕了，換個說法再試一次。', 'refusal');
   if (res.stop_reason === 'max_tokens') throw new TutorError('回覆太長被截斷了，請再試一次。', 'invalid');
   const text = res.content
@@ -118,14 +121,22 @@ export function toTutorError(e: unknown): TutorError {
   return new TutorError('發生未預期的錯誤，請再試一次。', 'other');
 }
 
-/** 用一個很小的請求確認金鑰可用 */
-export async function testConnection(apiKey: string, model: string): Promise<JsonResult<{ greeting: string }>> {
-  return callJSON<{ greeting: string }>({
-    apiKey,
-    model,
-    system: 'Reply with a short Japanese greeting.',
-    messages: [{ role: 'user', content: '請用一句日文跟我打招呼。' }],
-    schema: obj({ greeting: { type: 'string' } }),
-    maxTokens: 200,
-  });
+/** 用一個很小的請求確認金鑰可用：只要 API 回應成功就算通過 */
+export async function testConnection(apiKey: string, model: string): Promise<{ greeting: string; input: number; output: number }> {
+  try {
+    const res = await client(apiKey).messages.create({
+      model,
+      max_tokens: 1024,
+      system: 'Reply with one short Japanese greeting only.',
+      messages: [{ role: 'user', content: '請用一句日文跟我打招呼。' }],
+    });
+    const text = res.content
+      .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+      .map((b) => b.text)
+      .join('')
+      .trim();
+    return { greeting: text.slice(0, 60) || 'こんにちは', input: res.usage.input_tokens, output: res.usage.output_tokens };
+  } catch (e) {
+    throw toTutorError(e);
+  }
 }

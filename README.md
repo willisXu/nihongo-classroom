@@ -19,7 +19,7 @@
 
 ### Windows
 
-雙擊資料夾裡的 **`start-windows.bat`**。第一次會自動安裝套件（約 1～2 分鐘），之後瀏覽器會自動開啟 `http://localhost:5173`。
+雙擊資料夾裡的 **`start-windows.bat`**。第一次會自動安裝套件（約 1～2 分鐘），接著建置網站，瀏覽器會自動開啟 `http://localhost:5288`。
 
 ### macOS
 
@@ -36,11 +36,13 @@ cd nihongo-classroom
 
 ```bash
 npm install
-npm run dev        # 開發模式，http://localhost:5173
-npm run build      # 建置到 dist/
-npm run preview    # 預覽建置結果
+npm start          # 建置後開啟 http://localhost:5288（日常使用）
+npm run dev        # 開發模式，改程式會即時更新，同樣是 http://localhost:5288
+npm run build      # 型別檢查＋建置到 dist/
 npm test           # 單元測試與內容檢查
 ```
+
+> 學習紀錄存在瀏覽器裡，而且是跟著網址（含連接埠）走的。請固定用 `http://localhost:5288` 開啟，換了網址或連接埠，紀錄會看起來像不見了（其實還留在原本的網址）。
 
 ---
 
@@ -62,6 +64,7 @@ AI 家教直接從你的瀏覽器呼叫 [Claude API](https://platform.claude.com
 說明：
 
 - 金鑰只存在你自己瀏覽器的 localStorage，請求直接送到 `api.anthropic.com`，不經過任何其他伺服器。匯出的備份檔不包含金鑰。
+- localStorage 是同一個網址來源共用的：在本機請固定用 5288 埠（不要和其他會讀 localStorage 的專案共用同一個埠）；部署到 GitHub Pages 時，同一個帳號底下的所有 Pages 網站共用 `<帳號>.github.io` 這個來源，如果你還有放別人寫的程式的 Pages 網站，建議改用自己的網域或不要在線上版存金鑰。
 - 因為是從瀏覽器直接呼叫，SDK 需要 `dangerouslyAllowBrowser: true`。這個網站適合**自己用**；不要把存有金鑰的瀏覽器借給別人，也不要把金鑰寫進程式碼。
 - 可選模型：Claude Haiku 5.5（最省）、Claude Sonnet 5.5（預設）、Claude Opus 5.5。一次會話往返通常只用幾千個 token，「設定」頁會顯示累計用量與估算費用。
 - 三種模式都用結構化輸出（JSON schema），回覆會分成日文、假名讀音、中文翻譯、批改與建議回答。

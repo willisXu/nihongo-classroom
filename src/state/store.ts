@@ -47,7 +47,8 @@ export function createStore<T>(key: string, initial: () => T, normalize: (raw: u
 
   if (typeof window !== 'undefined') {
     window.addEventListener('storage', (e) => {
-      if (e.key !== key) return;
+      // key 為 null 代表另一個分頁清空了整個 localStorage
+      if (e.key !== key && e.key !== null) return;
       state = normalize(readJSON(key));
       emit();
     });

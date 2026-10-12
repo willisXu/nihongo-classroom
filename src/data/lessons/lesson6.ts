@@ -8,7 +8,7 @@ export const lesson6: Lesson = {
     '這一課沒有新的形狀，只有小字 ゃ ゅ ょ っ 和長音的規則。學完後你能數出每個詞有幾拍，分得清 [[きて]] 和 [[きって]]，也能在電腦上打出日文。平假名到這裡全部學完。',
   minutes: 45,
   newKana: [...'ゃゅょっ'],
-  quiz: { script: 'h', rows: ['a', 'k', 's', 't', 'n', 'h', 'm', 'y', 'r', 'w', 'nn'] },
+  quiz: { script: 'h', rows: ['a', 'k', 's', 't', 'n', 'h', 'm', 'y', 'r', 'w', 'nn', 'g', 'z', 'd', 'b', 'p'] },
   sections: [
     {
       id: 'yoon',

@@ -5,7 +5,8 @@ import { kanaInfo, originText } from '../data/kana';
 import type { Script } from '../data/types';
 import { lessonStore, recordWriting, writingStore } from '../state';
 import { readJSON, useStore, writeJSON } from '../state/store';
-import { ALL_ROW_IDS, ROW_CHOICES, SEI_ROW_IDS, buildPool, normalizeRows } from '../lib/kanaQuiz';
+import { ALL_ROW_IDS, ROW_CHOICES, SEI_ROW_IDS, normalizeRows } from '../lib/kanaQuiz';
+import { ALL_ROWS } from '../data/kana';
 import { nextLesson } from '../lib/progress';
 import { getStrokePaths } from '../lib/strokes';
 import { speak } from '../lib/speech';
@@ -13,6 +14,21 @@ import { Segmented } from '../components/Controls';
 import { Icon } from '../components/Icon';
 import { PracticeTabs } from '../components/PracticeTabs';
 import { TraceCanvas, type TraceMode, type TraceResult } from '../components/TraceCanvas';
+
+/** 練習範圍內的字（手寫也練 ぢ、づ、を，測驗則不出） */
+function writingChars(rows: string[], script: Script): string[] {
+  const chosen = new Set(normalizeRows(rows));
+  const out: string[] = [];
+  for (const row of ALL_ROWS) {
+    if (!chosen.has(row.id === 'nn' ? 'w' : row.id)) continue;
+    for (const c of row.cells) {
+      if (!c) continue;
+      const ch = script === 'h' ? c.h : c.k;
+      if (getStrokePaths(ch)) out.push(ch);
+    }
+  }
+  return out;
+}
 
 interface WritePrefs {
   script: Script;
@@ -46,7 +62,7 @@ export default function Writing() {
     }
     return p;
   });
-  const chars = useMemo(() => buildPool(prefs.rows, prefs.script, 'see').map((i) => i.ch).filter((c) => !!getStrokePaths(c)), [prefs.rows, prefs.script]);
+  const chars = useMemo(() => writingChars(prefs.rows, prefs.script), [prefs.rows, prefs.script]);
   const [current, setCurrent] = useState<string>(() => {
     const ch = params.get('char');
     return ch && getStrokePaths(ch) ? ch : chars[0] ?? 'あ';

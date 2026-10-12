@@ -11,7 +11,7 @@ import {
   addUsage, apiKeyStore, kanaStore, lessonStore, settingsStore, srsStore, updateSettings, type TutorLevel,
 } from '../state';
 import { useStore } from '../state/store';
-import { callJSON, estimateCost, toTutorError } from '../lib/claude';
+import { TutorError, callJSON, estimateCost, toTutorError } from '../lib/claude';
 import { learnedKana, suggestedLevel } from '../lib/progress';
 import { speak } from '../lib/speech';
 import { ApiKeySetup } from '../components/ApiKeySetup';
@@ -21,6 +21,7 @@ import { Hanamaru } from '../components/Hanamaru';
 import { Icon } from '../components/Icon';
 
 type Mode = 'chat' | 'correct' | 'quiz';
+type Msg = { role: 'user' | 'assistant'; content: string };
 
 function useLevel(): [TutorLevel, TutorLevel | 'auto'] {
   const settings = useStore(settingsStore);
@@ -29,12 +30,32 @@ function useLevel(): [TutorLevel, TutorLevel | 'auto'] {
   return [level, settings.tutorLevel];
 }
 
+/** 呼叫一次 Claude，並把用量記下來（即使回覆格式不對也已經計費） */
+function ask<T>(opts: { system: string; messages: Msg[]; schema: Record<string, unknown>; maxTokens: number; effort: 'low' | 'medium'; signal?: AbortSignal }) {
+  const model = settingsStore.get().model;
+  return callJSON<T>({
+    apiKey: apiKeyStore.get(),
+    model,
+    ...opts,
+    onUsage: (i, o) => addUsage(model, i, o),
+  });
+}
+
 export default function Tutor() {
   const apiKey = useStore(apiKeyStore);
-  const [params] = useSearchParams();
-  const [mode, setMode] = useState<Mode>(() => (params.get('mode') === 'correct' ? 'correct' : params.get('mode') === 'quiz' ? 'quiz' : 'chat'));
+  const [params, setParams] = useSearchParams();
+  // 網址參數只在進來時讀一次，讀完就清掉，避免切換或返回時重新開場（會再收一次費）
+  const [initial] = useState(() => ({
+    scenario: params.get('scenario'),
+    mode: (params.get('mode') === 'correct' ? 'correct' : params.get('mode') === 'quiz' ? 'quiz' : 'chat') as Mode,
+  }));
+  const [mode, setMode] = useState<Mode>(initial.mode);
   const [level, levelPref] = useLevel();
   const lessons = useStore(lessonStore);
+
+  useEffect(() => {
+    if (params.get('scenario') || params.get('mode')) setParams({}, { replace: true });
+  }, [params, setParams]);
 
   return (
     <div className="wrap">
@@ -80,9 +101,16 @@ export default function Tutor() {
             </label>
             <UsageLine />
           </div>
-          {mode === 'chat' ? <Conversation level={level} initialScenario={params.get('scenario')} /> : null}
-          {mode === 'correct' ? <Corrector level={level} /> : null}
-          {mode === 'quiz' ? <AiQuiz level={level} /> : null}
+          {/* 三個模式都保持掛載，切換時不會丟掉對話或重新呼叫 API */}
+          <div hidden={mode !== 'chat'}>
+            <Conversation level={level} initialScenario={initial.scenario} />
+          </div>
+          <div hidden={mode !== 'correct'}>
+            <Corrector level={level} />
+          </div>
+          <div hidden={mode !== 'quiz'}>
+            <AiQuiz level={level} />
+          </div>
         </>
       )}
     </div>
@@ -112,32 +140,33 @@ function Conversation({ level, initialScenario }: { level: TutorLevel; initialSc
   const settings = useStore(settingsStore);
   const [scenario, setScenario] = useState<Scenario | null>(() => SCENARIOS.find((s) => s.id === initialScenario) ?? null);
   const [entries, setEntries] = useState<ChatEntry[]>([]);
-  const [history, setHistory] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
+  /** 已送出的對話紀錄；最後一則若是 user，代表還在等（或等失敗了，可以重試） */
+  const [history, setHistory] = useState<Msg[]>([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cost, setCost] = useState({ input: 0, output: 0 });
-  const abort = useRef<AbortController | null>(null);
-  const listEnd = useRef<HTMLDivElement>(null);
   const [filter, setFilter] = useState<Purpose | 'all'>('all');
+  const abort = useRef<AbortController | null>(null);
+  const composerRef = useRef<HTMLFormElement>(null);
+  const composing = useRef(false);
 
-  const send = async (msgs: { role: 'user' | 'assistant'; content: string }[], sc: Scenario) => {
-    setBusy(true);
-    setError(null);
+  const send = async (msgs: Msg[], sc: Scenario) => {
+    abort.current?.abort();
     const ctrl = new AbortController();
     abort.current = ctrl;
+    setBusy(true);
+    setError(null);
     try {
-      const res = await callJSON<ConversationTurn>({
-        apiKey: apiKeyStore.get(),
-        model: settingsStore.get().model,
+      const res = await ask<ConversationTurn>({
         system: conversationSystem(sc, level),
         messages: msgs,
         schema: CONVERSATION_SCHEMA,
-        maxTokens: 1200,
+        maxTokens: 4000,
         effort: 'low',
         signal: ctrl.signal,
       });
-      addUsage(settingsStore.get().model, res.usage.input, res.usage.output);
+      if (ctrl.signal.aborted) return;
       setCost((c) => ({ input: c.input + res.usage.input, output: c.output + res.usage.output }));
       const turn = res.data;
       setHistory([...msgs, { role: 'assistant', content: JSON.stringify(turn) }]);
@@ -146,20 +175,24 @@ function Conversation({ level, initialScenario }: { level: TutorLevel; initialSc
         // 回饋屬於我的上一句
         for (let i = out.length - 1; i >= 0; i--) {
           if (out[i].role === 'me') {
-            out[i] = { ...out[i], feedback: turn.feedback };
+            if (!out[i].feedback) out[i] = { ...out[i], feedback: turn.feedback };
             break;
           }
+          if (out[i].role === 'ai') break;
         }
         out.push({ role: 'ai', turn });
         return out;
       });
       speak(turn.reply);
     } catch (e) {
-      const err = toTutorError(e);
-      if (err.message !== '已取消。') setError(err.message);
+      if (ctrl.signal.aborted) return;
+      setError(toTutorError(e).message);
     } finally {
-      setBusy(false);
-      abort.current = null;
+      // 只有最新的請求可以改狀態，避免舊請求把新請求的「思考中」關掉
+      if (abort.current === ctrl) {
+        abort.current = null;
+        setBusy(false);
+      }
     }
   };
 
@@ -168,38 +201,64 @@ function Conversation({ level, initialScenario }: { level: TutorLevel; initialSc
     setScenario(sc);
     setEntries([]);
     setCost({ input: 0, output: 0 });
-    const msgs = [{ role: 'user' as const, content: OPENING_MESSAGE }];
+    setError(null);
+    const msgs: Msg[] = [{ role: 'user', content: OPENING_MESSAGE }];
     setHistory(msgs);
     void send(msgs, sc);
   };
 
-  // 從首頁帶情境進來就直接開始
-  const started = useRef(false);
+  const leave = () => {
+    abort.current?.abort();
+    abort.current = null;
+    setBusy(false);
+    setScenario(null);
+    setEntries([]);
+    setHistory([]);
+    setError(null);
+  };
+
+  // 從首頁帶情境進來就直接開始。用計時器排程，開發模式的 StrictMode 掛載兩次時也只會送出一次。
   useEffect(() => {
-    if (scenario && !started.current && entries.length === 0) {
-      started.current = true;
-      start(scenario);
-    }
+    if (!scenario || entries.length || history.length) return;
+    const t = window.setTimeout(() => start(scenario), 0);
+    return () => window.clearTimeout(t);
+    // 只在第一次掛載時檢查
   }, []);
 
-  useEffect(() => {
-    listEnd.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [entries, busy]);
-
   useEffect(() => () => abort.current?.abort(), []);
+
+  // 新訊息出現時，把輸入框捲到畫面下緣，最新的回覆和建議就在它上方
+  useEffect(() => {
+    if (!entries.length && !busy) return;
+    composerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [entries, busy, error]);
 
   const submit = () => {
     const text = input.trim();
     if (!text || busy || !scenario) return;
     setInput('');
     setEntries((list) => [...list, { role: 'me', text }]);
-    const msgs = [...history, { role: 'user' as const, content: text }];
+    const msgs: Msg[] = [...history, { role: 'user', content: text }];
+    setHistory(msgs);
     void send(msgs, scenario);
   };
 
   const retry = () => {
-    if (!scenario || busy) return;
+    if (!scenario || busy || !history.length) return;
     void send(history, scenario);
+  };
+
+  /** 停止：還沒得到回覆的那句話放回輸入框，對話紀錄回到上一步 */
+  const stop = () => {
+    abort.current?.abort();
+    abort.current = null;
+    setBusy(false);
+    const last = history[history.length - 1];
+    if (last && last.role === 'user' && last.content !== OPENING_MESSAGE) {
+      setHistory(history.slice(0, -1));
+      setEntries((list) => (list.length && list[list.length - 1].role === 'me' ? list.slice(0, -1) : list));
+      setInput(last.content);
+    }
   };
 
   if (!scenario) {
@@ -258,18 +317,10 @@ function Conversation({ level, initialScenario }: { level: TutorLevel; initialSc
             中文翻譯
           </Switch>
           <div className="btn-row">
-            <button type="button" className="btn btn-sm" onClick={() => start(scenario)} disabled={busy}>
+            <button type="button" className="btn btn-sm" onClick={() => start(scenario)}>
               <Icon name="refresh" size={16} /> 重新開始
             </button>
-            <button
-              type="button"
-              className="btn btn-sm"
-              onClick={() => {
-                abort.current?.abort();
-                setScenario(null);
-                setEntries([]);
-              }}
-            >
+            <button type="button" className="btn btn-sm" onClick={leave}>
               換情境
             </button>
           </div>
@@ -312,7 +363,7 @@ function Conversation({ level, initialScenario }: { level: TutorLevel; initialSc
                       <p className="b-ja" lang="ja">
                         {e.feedback.corrected}
                       </p>
-                      <SpeakIcon text={e.feedback.corrected} label="播放更正後的句子" />
+                      {e.feedback.corrected ? <SpeakIcon text={e.feedback.corrected} label="播放更正後的句子" /> : null}
                     </div>
                     {e.feedback.explanation ? <p className="fb-why">{e.feedback.explanation}</p> : null}
                   </div>
@@ -341,23 +392,22 @@ function Conversation({ level, initialScenario }: { level: TutorLevel; initialSc
             </button>
           </div>
         ) : null}
-        <div ref={listEnd} />
       </div>
 
-      {last?.done ? (
+      {last?.done && !busy ? (
         <div className="done-banner">
           <Hanamaru show className="hm-inline" />
           <div>
             <p className="done-title">情境完成！</p>
             <p className="small">換一個情境，或重新開始用不同的說法再練一次。</p>
           </div>
-          <button type="button" className="btn" onClick={() => setScenario(null)}>
+          <button type="button" className="btn" onClick={leave}>
             換情境
           </button>
         </div>
       ) : null}
 
-      {last && last.suggestions.length && !last.done ? (
+      {last && last.suggestions.length && !last.done && !busy ? (
         <div className="suggest">
           <p className="small">不知道怎麼回？點一個參考說法放進輸入框：</p>
           <div className="suggest-list">
@@ -374,7 +424,7 @@ function Conversation({ level, initialScenario }: { level: TutorLevel; initialSc
                 <span lang="ja" className="sugg-ja">
                   {s.ja}
                 </span>
-                {settings.showReading && s.reading !== s.ja ? (
+                {settings.showReading && s.reading.replace(/\s/g, '') !== s.ja.replace(/\s/g, '') ? (
                   <span lang="ja" className="sugg-reading">
                     {s.reading}
                   </span>
@@ -387,6 +437,7 @@ function Conversation({ level, initialScenario }: { level: TutorLevel; initialSc
       ) : null}
 
       <form
+        ref={composerRef}
         className="composer"
         onSubmit={(e) => {
           e.preventDefault();
@@ -402,20 +453,38 @@ function Conversation({ level, initialScenario }: { level: TutorLevel; initialSc
           value={input}
           placeholder="用日文回答；不會說可以先打中文或羅馬拼音"
           onChange={(e) => setInput(e.target.value)}
+          onCompositionStart={() => {
+            composing.current = true;
+          }}
+          onCompositionEnd={() => {
+            // Safari 會先觸發 compositionend 再觸發 Enter 的 keydown，延後一點再解除
+            window.setTimeout(() => {
+              composing.current = false;
+            }, 0);
+          }}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-              e.preventDefault();
-              submit();
-            }
+            if (e.key !== 'Enter' || e.shiftKey) return;
+            if (composing.current || e.nativeEvent.isComposing || e.keyCode === 229) return;
+            e.preventDefault();
+            submit();
           }}
           lang="ja"
         />
+        {/* 兩顆按鈕用不同的 key：避免 React 沿用同一個元素，按「停止」的那一下被當成「送出」 */}
         {busy ? (
-          <button type="button" className="btn" onClick={() => abort.current?.abort()}>
+          <button
+            key="stop"
+            type="button"
+            className="btn"
+            onClick={(e) => {
+              e.preventDefault();
+              stop();
+            }}
+          >
             <Icon name="stop" size={16} /> 停止
           </button>
         ) : (
-          <button type="submit" className="btn btn-primary" disabled={!input.trim()}>
+          <button key="send" type="submit" className="btn btn-primary" disabled={!input.trim()}>
             <Icon name="send" size={17} /> 送出
           </button>
         )}
@@ -435,36 +504,48 @@ const VERDICT: Record<Correction['verdict'], { label: string; cls: string }> = {
   wrong: { label: '需要修改', cls: 'v-wrong' },
 };
 
+/** 離開頁面時取消進行中的請求 */
+function useAbortOnUnmount() {
+  const ref = useRef<AbortController | null>(null);
+  useEffect(() => () => ref.current?.abort(), []);
+  return ref;
+}
+
 function Corrector({ level }: { level: TutorLevel }) {
   const settings = useStore(settingsStore);
   const [ja, setJa] = useState('');
   const [meaning, setMeaning] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [results, setResults] = useState<{ input: string; meaning: string; result: Correction }[]>([]);
+  const [results, setResults] = useState<{ id: number; input: string; result: Correction }[]>([]);
+  const abort = useAbortOnUnmount();
 
   const check = async () => {
     const text = ja.trim();
     if (!text || busy) return;
+    const ctrl = new AbortController();
+    abort.current = ctrl;
     setBusy(true);
     setError(null);
     try {
-      const res = await callJSON<Correction>({
-        apiKey: apiKeyStore.get(),
-        model: settingsStore.get().model,
+      const res = await ask<Correction>({
         system: correctionSystem(level),
         messages: [{ role: 'user', content: meaning.trim() ? `${text}\n（我想表達：${meaning.trim()}）` : text }],
         schema: CORRECTION_SCHEMA,
-        maxTokens: 1500,
+        maxTokens: 6000,
         effort: 'medium',
+        signal: ctrl.signal,
       });
-      addUsage(settingsStore.get().model, res.usage.input, res.usage.output);
-      setResults((r) => [{ input: text, meaning: meaning.trim(), result: res.data }, ...r].slice(0, 10));
+      if (ctrl.signal.aborted) return;
+      setResults((r) => [{ id: Date.now(), input: text, result: res.data }, ...r].slice(0, 10));
       if (res.data.corrected) speak(res.data.corrected);
     } catch (e) {
-      setError(toTutorError(e).message);
+      if (!ctrl.signal.aborted) setError(toTutorError(e).message);
     } finally {
-      setBusy(false);
+      if (abort.current === ctrl) {
+        abort.current = null;
+        setBusy(false);
+      }
     }
   };
 
@@ -496,10 +577,10 @@ function Corrector({ level }: { level: TutorLevel }) {
         ) : null}
       </form>
 
-      {results.map((r, i) => {
+      {results.map((r) => {
         const v = VERDICT[r.result.verdict] ?? VERDICT.minor;
         return (
-          <article key={results.length - i} className="card correction">
+          <article key={r.id} className="card correction">
             <p className="c-input">
               <span className="c-label">你寫的</span>
               <span lang="ja">{r.input}</span>
@@ -566,6 +647,7 @@ function AiQuiz({ level }: { level: TutorLevel }) {
   const [idx, setIdx] = useState(0);
   const [picked, setPicked] = useState<number | null>(null);
   const [score, setScore] = useState(0);
+  const abort = useAbortOnUnmount();
 
   const learned = learnedKana(lessons) || LESSONS[0].newKana.join('');
   const weakKana = useMemo(
@@ -592,12 +674,12 @@ function AiQuiz({ level }: { level: TutorLevel }) {
   }, [srs, learned]);
 
   const generate = async () => {
+    const ctrl = new AbortController();
+    abort.current = ctrl;
     setBusy(true);
     setError(null);
     try {
-      const res = await callJSON<unknown>({
-        apiKey: apiKeyStore.get(),
-        model: settingsStore.get().model,
+      const res = await ask<unknown>({
         system: quizSystem(),
         messages: [
           {
@@ -612,20 +694,24 @@ function AiQuiz({ level }: { level: TutorLevel }) {
           },
         ],
         schema: QUIZ_SCHEMA,
-        maxTokens: 2500,
+        maxTokens: 8000,
         effort: 'medium',
+        signal: ctrl.signal,
       });
-      addUsage(settingsStore.get().model, res.usage.input, res.usage.output);
+      if (ctrl.signal.aborted) return;
       const qs = sanitizeQuiz(res.data);
-      if (!qs.length) throw new Error('這次出的題目格式不對，請再按一次。');
+      if (!qs.length) throw new TutorError('這次出的題目格式不對，請再按一次。', 'invalid');
       setQuestions(qs);
       setIdx(0);
       setPicked(null);
       setScore(0);
     } catch (e) {
-      setError(e instanceof Error && !('kind' in e) ? e.message : toTutorError(e).message);
+      if (!ctrl.signal.aborted) setError(toTutorError(e).message);
     } finally {
-      setBusy(false);
+      if (abort.current === ctrl) {
+        abort.current = null;
+        setBusy(false);
+      }
     }
   };
 

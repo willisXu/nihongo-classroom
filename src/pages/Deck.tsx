@@ -12,6 +12,15 @@ import { SpeakIcon } from '../components/Speak';
 import { Switch } from '../components/Controls';
 import { Icon } from '../components/Icon';
 
+const PLAIN: Record<string, string> = { ā: 'a', ī: 'i', ū: 'u', ē: 'e', ō: 'o' };
+/** 搜尋用的拼音寫法：kōhī、kohi、koohii 都算 */
+function romajiKeys(kana: string): string[] {
+  const r = romaji(kana).toLowerCase();
+  const short = r.replace(/[āīūēō]/g, (c) => PLAIN[c]);
+  const long = r.replace(/[āīūēō]/g, (c) => PLAIN[c] + PLAIN[c]);
+  return [r, short, long, short.replace(/[' -]/g, '')];
+}
+
 function statusOf(card: CardState | undefined, now: number): { label: string; cls: string } {
   if (!card || card.reps === 0) return { label: '未學', cls: '' };
   if (card.step >= 0) return { label: '學習中', cls: 'st-learning' };
@@ -43,7 +52,7 @@ export default function Deck() {
             it.kana.includes(q) ||
             (it.kanji ?? '').includes(q) ||
             it.zh.toLowerCase().includes(q) ||
-            romaji(it.kana).toLowerCase().includes(q)
+            romajiKeys(it.kana).some((k) => k.includes(q))
           );
         }),
       }))

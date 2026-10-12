@@ -253,7 +253,10 @@ export function sanitizeQuiz(raw: unknown): QuizQuestion[] {
   for (const q of (raw as { questions: unknown[] }).questions) {
     if (!q || typeof q !== 'object') continue;
     const r = q as Record<string, unknown>;
-    const choices = Array.isArray(r.choices) ? r.choices.filter((c): c is string => typeof c === 'string' && c.trim() !== '') : [];
+    const rawChoices = Array.isArray(r.choices) ? r.choices : [];
+    // 有空白選項就整題略過（過濾掉會讓答案的位置對不上）
+    if (rawChoices.some((c) => typeof c !== 'string' || c.trim() === '')) continue;
+    const choices = rawChoices as string[];
     const answer = typeof r.answer === 'number' ? Math.round(r.answer) : -1;
     if (typeof r.prompt !== 'string' || !r.prompt.trim()) continue;
     if (choices.length < 2 || answer < 0 || answer >= choices.length) continue;

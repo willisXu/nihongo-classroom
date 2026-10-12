@@ -18,7 +18,7 @@ if not exist node_modules (
     exit /b 1
   )
 )
-echo 正在啟動日文自學教室，瀏覽器會自動開啟 http://localhost:5173
+echo 正在啟動日文自學教室，瀏覽器會自動開啟 http://localhost:5288
 echo 要結束時，關掉這個視窗即可。
-call npm run dev -- --open
+call npm start
 pause

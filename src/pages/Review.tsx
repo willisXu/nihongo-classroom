@@ -3,8 +3,8 @@ import { Link, useParams } from 'react-router-dom';
 import { vocabById } from '../data/vocab';
 import { saveCard, settingsStore, srsStore, updateSettings } from '../state';
 import { useStore, readJSON, writeJSON } from '../state/store';
-import { buildQueue, newCard, previewLabel, review, GRADES, type Grade, type CardState } from '../lib/srs';
-import { studyDayKey } from '../lib/date';
+import { buildQueue, formatMinutes, newCard, previewLabel, review, GRADES, type Grade, type CardState } from '../lib/srs';
+import { studyDayKey, studyDayStart, addDays } from '../lib/date';
 import { romaji } from '../lib/romaji';
 import { speak } from '../lib/speech';
 import { POS_LABEL, VERB_GROUP_LABEL, deckItemIds, deckTitle } from '../lib/vocab';
@@ -13,7 +13,7 @@ import { Switch } from '../components/Controls';
 import { Icon } from '../components/Icon';
 
 const GRADE_LABEL: Record<Grade, string> = { again: '忘記了', hard: '有點難', good: '記得', easy: '很簡單' };
-/** 學習中的卡片若在這段時間內到期，就留在這一輪 */
+/** 學習中的卡片若在這段時間內到期，就留在這一輪（可以提早看） */
 const LEARN_AHEAD_MS = 20 * 60_000;
 
 interface Pending {
@@ -21,45 +21,62 @@ interface Pending {
   due: number;
 }
 
-export default function Review() {
+/** 牌組改變時整個重新開始 */
+export default function ReviewRoute() {
   const { deck = 'all' } = useParams();
+  return <Review key={deck} deck={deck} />;
+}
+
+function pickNext(main: string[], learning: Pending[], now: number): string | null {
+  const dueL = learning.filter((p) => p.due <= now).sort((a, b) => a.due - b.due)[0];
+  if (dueL) return dueL.id;
+  if (main.length) return main[0];
+  const ahead = learning.filter((p) => p.due <= now + LEARN_AHEAD_MS).sort((a, b) => a.due - b.due)[0];
+  return ahead?.id ?? null;
+}
+
+/** 互動元件上的按鍵交給元件自己處理 */
+function isInteractive(t: EventTarget | null): boolean {
+  return t instanceof Element && !!t.closest('a, button, input, select, textarea, label, [contenteditable="true"]');
+}
+function isTextEntry(t: EventTarget | null): boolean {
+  return t instanceof Element && !!t.closest('textarea, select, [contenteditable="true"], input:not([type="checkbox"]):not([type="radio"])');
+}
+
+function Review({ deck }: { deck: string }) {
   const settings = useStore(settingsStore);
   const ids = useMemo(() => deckItemIds(deck), [deck]);
   const [autoplay, setAutoplay] = useState<boolean>(() => readJSON('nk.autoplay') !== false);
 
-  // 開場時決定這一輪的卡片（之後新增的到期卡片下一輪再出現）
+  // 開場時決定這一輪的卡片（之後才到期的複習卡下一輪再出現）
   const [session] = useState(() => {
     const now = Date.now();
     const srs = srsStore.get();
     const freshToday = srs.days[studyDayKey(now)]?.fresh ?? 0;
     const newLimit = Math.max(0, settingsStore.get().newPerDay - freshToday);
     const q = buildQueue(srs.cards, ids, now, newLimit);
-    return { main: [...q.review, ...q.fresh], learning: q.learning.map((id) => ({ id, due: srs.cards[id]?.due ?? now })) };
+    // 學習中、幾分鐘內就到期的卡片也放進這一輪
+    const learning: Pending[] = [];
+    for (const id of ids) {
+      const c = srs.cards[id];
+      if (c && c.reps > 0 && c.step >= 0 && c.due <= now + LEARN_AHEAD_MS) learning.push({ id, due: c.due });
+    }
+    const main = [...q.review, ...q.fresh];
+    return { main, learning, first: pickNext(main, learning, now) };
   });
   const [main, setMain] = useState<string[]>(session.main);
   const [learning, setLearning] = useState<Pending[]>(session.learning);
-  const [currentId, setCurrentId] = useState<string | null>(null);
+  const [currentId, setCurrentId] = useState<string | null>(session.first);
   const [flipped, setFlipped] = useState(false);
-  const [done, setDone] = useState({ total: 0, again: 0 });
+  const [done, setDone] = useState({ cards: new Set<string>(), total: 0, again: 0 });
   const [now, setNow] = useState(Date.now());
   const [turn, setTurn] = useState(0);
-
-  const pickNext = useCallback((m: string[], l: Pending[]): string | null => {
-    const t = Date.now();
-    const dueL = l.filter((p) => p.due <= t).sort((a, b) => a.due - b.due)[0];
-    if (dueL) return dueL.id;
-    if (m.length) return m[0];
-    const ahead = l.filter((p) => p.due <= t + LEARN_AHEAD_MS).sort((a, b) => a.due - b.due)[0];
-    return ahead?.id ?? null;
-  }, []);
-
-  useEffect(() => {
-    setCurrentId(pickNext(session.main, session.learning));
-  }, [pickNext, session]);
+  const actionsRef = useRef<HTMLDivElement>(null);
 
   const item = currentId ? vocabById(currentId) : undefined;
   const card: CardState | undefined = currentId ? srsStore.get().cards[currentId] : undefined;
   const isNew = !card || card.reps === 0;
+  const early = !!card && card.reps > 0 && card.due > now;
 
   // 換卡（或同一張卡再出現）時翻回正面，並自動念一次
   const autoplayRef = useRef(autoplay);
@@ -70,6 +87,11 @@ export default function Review() {
     const it = currentId ? vocabById(currentId) : undefined;
     if (it && autoplayRef.current) speak(it.kanji ?? it.kana);
   }, [currentId, turn]);
+
+  // 手機上翻面後，把評分按鈕捲進畫面
+  useEffect(() => {
+    if (flipped) actionsRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [flipped]);
 
   const grade = useCallback(
     (g: Grade) => {
@@ -84,23 +106,24 @@ export default function Review() {
       if (after.step >= 0 && after.due <= t + LEARN_AHEAD_MS) l = [...l, { id: currentId, due: after.due }];
       setMain(m);
       setLearning(l);
-      setDone((d) => ({ total: d.total + 1, again: d.again + (g === 'again' ? 1 : 0) }));
-      setCurrentId(pickNext(m, l));
+      setDone((d) => ({ cards: new Set(d.cards).add(currentId), total: d.total + 1, again: d.again + (g === 'again' ? 1 : 0) }));
+      setCurrentId(pickNext(m, l, t));
       setTurn((n) => n + 1);
     },
-    [currentId, flipped, main, learning, pickNext],
+    [currentId, flipped, main, learning],
   );
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      const t = e.target as HTMLElement | null;
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT')) return;
-      if (!item) return;
-      if ((e.key === ' ' || e.key === 'Enter') && !flipped) {
+      if (e.metaKey || e.ctrlKey || e.altKey || !item) return;
+      if (e.key === ' ' || e.key === 'Enter') {
+        if (isInteractive(e.target) || flipped) return;
         e.preventDefault();
         setFlipped(true);
-      } else if (flipped && /^[1-4]$/.test(e.key)) {
+        return;
+      }
+      if (isTextEntry(e.target)) return;
+      if (flipped && /^[1-4]$/.test(e.key)) {
         e.preventDefault();
         grade(GRADES[Number(e.key) - 1]);
       } else if (e.key === 'r' || e.key === 'R') {
@@ -112,8 +135,22 @@ export default function Review() {
     return () => window.removeEventListener('keydown', onKey);
   }, [item, flipped, grade]);
 
-  const newLeft = main.filter((id) => !srsStore.get().cards[id] || srsStore.get().cards[id].reps === 0).length;
+  const cards = srsStore.get().cards;
+  const newLeft = main.filter((id) => !cards[id] || cards[id].reps === 0).length;
   const reviewLeft = main.length - newLeft;
+
+  // 這一輪結束後，今天稍晚還會到期的學習中卡片
+  const laterToday = useMemo(() => {
+    if (item) return null;
+    const t = Date.now();
+    const end = addDays(studyDayStart(t), 1);
+    const due = ids
+      .map((id) => cards[id])
+      .filter((c): c is CardState => !!c && c.reps > 0 && c.step >= 0 && c.due > t && c.due < end)
+      .map((c) => c.due)
+      .sort((a, b) => a - b);
+    return due.length ? { n: due.length, wait: due[0] - t } : null;
+  }, [item, ids, cards]);
 
   return (
     <div className="wrap review-wrap">
@@ -152,20 +189,27 @@ export default function Review() {
             <>
               <h2>這一輪完成了</h2>
               <p>
-                複習了 {done.total} 張，其中 {done.total - done.again} 次記得（{Math.round(((done.total - done.again) / done.total) * 100)}%）。
+                複習了 {done.cards.size} 張卡片、作答 {done.total} 次，其中 {done.total - done.again} 次記得（
+                {Math.round(((done.total - done.again) / done.total) * 100)}%）。
               </p>
-              {learning.length ? <p className="small">還有 {learning.length} 張學習中的卡片，幾分鐘後會到期，可以等一下再回來。</p> : null}
             </>
           ) : (
             <>
               <h2>現在沒有要複習的卡片</h2>
-              <p>
-                {settingsStore.get().newPerDay === 0
-                  ? '每天新卡設定為 0 張，到牌組頁調整後就能學新卡。'
-                  : '今天的新卡已經學完，到期的卡片也都複習過了。明天再來。'}
-              </p>
+              {!laterToday ? (
+                <p>
+                  {settingsStore.get().newPerDay === 0
+                    ? '每天新卡設定為 0 張，到單字牌組頁調整後就能學新卡。'
+                    : '今天的新卡已經學完，到期的卡片也都複習過了。明天再來。'}
+                </p>
+              ) : null}
             </>
           )}
+          {laterToday ? (
+            <p className="small">
+              還有 {laterToday.n} 張學習中的卡片，約 {formatMinutes(laterToday.wait)}後到期，到時候再回來這一頁。
+            </p>
+          ) : null}
           <div className="btn-row">
             <Link className="btn btn-primary" to="/vocab">
               回單字牌組
@@ -179,6 +223,7 @@ export default function Review() {
         <div className="card flash">
           <div className="flash-badges">
             {isNew ? <span className="pill pill-accent">新卡</span> : card && card.step >= 0 ? <span className="pill">學習中</span> : <span className="pill">複習</span>}
+            {early ? <span className="pill">提早複習</span> : null}
             {item.topic ? <span className="pill">{item.topic}</span> : null}
           </div>
           <div className="flash-front">
@@ -217,7 +262,7 @@ export default function Review() {
               {item.note ? <p className="v-note">{item.note}</p> : null}
             </div>
           ) : null}
-          <div className="flash-actions">
+          <div className="flash-actions" ref={actionsRef}>
             {!flipped ? (
               <button type="button" className="btn btn-primary btn-wide" onClick={() => setFlipped(true)}>
                 顯示答案 <span className="kbd">空白鍵</span>

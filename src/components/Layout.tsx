@@ -31,7 +31,7 @@ function VoiceNote() {
   const [closed, setClosed] = useState(() => readJSON('nk.vnote') === true);
   if (closed || !sp.ready || (sp.supported && sp.hasJapanese)) return null;
   return (
-    <div className="wrap">
+    <div className="vnote-toast">
       <div className="vnote" role="status">
         <p>
           {sp.supported
@@ -66,7 +66,14 @@ export function Layout() {
 
   return (
     <div className="app">
-      <a className="skip" href="#main">
+      <a
+        className="skip"
+        href="#main"
+        onClick={(e) => {
+          e.preventDefault();
+          document.getElementById('main')?.focus();
+        }}
+      >
         跳到主要內容
       </a>
       <header className="masthead">

@@ -117,7 +117,7 @@ export default function Practice() {
       if (/^[1-4]$/.test(e.key)) {
         e.preventDefault();
         answer(Number(e.key) - 1);
-      } else if (e.key === 'Enter' && q.picked !== null && t?.tagName !== 'BUTTON') {
+      } else if (e.key === 'Enter' && q.picked !== null && !t?.closest('a, button, select')) {
         e.preventDefault();
         next(true);
       } else if ((e.key === 'r' || e.key === 'R') && prefs.mode === 'listen' && q.item) {
@@ -130,7 +130,14 @@ export default function Practice() {
     return () => window.removeEventListener('keydown', onKey);
   }, [answer, next, q, prefs.mode]);
 
-  const setRows = (rows: string[]) => setPrefs((p) => ({ ...p, rows: rows.length ? rows : p.rows }));
+  /** 範圍真的改變時才更新（重選同樣的範圍不會清掉這一輪的分數） */
+  const applyScope = (script: QuizScript, rows: string[]) =>
+    setPrefs((p) => {
+      const next = rows.length ? rows : p.rows;
+      if (p.script === script && next.length === p.rows.length && next.every((r, i) => r === p.rows[i])) return p;
+      return { ...p, script, rows: next };
+    });
+  const setRows = (rows: string[]) => applyScope(prefs.script, rows);
   const toggleRow = (id: string) => {
     const has = prefs.rows.includes(id);
     if (has && prefs.rows.length === 1) return;
@@ -201,7 +208,7 @@ export default function Practice() {
                   key={l.id}
                   type="button"
                   className="linkbtn"
-                  onClick={() => setPrefs((p) => ({ ...p, script: l.quiz.script, rows: normalizeRows(l.quiz.rows) }))}
+                  onClick={() => applyScope(l.quiz.script, normalizeRows(l.quiz.rows))}
                 >
                   第 {l.id} 課
                 </button>

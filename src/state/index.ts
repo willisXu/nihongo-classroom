@@ -52,6 +52,9 @@ export const settingsStore = createStore<Settings>('nk.settings', defaultSetting
   };
 });
 
+/** 每天新卡的選項（單字頁和設定頁共用） */
+export const NEW_PER_DAY_OPTIONS = [0, 5, 10, 15, 20, 30, 50];
+
 export function updateSettings(patch: Partial<Settings>) {
   settingsStore.set((s) => ({ ...s, ...patch }));
 }

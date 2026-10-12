@@ -77,7 +77,7 @@ export default function Home() {
             {days > 0 ? `連續學習 ${days} 天` : '今天開始第一天'}
           </span>
           <span>假名練習 {today.kana ?? 0} 題</span>
-          <span>單字複習 {today.review ?? 0} 張</span>
+          <span>單字複習 {today.review ?? 0} 次</span>
           <span>手寫 {today.writing ?? 0} 字</span>
         </p>
       </header>

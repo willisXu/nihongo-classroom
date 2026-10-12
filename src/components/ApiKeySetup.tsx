@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { apiKeyStore, settingsStore, updateSettings, type ModelId } from '../state';
+import { addUsage, apiKeyStore, settingsStore, updateSettings, type ModelId } from '../state';
 import { useStore } from '../state/store';
 import { MODELS, testConnection, toTutorError } from '../lib/claude';
 import { Icon } from './Icon';
@@ -26,10 +26,11 @@ export function ApiKeySetup({ compact = false }: { compact?: boolean }) {
     setStatus({ tone: 'busy', text: '正在測試連線…' });
     try {
       const res = await testConnection(key, settings.model);
+      addUsage(settings.model, res.input, res.output);
       apiKeyStore.set(key);
       setDraft('');
       setEditing(false);
-      setStatus({ tone: 'ok', text: `連線成功，Claude 說：「${res.data.greeting}」` });
+      setStatus({ tone: 'ok', text: `連線成功，Claude 說：「${res.greeting}」` });
     } catch (e) {
       setStatus({ tone: 'mark', text: toTutorError(e).message });
     }
@@ -97,9 +98,14 @@ export function ApiKeySetup({ compact = false }: { compact?: boolean }) {
           </label>
           <input
             id="api-key"
-            type="password"
+            type="text"
+            className="key-input"
             autoComplete="off"
+            autoCapitalize="off"
+            autoCorrect="off"
             spellCheck={false}
+            data-1p-ignore="true"
+            data-lpignore="true"
             placeholder="sk-ant-…"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}

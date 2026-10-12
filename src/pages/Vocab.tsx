@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { DECKS } from '../data/vocab';
-import { lessonStore, settingsStore, srsStore, updateSettings } from '../state';
+import { NEW_PER_DAY_OPTIONS, lessonStore, settingsStore, srsStore, updateSettings } from '../state';
 import { useStore } from '../state/store';
 import { deckStats } from '../lib/srs';
 import { studyDayKey } from '../lib/date';
@@ -65,7 +65,7 @@ export default function Vocab() {
           <label className="newper" htmlFor="newPerDay">
             每天新卡
             <select id="newPerDay" value={settings.newPerDay} onChange={(e) => updateSettings({ newPerDay: Number(e.target.value) })}>
-              {[0, 5, 10, 15, 20, 30].map((n) => (
+              {NEW_PER_DAY_OPTIONS.map((n) => (
                 <option key={n} value={n}>
                   {n} 張
                 </option>

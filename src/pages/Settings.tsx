@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { settingsStore, updateSettings, usageStore, exportBackup, importBackup, resetAllProgress, type ThemePref } from '../state';
+import { NEW_PER_DAY_OPTIONS, settingsStore, updateSettings, usageStore, exportBackup, importBackup, resetAllProgress, type ThemePref } from '../state';
 import { useStore } from '../state/store';
 import { useSpeech, speak } from '../lib/speech';
 import { estimateCost, modelInfo } from '../lib/claude';
@@ -14,6 +14,7 @@ export default function Settings() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [msg, setMsg] = useState<{ tone: 'ok' | 'mark'; text: string } | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [pendingImport, setPendingImport] = useState<File | null>(null);
 
   const totalCost = Object.entries(usage.byModel).reduce((sum, [m, u]) => sum + estimateCost(m, u.input, u.output), 0);
 
@@ -31,7 +32,8 @@ export default function Settings() {
     setMsg({ tone: 'ok', text: '已下載備份檔。到另一台裝置打開這個網站，用「匯入備份」就能接著學。' });
   };
 
-  const onFile = async (f: File | undefined) => {
+  const onFile = async (f: File | null) => {
+    setPendingImport(null);
     if (!f) return;
     try {
       const n = importBackup(await f.text());
@@ -104,7 +106,7 @@ export default function Settings() {
             每天新卡
           </label>
           <select id="set-newper" value={settings.newPerDay} onChange={(e) => updateSettings({ newPerDay: Number(e.target.value) })}>
-            {[0, 5, 10, 15, 20, 30, 50].map((n) => (
+            {NEW_PER_DAY_OPTIONS.map((n) => (
               <option key={n} value={n}>
                 {n} 張
               </option>
@@ -144,18 +146,36 @@ export default function Settings() {
           <button type="button" className="btn" onClick={download}>
             匯出備份
           </button>
-          <label className="btn" htmlFor="import-file">
-            匯入備份
-          </label>
           <input
             ref={fileRef}
             id="import-file"
             type="file"
             accept="application/json,.json"
-            className="sr-only"
-            onChange={(e) => void onFile(e.target.files?.[0])}
+            className="sr-only file-input"
+            onChange={(e) => setPendingImport(e.target.files?.[0] ?? null)}
           />
+          <label className="btn" htmlFor="import-file">
+            匯入備份
+          </label>
         </div>
+        {pendingImport ? (
+          <div className="reset-row confirm-row" role="alert">
+            <span>匯入「{pendingImport.name}」會覆蓋這個瀏覽器目前的學習紀錄，確定嗎？</span>
+            <button type="button" className="btn btn-sm btn-primary" onClick={() => void onFile(pendingImport)}>
+              匯入
+            </button>
+            <button
+              type="button"
+              className="linkbtn"
+              onClick={() => {
+                setPendingImport(null);
+                if (fileRef.current) fileRef.current.value = '';
+              }}
+            >
+              取消
+            </button>
+          </div>
+        ) : null}
         {msg ? (
           <p className={`key-status tone-${msg.tone}`} role="status">
             {msg.text}
