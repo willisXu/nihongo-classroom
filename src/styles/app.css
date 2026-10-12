@@ -101,6 +101,7 @@ main { outline: none; padding-bottom: 32px; }
 .vnote-toast .vnote { box-shadow: 0 10px 30px -12px var(--scrim); border: 1px solid var(--line); }
 .vnote { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; background: var(--mark-soft); border-radius: var(--r); padding: 10px 14px; font-size: 14px; }
 .vnote p { flex: 1 1 280px; min-width: 0; }
+.offline-note { margin-bottom: 14px; }
 
 .site-foot { border-top: 1px solid var(--line); padding-block: 18px 24px; font-size: 13px; color: var(--ink-3); }
 

@@ -10,6 +10,7 @@
 - **單字卡**：JLPT N5 核心單字（776）、旅遊（226）、職場（127）、日劇・動畫・音樂（128）四組牌組，用間隔複習排程。
 - **AI 日文家教**：用 Claude 練情境會話（點餐、入住、問路、自我介紹、接電話、聊動畫…）、批改句子、依弱點出題。
 - **學習地圖**：從零到 N4 的路線、每天 45 分鐘的分配、2027 年 JLPT 時程與教材建議。
+- **離線使用、加到主畫面**：開過一次之後，沒有網路也能上課、練習、複習單字卡（AI 家教需要網路）；可以安裝成 App。
 
 所有學習紀錄都存在瀏覽器的 localStorage，不需要帳號或伺服器。
 
@@ -37,7 +38,7 @@ cd nihongo-classroom
 - **第一次執行**會先安裝套件（約 1～2 分鐘，需要網路），再建置網站、打開瀏覽器。
 - 套件**沒裝完整**（例如上次安裝到一半斷線）或**套件有更新**時，會自動重新安裝，不用自己刪資料夾。安裝失敗的話，確認網路後再雙擊一次就好。
 - 網站**已經在執行**時再雙擊一次，只會直接幫你打開瀏覽器，不會重複啟動。
-- 使用期間請讓那個視窗開著；關掉視窗（或按 Ctrl+C），網站就會停止。
+- 使用期間請讓那個視窗開著；關掉視窗（或按 Ctrl+C），網站伺服器就會停止。不過開過一次之後，瀏覽器已經存了離線版，`http://localhost:5288` 還是打得開上次的版本（新的修改要再雙擊啟動檔才會看到）。
 - 如果 5288 這個連接埠被別的程式占用，會說明原因後停下來（學習紀錄跟著連接埠走，所以不會改用別的埠）。
 
 ### 手動執行
@@ -61,6 +62,21 @@ npm test           # 單元測試與內容檢查
 - **Windows**：Edge 內建自然的日文語音（Nanami）；Chrome 會用「Google 日本語」。如果聽不到，到「設定 → 時間與語言 → 語音 → 新增語音」加入日文。
 - **macOS / iPhone**：到「系統設定 → 輔助使用 → 朗讀內容 → 系統語音 → 管理語音」加入日文（Kyoko、Otoya）。
 - 網站右上角的「慢速發音」可以放慢語速，「設定」頁可以指定要用哪個語音。
+
+## 加到主畫面、離線使用
+
+用瀏覽器開過一次之後，網站會在背景下載離線要用的檔案（傳輸約 1.4 MB，只需要一次；之後更新只下載有變的檔）。之後沒有網路也能上課、做測驗、手寫、複習單字卡，學習紀錄照常儲存；AI 家教需要網路。
+
+- **iPhone／iPad**：用 Safari 開啟，點「分享」→「加入主畫面」。
+- **Android**：用 Chrome 開啟，從選單選「加到主畫面」或「安裝應用程式」。
+- **電腦**：用 Chrome 或 Edge 開啟，按網址列右側的「安裝」圖示，或到網站的「設定 → App 與離線使用」按「安裝成 App」。
+- 安裝後，長按 App 圖示（Android）或在工作列的圖示按右鍵（電腦），可以直接開「複習單字卡」「假名測驗」「AI 家教」。
+
+說明：
+
+- 有網路時打開一定是最新版；沒有網路、伺服器出錯，或網路慢到 3 秒還沒回應時，改用上次下載好的版本。網站更新後，新版會在背景自動下載。
+- iPhone、iPad（還有 Mac Safari 的「加入 Dock」）安裝的 App，學習紀錄和 Safari 是**分開存的**：在 Safari 學過的話，先在 Safari「匯出備份」，再到 App 裡「匯入備份」。Android 和電腦的 Chrome、Edge 則是同一份紀錄。
+- 離線功能只在建置好的網站（線上版、`npm start`）啟用；`npm run dev` 的開發模式不會註冊，也不會被離線版擋住。
 
 ## AI 日文家教
 
@@ -117,6 +133,7 @@ src/
     kanaQuiz.ts        假名測驗出題與干擾選項
     claude.ts          Claude API：模型、費用、金鑰整理、錯誤型別（不含 SDK）
     claude-api.ts      真正呼叫 API 的部分（含 Claude SDK，第一次用到才載入）
+    pwa.ts             離線使用與安裝成 App：註冊 service worker、安裝按鈕、連線狀態
     romaji.ts          假名轉羅馬拼音
     speech.ts          日文語音合成
   state/               localStorage 狀態（設定、進度、紀錄、備份）
@@ -127,7 +144,12 @@ scripts/
   start-lib.mjs        啟動程式用的小工具（只用 Node 內建模組）
   fetch-kanjivg.mjs    下載 KanjiVG 筆順，產生 src/data/strokes.json
   nk-fonts.mjs         建置時把兩套字型裁成網站用得到的字（Vite 外掛，產生 src/fonts/generated/，不進版控）
-tests/                 Vitest：排程、筆畫比對、假名測驗、課程與單字內容檢查、啟動程式
+  nk-pwa.mjs           建置時產生 dist/sw.js（Vite 外掛）：列出要預先下載的檔案，套進 sw-template.js
+  sw-template.js       service worker 的程式：預先下載、離線時用快取開網站、新版自動接手
+public/
+  manifest.webmanifest 安裝成 App 的名稱、圖示、顏色
+  icons/               App 圖示（由 favicon.svg 的「あ」筆畫繪製）
+tests/                 Vitest：排程、筆畫比對、假名測驗、課程與單字內容檢查、啟動程式、離線快取
 ```
 
 ### 內容檢查
@@ -153,6 +175,7 @@ tests/                 Vitest：排程、筆畫比對、假名測驗、課程與
 - 以下檔案取自或衍生自 [KanjiVG](https://kanjivg.tagaini.net/)（© Ulrich Apel），以 [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) 授權，沿用相同授權、不適用 MIT：
   - `src/data/strokes.json`：假名筆順資料
   - `public/favicon.svg`：網站圖示（「あ」的筆畫）
+  - `public/icons/*.png`：加到主畫面用的 App 圖示（由上面的圖示繪製）
 - 字型 Klee One、LXGW WenKai TC 以 SIL Open Font License 1.1 授權，透過 Fontsource 套件引入；建置時依網站用到的字裁切（`scripts/nk-fonts.mjs`），授權全文跟著網站發布成 `FONT-LICENSES.txt`。
 - 打包進網站的 npm 套件（React、React Router、Anthropic SDK 等）的授權全文，建置時會自動產生成 `dist/THIRD-PARTY-LICENSES.md`，和 `index.html` 一起發布（線上版：<https://willisxu.github.io/nihongo-classroom/THIRD-PARTY-LICENSES.md>）。
 

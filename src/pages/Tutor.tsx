@@ -17,6 +17,7 @@ import { TutorError, callJSON, estimateCost, preloadClaudeApi, toTutorError } fr
 import { learnedKana, suggestedLevel } from '../lib/progress';
 import { speak } from '../lib/speech';
 import { usePageTitle } from '../lib/title';
+import { useOnline } from '../lib/pwa';
 import { ApiKeySetup } from '../components/ApiKeySetup';
 import { Segmented, Switch } from '../components/Controls';
 import { SpeakIcon } from '../components/Speak';
@@ -128,6 +129,7 @@ export default function Tutor() {
   const modeRef = useRef(mode);
   const [level, levelPref] = useLevel();
   const lessons = useStore(lessonStore);
+  const online = useOnline();
 
   useEffect(() => {
     if (params.get('scenario') || params.get('mode')) setParams({}, { replace: true });
@@ -150,6 +152,12 @@ export default function Tutor() {
         <h1>AI 日文家教</h1>
         <p className="lede">情境會話練開口、句子批改練寫作、AI 出題練弱點。程度會配合你的進度，卡住時可以先用中文說。</p>
       </header>
+
+      {!online ? (
+        <div className="vnote offline-note" role="status">
+          <p>現在沒有網路。AI 家教要連上網路才能用；課程、練習和單字卡離線也能用。</p>
+        </div>
+      ) : null}
 
       {!apiKey ? (
         <section className="card setup-card" aria-labelledby="h-setup">

@@ -10,6 +10,7 @@ import App, { applyTheme } from './App';
 import { settingsStore } from './state';
 import { storageHealth } from './state/store';
 import { initSpeech } from './lib/speech';
+import { initPwa } from './lib/pwa';
 import { reloadOnce } from './components/ErrorBoundary';
 
 // 網站更新後，舊分頁載不到新版的程式檔：自動重新整理一次（30 秒內不重複）。
@@ -21,6 +22,8 @@ window.addEventListener('vite:preloadError', (event) => {
 applyTheme(settingsStore.get().theme);
 storageHealth.probe();
 initSpeech();
+// 離線使用與安裝成 App（service worker 等頁面載完才註冊）
+initPwa();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -9,6 +9,7 @@ import { estimateCost, modelInfo } from '../lib/claude';
 import { daysBetween } from '../lib/date';
 import { usePageTitle } from '../lib/title';
 import { ApiKeySetup } from '../components/ApiKeySetup';
+import { AppInstall } from '../components/AppInstall';
 import { Segmented, Switch } from '../components/Controls';
 import { Icon } from '../components/Icon';
 
@@ -146,6 +147,11 @@ export default function Settings() {
           ) : null}
           <p className="small">費用是依公開價格估算，實際金額以 Claude Console 的帳單為準。</p>
         </div>
+      </section>
+
+      <section className="block" aria-labelledby="h-app">
+        <h2 id="h-app">App 與離線使用</h2>
+        <AppInstall />
       </section>
 
       <section className="block" aria-labelledby="h-data">

@@ -112,7 +112,10 @@ export function toTutorError(e: unknown): TutorError {
   // 逾時是連線錯誤的一種（子類別），要先判斷
   if (e instanceof Anthropic.APIConnectionTimeoutError) return new TutorError(TIMEOUT_MESSAGE, 'timeout');
   if (e instanceof Anthropic.APIConnectionError) {
-    return new TutorError('連不上 Claude API。請確認網路連線，或稍後再試。', 'network');
+    return new TutorError(
+      '連不上 Claude API。請確認網路連線後再試；網路正常卻一直連不上的話，可能是所在的網路或地區連不到 api.anthropic.com。',
+      'network',
+    );
   }
   if (e instanceof Anthropic.APIError) {
     // 串流開始後才發生的錯誤沒有 HTTP 狀態碼，只能看錯誤類型
@@ -123,7 +126,9 @@ export function toTutorError(e: unknown): TutorError {
       return new TutorError('API 帳戶餘額不足，或帳單、付款方式有問題。請到 Claude Console 的 Billing 頁面處理後再試。', 'billing');
     }
     if (s === 403 || type === 'permission_error') {
-      return new TutorError('這把金鑰沒有使用這個模型的權限。請到 Claude Console 確認金鑰和帳戶狀態。', 'auth');
+      // 金鑰權限不足，或從 Claude API 不提供服務的地區連線；附上 API 的原文說明比較好判斷
+      const detail = message ? `（API 說明：${clip(message)}）` : '';
+      return new TutorError(`這把金鑰沒有權限，或所在的地區不在 Claude API 的服務範圍。請到 Claude Console 確認金鑰和帳戶狀態。${detail}`, 'auth');
     }
     if (s === 404 || type === 'not_found_error') return new TutorError('找不到這個模型。請到「設定」換一個模型。', 'invalid');
     if (s === 413 || type === 'request_too_large' || /prompt is too long/i.test(message)) {

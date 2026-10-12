@@ -10,11 +10,12 @@
 | --- | --- |
 | `src/data/strokes.json` | 假名筆順資料，由 `scripts/fetch-kanjivg.mjs` 從 KanjiVG 下載後擷取而成 |
 | `public/favicon.svg` | 網站圖示，裡面的三個筆畫是 KanjiVG「あ」（`03042.svg`）的筆畫路徑 |
+| `public/icons/*.png` | 加到主畫面、安裝成 App 用的圖示，由 `public/favicon.svg` 的「あ」筆畫繪製而成 |
 
 - 來源：https://kanjivg.tagaini.net/ ・ https://github.com/KanjiVG/kanjivg
 - 著作權：© Ulrich Apel
 - 授權：Creative Commons Attribution-Share Alike 3.0（CC BY-SA 3.0）https://creativecommons.org/licenses/by-sa/3.0/
-- 這兩個衍生檔案沿用 CC BY-SA 3.0 授權。
+- 這些衍生檔案沿用 CC BY-SA 3.0 授權。
 
 ## 字型
 
