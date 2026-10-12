@@ -107,8 +107,8 @@ export const SCENARIOS: Scenario[] = [
 
 export const LEVEL_LABEL: Record<TutorLevel, string> = {
   kana: '只用假名（剛學完五十音）',
-  n5: '初級（N5）',
-  n4: '初中級（N4）',
+  n5: '初級前半（N5）',
+  n4: '初級後半（N4）',
 };
 
 const LEVEL_RULES: Record<TutorLevel, string> = {
@@ -152,7 +152,7 @@ export function conversationSystem(s: Scenario, level: TutorLevel): string {
     'Rules:',
     '- Stay in character. Keep each reply to one or two short sentences so the learner can follow.',
     s.casual
-      ? '- You are close friends, so use natural casual speech (plain form), but keep it simple.'
+      ? '- You are close friends, so use natural casual speech (plain form), but keep it simple. Never treat the learner\'s です／ます as a mistake. If the learner level says they have only just finished kana, stay with です／ます yourself too, because they have not learned plain forms yet.'
       : '- Use polite です／ます speech appropriate to the situation.',
     '- The learner may answer in Japanese, romaji, or Chinese when stuck. Understand what they mean and continue the scene.',
     '- `feedback` is only about the learner\'s most recent message. ok=true when it was natural and correct for the situation. When ok=false, `corrected` is the natural Japanese for what they meant (also when they wrote Chinese or romaji), and `explanation` is one or two short, kind sentences in Traditional Chinese (Taiwan) about the key fix. When ok=true, leave corrected and explanation empty.',
@@ -160,7 +160,7 @@ export function conversationSystem(s: Scenario, level: TutorLevel): string {
     '- `translation` is a natural Traditional Chinese (Taiwan) translation of `reply`.',
     '- `suggestions`: exactly two short things the learner could say next, at their level, each with Japanese (`ja`), its full kana reading (`reading`) and Chinese (`zh`).',
     '- Set `done` to true only when the learner has reached the goal; then close the scene politely in `reply`.',
-    '- In Chinese text use Taiwanese terms (計程車、捷運、便利商店、悠遊卡).',
+    '- In Chinese text use Taiwanese wording, e.g. 計程車 (not 出租車), 便利商店 (not 便利店), 影片 (not 視頻), 軟體 (not 軟件). Keep Japanese names such as Suica as they are instead of swapping in Taiwanese brands.',
   ].join('\n');
 }
 

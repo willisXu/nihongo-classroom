@@ -9,7 +9,7 @@ export const business: Deck = {
     { id: 'business-0001', kana: 'はじめまして', kanji: '初めまして', zh: '初次見面', pos: 'expression', topic: '自我介紹', note: '第一次見面的開場白，後面接自己的名字' },
     { id: 'business-0002', kana: '〜ともうします', kanji: '〜と申します', zh: '我叫〜（謙讓說法）', pos: 'expression', topic: '自我介紹', note: '謙讓語，自我介紹時比「〜です」更正式' },
     { id: 'business-0003', kana: 'よろしくおねがいいたします', kanji: 'よろしくお願いいたします', zh: '請多多指教；麻煩您了', pos: 'expression', topic: '自我介紹', note: '「いたします」是謙讓語，比「よろしくお願いします」更正式；Email 結尾也用' },
-    { id: 'business-0004', kana: 'よろしくおねがいします', kanji: 'よろしくお願いします', zh: '請多指教；拜託了', pos: 'expression', topic: '自我介紹', note: '丁寧語，同事之間或一般場合用' },
+    { id: 'business-0004', kana: 'よろしくおねがいします', kanji: 'よろしくお願いします', zh: '請多指教；拜託了', pos: 'expression', topic: '自我介紹', note: '一般的禮貌說法，同事之間或一般場合用；更正式時說「よろしくお願いいたします」' },
     { id: 'business-0005', kana: 'こちらこそ', zh: '彼此彼此；我才要（請您多指教）', pos: 'expression', topic: '自我介紹', note: '對方先說「よろしく」時，回「こちらこそ、よろしくお願いします」' },
     { id: 'business-0006', kana: '〜からまいりました', kanji: '〜から参りました', zh: '我從〜來（謙讓說法）', pos: 'expression', topic: '自我介紹', note: '「来ました」的謙讓語，例如「台湾から参りました」' },
     { id: 'business-0007', kana: '〜のものです', kanji: '〜の者です', zh: '我是〜（公司）的人', pos: 'expression', topic: '自我介紹', note: '打電話或拜訪時報上公司名，例如「ABC 社の者です」' },
