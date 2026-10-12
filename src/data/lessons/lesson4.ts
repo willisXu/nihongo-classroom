@@ -1,14 +1,10 @@
 import type { Lesson } from '../types';
+import { lessonMeta } from './meta';
 
 export const lesson4: Lesson = {
-  id: 4,
-  title: 'や・ら・わ行・ん',
-  headline: '最後 11 個清音，平假名的基本字全部到齊',
+  ...lessonMeta(4),
   summary:
     '學完這一課，46 個平假名清音全部到齊。你會念彈舌的ら行，知道 を 只當助詞、ん 自己算一拍，也能念出 [[こんにちは]] 和 [[さようなら]]。',
-  minutes: 40,
-  newKana: [...'やゆよらりるれろわをん'],
-  quiz: { script: 'h', rows: ['y', 'r', 'w', 'nn'] },
   sections: [
     {
       id: 'ya',

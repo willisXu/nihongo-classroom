@@ -1,9 +1,8 @@
 import type { Deck } from '../types';
+import { deckHead } from './meta';
 
 export const n5: Deck = {
-  id: 'n5',
-  title: 'JLPT N5 核心單字',
-  description: '檢定 N5 範圍的常用詞，從招呼語、數字、時間到基本動詞和形容詞。',
+  ...deckHead('n5'),
   items: [
     { id: 'n5-0001', kana: 'おはようございます', zh: '早安', pos: 'expression', topic: '招呼語', note: '對長輩或在職場用；朋友之間說「おはよう」', ex: { ja: '先生、おはようございます。', kana: 'せんせい、おはようございます。', zh: '老師早安。' } },
     { id: 'n5-0002', kana: 'こんにちは', zh: '你好；午安', pos: 'expression', topic: '招呼語', note: '白天見面時說；最後的「は」念「わ」' },

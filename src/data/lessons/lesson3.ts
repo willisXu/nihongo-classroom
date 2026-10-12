@@ -1,14 +1,10 @@
 import type { Lesson } from '../types';
+import { lessonMeta } from './meta';
 
 export const lesson3: Lesson = {
-  id: 3,
-  title: 'は行・ま行',
-  headline: 'ふ 不是ㄈ：は行和ま行',
+  ...lessonMeta(3),
   summary:
     '學完這一課，你能念出は行、ま行的 10 個字，發得出牙齒不碰嘴唇的 ふ，分得出 ひ 和 し，也知道 は、へ 當助詞時要念 wa、e。累計 35 個平假名。',
-  minutes: 35,
-  newKana: [...'はひふへほまみむめも'],
-  quiz: { script: 'h', rows: ['h', 'm'] },
   sections: [
     {
       id: 'hm',

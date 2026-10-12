@@ -41,17 +41,25 @@ export function speechText(item: Pick<VocabItem, 'kana'>): string {
 
 /**
  * 'all' 或牌組代號 → 卡片 id 清單。
- * 「全部牌組」裡，同一個字（假名＋漢字相同）出現在好幾個牌組時只留第一張，不會同一個字複習兩次。
+ * 「全部牌組」裡，同一個字（假名＋漢字相同）出現在好幾個牌組時：學過的卡片照常複習（各自有排程，
+ * 到期數才對得上）；還沒學過的只留一張當新卡，而且已經在別的牌組學過的字不再當新卡出現。
  */
-export function deckItemIds(deckId: string): string[] {
+export function deckItemIds(deckId: string, cards: Record<string, { reps: number } | undefined> = {}): string[] {
   if (deckId === 'all') {
-    const seen = new Set<string>();
+    const keyOf = (it: VocabItem) => `${it.kana}|${it.kanji ?? ''}`;
+    const started = (it: VocabItem) => (cards[it.id]?.reps ?? 0) > 0;
+    const learnedKeys = new Set(DECKS.flatMap((d) => d.items.filter(started).map(keyOf)));
+    const freshKeys = new Set<string>();
     const ids: string[] = [];
     for (const d of DECKS) {
       for (const it of d.items) {
-        const key = `${it.kana}|${it.kanji ?? ''}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
+        if (started(it)) {
+          ids.push(it.id);
+          continue;
+        }
+        const key = keyOf(it);
+        if (learnedKeys.has(key) || freshKeys.has(key)) continue;
+        freshKeys.add(key);
         ids.push(it.id);
       }
     }

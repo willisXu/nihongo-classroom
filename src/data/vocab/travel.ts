@@ -1,9 +1,8 @@
 import type { Deck } from '../types';
+import { deckHead } from './meta';
 
 export const travel: Deck = {
-  id: 'travel',
-  title: '旅遊與日常',
-  description: '點餐、購物、交通、住宿、問路，到日本自助旅行最常用到的詞和句子。',
+  ...deckHead('travel'),
   items: [
     // 機場與入境
     { id: 'travel-0001', kana: 'くうこう', kanji: '空港', zh: '機場', pos: 'noun', topic: '機場與入境', ex: { ja: '空港までバスで行きます。', kana: 'くうこうまでバスでいきます。', zh: '搭巴士去機場。' } },

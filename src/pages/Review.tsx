@@ -41,7 +41,8 @@ function isTextEntry(t: EventTarget | null): boolean {
 
 function Review({ deck, onRestart }: { deck: string; onRestart: () => void }) {
   const settings = useStore(settingsStore);
-  const ids = useMemo(() => deckItemIds(deck), [deck]);
+  // 開場時決定牌組內容（全部牌組要看哪些重複的字已經學過）
+  const ids = useMemo(() => deckItemIds(deck, srsStore.get().cards), [deck]);
   const [autoplay, setAutoplay] = useState<boolean>(() => readJSON('nk.autoplay') !== false);
 
   // 開場時決定這一輪的卡片（之後才到期的卡片，在結束畫面按「繼續複習」開下一輪）

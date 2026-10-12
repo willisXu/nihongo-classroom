@@ -23,7 +23,9 @@
 | Klee One（Fontworks） | Copyright 2020 The Klee Project Authors | SIL Open Font License 1.1 | `@fontsource/klee-one`（Fontsource） |
 | LXGW WenKai TC（落霞與孤鶩） | Copyright 2024 The LXGW WenKai Project Authors | SIL Open Font License 1.1 | `@fontsource/lxgw-wenkai-tc`（Fontsource） |
 
-SIL Open Font License 1.1 全文：https://openfontlicense.org/open-font-license-official-text/ （也收錄在下面的 `THIRD-PARTY-LICENSES.md` 裡）。
+SIL Open Font License 1.1 全文：https://openfontlicense.org/open-font-license-official-text/ 。
+
+建置時 `scripts/nk-fonts.mjs` 會把這兩套字型依網站用到的字裁切（subset），另存成 NK Display、NK Kana、NK Meaning 三組 woff2 檔，仍以 SIL Open Font License 1.1 授權；兩套字型的授權全文會一起發布成網站根目錄的 **`FONT-LICENSES.txt`**（線上版：https://willisxu.github.io/nihongo-classroom/FONT-LICENSES.txt ）。
 
 ## 打包進網站的 npm 套件
 

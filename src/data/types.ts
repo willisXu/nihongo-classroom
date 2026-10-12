@@ -118,6 +118,9 @@ export interface Lesson {
   next?: Inline;
 }
 
+/** 一課的摘要：列表頁、首頁和練習頁只需要這些欄位 */
+export type LessonMeta = Pick<Lesson, 'id' | 'title' | 'headline' | 'minutes' | 'newKana' | 'quiz'>;
+
 /* ---------------- 單字 ---------------- */
 
 export type Pos =
@@ -163,4 +166,13 @@ export interface Deck {
   title: string;
   description: string;
   items: VocabItem[];
+}
+
+/** 牌組摘要：首頁和牌組列表只需要這些，不用載入全部單字 */
+export interface DeckMeta {
+  id: DeckId;
+  title: string;
+  description: string;
+  /** 單字數；卡片 id 依序是 n5-0001、n5-0002…，測試會檢查和實際資料一致 */
+  count: number;
 }

@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useMemo } from 'react';
-import { LESSONS } from '../data/lessons';
-import { DECKS } from '../data/vocab';
+import { LESSON_META as LESSONS } from '../data/lessons/meta';
+import { DECK_META, metaItemIds } from '../data/vocab/meta';
 import {
   activityStore, apiKeyStore, kanaLevel, kanaStore, lastExportStore, lessonStore, settingsStore, srsStore, writingStore,
 } from '../state';
@@ -11,7 +11,7 @@ import { deckStats } from '../lib/srs';
 import { daysBetween, formatDateZh, studyDayKey } from '../lib/date';
 import { Icon } from '../components/Icon';
 import { Meter } from '../components/Controls';
-import { SCENARIOS, PURPOSE_LABEL } from '../data/tutor';
+import { SCENARIOS, PURPOSE_LABEL } from '../data/scenarios';
 import { buildPool } from '../lib/kanaQuiz';
 import { usePageTitle } from '../lib/title';
 
@@ -57,8 +57,8 @@ export default function Home() {
   const vocab = useMemo(() => {
     let due = 0;
     let seen = 0;
-    const perDeck = DECKS.map((d) => {
-      const s = deckStats(srs.cards, d.items.map((i) => i.id), now);
+    const perDeck = DECK_META.map((d) => {
+      const s = deckStats(srs.cards, metaItemIds(d), now);
       due += s.due;
       seen += s.seen;
       return { deck: d, ...s };

@@ -27,8 +27,9 @@
   --lift: 0 1px 0 rgba(28, 36, 64, 0.04), 0 6px 18px -10px rgba(28, 36, 64, 0.22);
   --scrim: rgba(28, 36, 64, 0.35);
 
-  --font-kana: 'Klee One', 'UD Digi Kyokasho N-R', 'UD デジタル 教科書体 N-R', 'Hiragino Mincho ProN', 'Yu Mincho', serif;
-  --font-display: 'LXGW WenKai TC', 'Klee One', 'Kaiti TC', 'BiauKai', 'DFKai-SB', serif;
+  /* NK Kana／NK Display 是建置時裁切過的字型（scripts/nk-fonts.mjs），缺的字再往下找完整的 Klee One */
+  --font-kana: 'NK Kana', 'Klee One', 'UD Digi Kyokasho N-R', 'UD デジタル 教科書体 N-R', 'Hiragino Mincho ProN', 'Yu Mincho', serif;
+  --font-display: 'NK Display', 'NK Kana', 'Klee One', 'Kaiti TC', 'BiauKai', 'DFKai-SB', serif;
   --font-body: 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans TC', 'Noto Sans CJK TC', 'Heiti TC', system-ui, sans-serif;
   --font-print: 'Hiragino Sans', 'Yu Gothic', 'Meiryo', 'Noto Sans JP', sans-serif;
 

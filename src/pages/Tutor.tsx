@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+// AI 回覆可能出現網站資料沒有的漢字：這一頁才載入完整的 Klee One 來補（其他頁用裁過的 NK Kana 就夠）
+import '@fontsource/klee-one/600.css';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   CONVERSATION_SCHEMA, CORRECTION_SCHEMA, LEVEL_LABEL, OPENING_MESSAGE, PURPOSE_LABEL, QUIZ_SCHEMA, SCENARIOS,
@@ -6,12 +8,12 @@ import {
   type ConversationTurn, type Correction, type Purpose, type QuizQuestion, type Scenario,
 } from '../data/tutor';
 import { DECKS } from '../data/vocab';
-import { LESSONS } from '../data/lessons';
+import { LESSON_META as LESSONS } from '../data/lessons/meta';
 import {
   addUsage, apiKeyStore, kanaStore, lessonStore, settingsStore, srsStore, updateSettings, type TutorLevel,
 } from '../state';
 import { isObj, num, oneOf, str, useStore } from '../state/store';
-import { TutorError, callJSON, estimateCost, toTutorError } from '../lib/claude';
+import { TutorError, callJSON, estimateCost, preloadClaudeApi, toTutorError } from '../lib/claude';
 import { learnedKana, suggestedLevel } from '../lib/progress';
 import { speak } from '../lib/speech';
 import { usePageTitle } from '../lib/title';
@@ -107,6 +109,10 @@ function writeSession(part: 'mode' | 'chat' | 'correct' | 'quiz', value: unknown
 export default function Tutor() {
   usePageTitle('AI 日文家教');
   const apiKey = useStore(apiKeyStore);
+  // 有金鑰就先在背景載入 Claude SDK，第一次送出不用等
+  useEffect(() => {
+    if (apiKey) preloadClaudeApi();
+  }, [apiKey]);
   const [params, setParams] = useSearchParams();
   // 網址參數只在進來時讀一次，讀完就清掉，避免切換或返回時重新開場（會再收一次費）
   const [initial] = useState(() => {

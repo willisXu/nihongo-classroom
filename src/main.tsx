@@ -1,8 +1,9 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-// 字型只自帶兩套：假名用的教科書體、標題用的楷書；內文用系統的正體中文字型
-import '@fontsource/klee-one/600.css';
-import '@fontsource/lxgw-wenkai-tc/700.css';
+// 字型只自帶兩套：假名用的教科書體、標題用的楷書；內文用系統的正體中文字型。
+// nk-fonts.css 是建置時裁成網站用得到的字的版本（scripts/nk-fonts.mjs），只有幾 kB，跟著主要 CSS 一起載入，
+// 字型檔已經在快取裡時，第一次畫面就是正確的字型，不會閃一下。
+import './fonts/generated/nk-fonts.css';
 import './styles/tokens.css';
 import './styles/app.css';
 import App, { applyTheme } from './App';

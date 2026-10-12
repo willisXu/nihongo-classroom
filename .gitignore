@@ -5,5 +5,7 @@ dist/
 Thumbs.db
 .vite/
 coverage/
+# 建置時產生的裁切字型（scripts/nk-fonts.mjs）
+src/fonts/generated/
 .env
 .env.*

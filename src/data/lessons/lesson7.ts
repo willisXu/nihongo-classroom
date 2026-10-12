@@ -1,14 +1,10 @@
 import type { Lesson } from '../types';
+import { lessonMeta } from './meta';
 
 export const lesson7: Lesson = {
-  id: 7,
-  title: '片假名（一）',
-  headline: '第二套假名：寫外來語的片假名',
+  ...lessonMeta(7),
   summary:
     '學完這一課，你會讀ア行到ナ行的片假名和它們的濁音，認得長音符號 ー，分得出 シ 和 ツ，也念得出 [[ケーキ]]、[[タクシー]]、[[サッカー]] 這些外來語。',
-  minutes: 40,
-  newKana: [...'アイウエオカキクケコサシスセソタチツテトナニヌネノガギグゲゴザジズゼゾダヂヅデドャュョッー'],
-  quiz: { script: 'k', rows: ['a', 'k', 's', 't', 'n', 'g', 'z', 'd'] },
   sections: [
     {
       id: 'what',

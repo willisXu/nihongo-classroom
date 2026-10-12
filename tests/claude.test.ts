@@ -2,7 +2,9 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import Anthropic from '@anthropic-ai/sdk';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { TIMEOUT_MESSAGE, TutorError, callJSON, normalizeApiKey, testConnection, toTutorError } from '../src/lib/claude';
+import { TIMEOUT_MESSAGE, TutorError, callJSON, normalizeApiKey, testConnection, toTutorError as toTutorErrorLazy } from '../src/lib/claude';
+// 錯誤對照表在真正呼叫 API 的模組裡（含 SDK）；claude.ts 的 toTutorError 在 SDK 載入後會交給它
+import { toTutorError } from '../src/lib/claude-api';
 
 const KEY = 'sk-ant-api03-Ab_cd-EF12';
 
@@ -341,5 +343,16 @@ describe('testConnection (streaming)', () => {
       res.end(JSON.stringify({ type: 'error', error: { type: 'authentication_error', message: 'invalid x-api-key' } }));
     };
     expect((await failure(testConnection(KEY, 'claude-haiku-5-5'))).kind).toBe('auth');
+  });
+});
+
+describe('SDK 延後載入', () => {
+  it('SDK 還沒載入前，取消和意外錯誤也有說明；載入後交給完整的對照表', async () => {
+    const abort = new DOMException('aborted', 'AbortError');
+    expect(toTutorErrorLazy(abort).kind).toBe('aborted');
+    await import('../src/lib/claude-api');
+    const e = new Anthropic.APIConnectionTimeoutError();
+    // 測試裡 callJSON 已經跑過，SDK 已載入
+    expect(toTutorErrorLazy(e).message).toBe(TIMEOUT_MESSAGE);
   });
 });

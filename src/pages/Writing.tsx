@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { LESSONS, lessonById } from '../data/lessons';
+import { LESSON_META as LESSONS, lessonMetaById as lessonById } from '../data/lessons/meta';
 import { kanaInfo, originText } from '../data/kana';
 import type { Script } from '../data/types';
 import { lessonStore, recordWriting, writingStore } from '../state';

@@ -105,16 +105,18 @@ AI 家教直接從你的瀏覽器呼叫 [Claude API](https://platform.claude.com
 src/
   data/
     kana.ts            假名資料：注音對照、發音提示、字源、例字
-    lessons/           第 1–8 課（資料驅動，lesson1.ts … lesson8.ts）
-    vocab/             單字牌組：n5 / travel / business / anime
-    tutor.ts           AI 家教的情境、系統提示與 JSON schema
+    lessons/           第 1–8 課（資料驅動，lesson1.ts … lesson8.ts）；meta.ts 是每課摘要（首頁和列表只載這個）
+    vocab/             單字牌組：n5 / travel / business / anime；meta.ts 是牌組摘要（首頁和列表只載這個）
+    scenarios.ts       AI 家教的情境清單
+    tutor.ts           AI 家教的系統提示與 JSON schema
     strokes.json       KanjiVG 筆順（由 scripts/fetch-kanjivg.mjs 產生）
     types.ts           資料型別
   lib/
     srs.ts             間隔複習排程（SM-2 變形）
     strokes.ts         手寫筆畫比對
     kanaQuiz.ts        假名測驗出題與干擾選項
-    claude.ts          Claude API 呼叫與錯誤訊息
+    claude.ts          Claude API：模型、費用、金鑰整理、錯誤型別（不含 SDK）
+    claude-api.ts      真正呼叫 API 的部分（含 Claude SDK，第一次用到才載入）
     romaji.ts          假名轉羅馬拼音
     speech.ts          日文語音合成
   state/               localStorage 狀態（設定、進度、紀錄、備份）
@@ -124,6 +126,7 @@ scripts/
   start.mjs            啟動程式（啟動檔和 npm start 都跑這支：檢查 Node、連接埠、安裝套件、建置）
   start-lib.mjs        啟動程式用的小工具（只用 Node 內建模組）
   fetch-kanjivg.mjs    下載 KanjiVG 筆順，產生 src/data/strokes.json
+  nk-fonts.mjs         建置時把兩套字型裁成網站用得到的字（Vite 外掛，產生 src/fonts/generated/，不進版控）
 tests/                 Vitest：排程、筆畫比對、假名測驗、課程與單字內容檢查、啟動程式
 ```
 
@@ -150,7 +153,7 @@ tests/                 Vitest：排程、筆畫比對、假名測驗、課程與
 - 以下檔案取自或衍生自 [KanjiVG](https://kanjivg.tagaini.net/)（© Ulrich Apel），以 [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) 授權，沿用相同授權、不適用 MIT：
   - `src/data/strokes.json`：假名筆順資料
   - `public/favicon.svg`：網站圖示（「あ」的筆畫）
-- 字型 Klee One、LXGW WenKai TC 以 SIL Open Font License 1.1 授權，透過 Fontsource 套件引入。
+- 字型 Klee One、LXGW WenKai TC 以 SIL Open Font License 1.1 授權，透過 Fontsource 套件引入；建置時依網站用到的字裁切（`scripts/nk-fonts.mjs`），授權全文跟著網站發布成 `FONT-LICENSES.txt`。
 - 打包進網站的 npm 套件（React、React Router、Anthropic SDK 等）的授權全文，建置時會自動產生成 `dist/THIRD-PARTY-LICENSES.md`，和 `index.html` 一起發布（線上版：<https://willisxu.github.io/nihongo-classroom/THIRD-PARTY-LICENSES.md>）。
 
 詳見 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。

@@ -45,7 +45,7 @@ describe('單字發音', () => {
 });
 
 describe('全部牌組', () => {
-  it('同一個字（假名＋漢字）只出現一次', () => {
+  it('還沒學過的同一個字（假名＋漢字）只出現一次', () => {
     const ids = deckItemIds('all');
     const keys = ids.map((id) => {
       const it = ALL.find((x) => x.id === id)!;
@@ -53,6 +53,15 @@ describe('全部牌組', () => {
     });
     expect(new Set(keys).size).toBe(keys.length);
     expect(new Set(ALL.map((it) => `${it.kana}|${it.kanji ?? ''}`)).size).toBe(ids.length);
+  });
+
+  it('另一個牌組裡已經學過的同一個字照常出現', () => {
+    const dup = ALL.find((it) => it.id.startsWith('travel-') && ALL.some((o) => o.id.startsWith('n5-') && o.kana === it.kana && o.kanji === it.kanji))!;
+    const twin = ALL.find((o) => o.id.startsWith('n5-') && o.kana === dup.kana && o.kanji === dup.kanji)!;
+    expect(deckItemIds('all')).not.toContain(dup.id);
+    const withProgress = deckItemIds('all', { [dup.id]: { reps: 2 } });
+    expect(withProgress).toContain(dup.id);
+    expect(withProgress, '已經學過的字不再當新卡').not.toContain(twin.id);
   });
 
   it('同一個字在不同牌組的寫法一致（假名和中文都相同時，漢字欄位也要相同）', () => {
@@ -75,6 +84,29 @@ describe('單字 id', () => {
     for (const [id, kana] of Object.entries(fixture)) {
       expect(byId.has(id), `${id} 不見了`).toBe(true);
       expect(byId.get(id), `${id} 變成別的字了`).toBe(kana);
+    }
+  });
+});
+
+describe('牌組與課程摘要', () => {
+  it('牌組摘要和實際單字一致（數量、名稱、依序編號的 id）', async () => {
+    const { DECK_META, metaItemIds } = await import('../src/data/vocab/meta');
+    expect(DECK_META.map((m) => m.id)).toEqual(DECKS.map((d) => d.id));
+    for (const m of DECK_META) {
+      const deck = DECKS.find((d) => d.id === m.id)!;
+      expect(m.count, `${m.id} 的 count`).toBe(deck.items.length);
+      expect(m.title).toBe(deck.title);
+      expect(metaItemIds(m)).toEqual(deck.items.map((it) => it.id));
+    }
+  });
+
+  it('課程摘要和課文一致', async () => {
+    const { LESSON_META } = await import('../src/data/lessons/meta');
+    const { LESSONS } = await import('../src/data/lessons');
+    expect(LESSON_META.map((l) => l.id)).toEqual(LESSONS.map((l) => l.id));
+    for (const l of LESSONS) {
+      const m = LESSON_META.find((x) => x.id === l.id)!;
+      expect({ title: l.title, headline: l.headline, quiz: l.quiz, newKana: l.newKana }).toEqual({ title: m.title, headline: m.headline, quiz: m.quiz, newKana: m.newKana });
     }
   });
 });

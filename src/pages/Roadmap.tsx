@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { lessonStore } from '../state';
 import { useStore } from '../state/store';
 import { lessonsDone } from '../lib/progress';
-import { LESSONS } from '../data/lessons';
+import { LESSON_META as LESSONS } from '../data/lessons/meta';
 import { usePageTitle } from '../lib/title';
 
 const PHASES = [

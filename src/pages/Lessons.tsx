@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { LESSONS } from '../data/lessons';
+import { LESSON_META as LESSONS } from '../data/lessons/meta';
 import { lessonStore } from '../state';
 import { useStore } from '../state/store';
 import { lessonsDone, nextLesson } from '../lib/progress';

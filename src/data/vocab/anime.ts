@@ -1,9 +1,8 @@
 import type { Deck } from '../types';
+import { deckHead } from './meta';
 
 export const anime: Deck = {
-  id: 'anime',
-  title: '日劇・動畫・音樂',
-  description: '追劇和看動畫最常聽到的詞和口頭禪，附上語氣和使用場合。',
+  ...deckHead('anime'),
   items: [
     // 反應
     { id: 'anime-0001', kana: 'やばい', zh: '糟了；不妙；（年輕人）超厲害、超扯', pos: 'i-adj', topic: '反應', ex: { ja: 'やばい、遅刻しそう！', kana: 'やばい、ちこくしそう！', zh: '糟了，快遲到了！' }, note: '口語，原意是「危險、不妙」，年輕人也拿來表示「超讚」；不要對長輩或上司用' },

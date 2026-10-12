@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { nkFonts } from './scripts/nk-fonts.mjs';
 
 // 學習紀錄存在瀏覽器的 localStorage，而 localStorage 是跟著「網址＋連接埠」走的。
 // 固定用 5288（開發和預覽都一樣），換次啟動也能接著學；strictPort 讓它不會悄悄換成別的埠。
@@ -9,10 +10,13 @@ const PORT = 5288;
 export default defineConfig({
   // './' 讓建置結果可以放在任何子路徑（例如 GitHub Pages 的 /nihongo-classroom/）
   base: './',
-  plugins: [react()],
+  // nkFonts：把兩套中日文字型裁成網站用得到的字（見 scripts/nk-fonts.mjs）
+  plugins: [react(), nkFonts()],
   server: { port: PORT, strictPort: true },
   preview: { port: PORT, strictPort: true },
   build: {
+    // 字型檔不要內嵌成 base64：內嵌後每一頁都得連同 CSS 下載全部字型，就失去「用到才下載」的好處
+    assetsInlineLimit: (file: string) => (/\.woff2?$/.test(file) ? false : undefined),
     // 首頁的程式含全部單字資料（約 630 kB）；超過 700 kB 就提醒，避免不知不覺越來越大
     chunkSizeWarningLimit: 700,
     // 把打包進網站的 npm 套件（React、React Router、Anthropic SDK…）的授權全文

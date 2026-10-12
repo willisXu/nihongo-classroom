@@ -513,7 +513,8 @@ table.jlpt { min-width: 560px; }
 .f-kana { font-size: 20px; color: var(--ink-2); }
 .f-r { font-size: 14px; color: var(--ink-3); margin-bottom: 6px; }
 .flash-back { display: grid; gap: 10px; border-top: 1.5px dashed var(--grid); padding-top: 14px; }
-.f-zh { font-family: var(--font-display); font-weight: 700; font-size: 24px; text-align: center; }
+/* 單字解釋：標題字型沒有的字由 NK Meaning 補上（只有複習頁會下載） */
+.f-zh { font-family: 'NK Display', 'NK Meaning', var(--font-display); font-weight: 700; font-size: 24px; text-align: center; }
 .f-pos { font-size: 13px; color: var(--ink-3); text-align: center; }
 .flash-actions { display: grid; justify-items: center; }
 .grades { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; width: 100%; }

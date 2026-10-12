@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { DECKS } from '../data/vocab';
+import { DECK_META, metaItemIds } from '../data/vocab/meta';
 import { NEW_PER_DAY_OPTIONS, lessonStore, settingsStore, srsStore, updateSettings } from '../state';
 import { useStore } from '../state/store';
 import { deckStats } from '../lib/srs';
@@ -24,7 +24,7 @@ export default function Vocab() {
   const lessons = useStore(lessonStore);
   const freshToday = srs.days[studyDayKey(now)]?.fresh ?? 0;
   const newLeft = Math.max(0, settings.newPerDay - freshToday);
-  const all = deckStats(srs.cards, DECKS.flatMap((d) => d.items.map((i) => i.id)), now);
+  const all = deckStats(srs.cards, DECK_META.flatMap(metaItemIds), now);
 
   return (
     <div className="wrap">
@@ -78,8 +78,8 @@ export default function Vocab() {
       </section>
 
       <div className="deck-grid">
-        {DECKS.map((d) => {
-          const s = deckStats(srs.cards, d.items.map((i) => i.id), now);
+        {DECK_META.map((d) => {
+          const s = deckStats(srs.cards, metaItemIds(d), now);
           return (
             <article key={d.id} className="card deck-card">
               <div className="deck-top">

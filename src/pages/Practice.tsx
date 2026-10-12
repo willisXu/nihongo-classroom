@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { LESSONS, lessonById } from '../data/lessons';
+import { LESSON_META as LESSONS, lessonMetaById as lessonById } from '../data/lessons/meta';
 import { SEION_ROWS } from '../data/kana';
 import { kanaLevel, kanaStore, lessonStore, recordKana, type KanaStats } from '../state';
 import { readJSON, useStore, writeJSON } from '../state/store';

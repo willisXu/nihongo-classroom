@@ -1,14 +1,10 @@
 import type { Lesson } from '../types';
+import { lessonMeta } from './meta';
 
 export const lesson5: Lesson = {
-  id: 5,
-  title: '濁音・半濁音',
-  headline: '加兩點、加一個圈：再多 25 個音',
+  ...lessonMeta(5),
   summary:
     '學完這一課，你看到 {{゛}} 和 {{゜}} 就知道怎麼念，並且能靠「聲帶有沒有振動」分出 か 和 が、た 和 だ。這是中文母語者最需要花時間的一課。',
-  minutes: 45,
-  newKana: [...'がぎぐげござじずぜぞだぢづでどばびぶべぼぱぴぷぺぽ'],
-  quiz: { script: 'h', rows: ['g', 'z', 'd', 'b', 'p'] },
   sections: [
     {
       id: 'marks',

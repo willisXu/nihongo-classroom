@@ -1,14 +1,10 @@
 import type { Lesson } from '../types';
+import { lessonMeta } from './meta';
 
 export const lesson2: Lesson = {
-  id: 2,
-  title: 'た行・な行',
-  headline: '10 個新假名，和中文裡沒有的 つ',
+  ...lessonMeta(2),
   summary:
     '學完這一課，你能直接念出た行、な行的 10 個字，發得出嘴唇不嘟的 つ，也知道為什麼詞中間的 た 聽起來像「搭」。加上第 1 課，你已經認得 25 個平假名。',
-  minutes: 35,
-  newKana: [...'たちつてとなにぬねの'],
-  quiz: { script: 'h', rows: ['t', 'n'] },
   sections: [
     {
       id: 'tn',

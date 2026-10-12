@@ -236,7 +236,13 @@ export default function Settings() {
             </a>{' '}
             授權。
           </li>
-          <li>字型：Klee One、LXGW WenKai TC，皆以 SIL Open Font License 1.1 授權；內文使用系統字型。</li>
+          <li>
+            字型：Klee One、LXGW WenKai TC（只保留網站用到的字，下載量小很多），皆以 SIL Open Font License 1.1 授權（
+            <a href="./FONT-LICENSES.txt" target="_blank" rel="noopener">
+              授權全文
+            </a>
+            ）；內文使用系統字型。
+          </li>
           <li>
             程式碼以 MIT 授權公開在{' '}
             <a href="https://github.com/willisXu/nihongo-classroom" target="_blank" rel="noopener noreferrer">

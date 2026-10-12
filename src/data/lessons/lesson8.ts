@@ -1,14 +1,10 @@
 import type { Lesson } from '../types';
+import { lessonMeta } from './meta';
 
 export const lesson8: Lesson = {
-  id: 8,
-  title: '片假名（二）',
-  headline: '最後一課：片假名全部到齊',
+  ...lessonMeta(8),
   summary:
     '學完這一課，你就學完了全部的假名。你會讀ハ行到ン的片假名和バ行、パ行，分得出 ン 和 ソ，也看得懂 [[パーティー]]、[[カフェ]] 這種用小字拼出的外國音。',
-  minutes: 45,
-  newKana: [...'ハヒフヘホマミムメモヤユヨラリルレロワヲンバビブベボパピプペポァィゥェォヴ'],
-  quiz: { script: 'k', rows: ['h', 'm', 'y', 'r', 'w', 'nn', 'b', 'p'] },
   sections: [
     {
       id: 'rows',

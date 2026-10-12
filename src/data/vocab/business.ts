@@ -1,9 +1,8 @@
 import type { Deck } from '../types';
+import { deckHead } from './meta';
 
 export const business: Deck = {
-  id: 'business',
-  title: '職場與商務',
-  description: '自我介紹、公司用語、電話和會議的基本說法，以及職場最常聽到的客套話。',
+  ...deckHead('business'),
   items: [
     // 自我介紹
     { id: 'business-0001', kana: 'はじめまして', zh: '初次見面', pos: 'expression', topic: '自我介紹', note: '第一次見面的開場白，後面接自己的名字；漢字寫作「初めまして」' },
