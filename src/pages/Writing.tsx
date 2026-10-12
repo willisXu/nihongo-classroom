@@ -5,19 +5,58 @@ import { kanaInfo, originText } from '../data/kana';
 import type { Script } from '../data/types';
 import { lessonStore, recordWriting, writingStore } from '../state';
 import { readJSON, useStore, writeJSON } from '../state/store';
-import { ALL_ROW_IDS, ROW_CHOICES, SEI_ROW_IDS, normalizeRows } from '../lib/kanaQuiz';
+import { ROW_CHOICES, SEI_ROW_IDS, normalizeRows } from '../lib/kanaQuiz';
 import { ALL_ROWS } from '../data/kana';
 import { nextLesson } from '../lib/progress';
 import { getStrokePaths } from '../lib/strokes';
 import { speak } from '../lib/speech';
+import { usePageTitle } from '../lib/title';
 import { Segmented } from '../components/Controls';
 import { Icon } from '../components/Icon';
 import { PracticeTabs } from '../components/PracticeTabs';
 import { TraceCanvas, type TraceMode, type TraceResult } from '../components/TraceCanvas';
 
-/** 練習範圍內的字（手寫也練 ぢ、づ、を，測驗則不出） */
+/* ---------- 手寫才有的範圍：小字和長音（測驗不出） ---------- */
+const SMALL_ROW = { id: 'small', h: 'ゃ・っ', k: 'ャ・ッ・ー', group: 'small' as const };
+const WRITE_ROWS = [...ROW_CHOICES, SMALL_ROW];
+const WRITE_ROW_IDS = WRITE_ROWS.map((r) => r.id);
+const SMALL_CHARS: Record<Script, string[]> = {
+  h: ['ゃ', 'ゅ', 'ょ', 'っ'],
+  k: ['ャ', 'ュ', 'ョ', 'ッ', 'ァ', 'ィ', 'ゥ', 'ェ', 'ォ', 'ー'],
+};
+/** 小字和長音不在五十音表裡：說明、聽發音時念的例子 */
+const SMALL_INFO: Record<string, { r: string; note: string; say: string }> = {
+  ゃ: { r: 'ya（小字）', note: '接在い段字後面合成一拍，例 きゃ kya', say: 'きゃ' },
+  ゅ: { r: 'yu（小字）', note: '接在い段字後面合成一拍，例 きゅ kyu', say: 'きゅ' },
+  ょ: { r: 'yo（小字）', note: '接在い段字後面合成一拍，例 きょ kyo', say: 'きょ' },
+  っ: { r: '促音', note: '停一拍，下一個子音念兩次，例 きって kitte', say: 'きって' },
+  ャ: { r: 'ya（小字）', note: '接在イ段字後面合成一拍，例 キャ kya', say: 'キャ' },
+  ュ: { r: 'yu（小字）', note: '接在イ段字後面合成一拍，例 キュ kyu', say: 'キュ' },
+  ョ: { r: 'yo（小字）', note: '接在イ段字後面合成一拍，例 キョ kyo', say: 'キョ' },
+  ッ: { r: '促音', note: '停一拍，下一個子音念兩次，例 ベッド beddo', say: 'ベッド' },
+  ァ: { r: 'a（小字）', note: '拼外國音，例 ファ fa', say: 'ファ' },
+  ィ: { r: 'i（小字）', note: '拼外國音，例 ティ ti', say: 'ティ' },
+  ゥ: { r: 'u（小字）', note: '拼外國音，例 トゥ tu', say: 'トゥ' },
+  ェ: { r: 'e（小字）', note: '拼外國音，例 シェ she', say: 'シェ' },
+  ォ: { r: 'o（小字）', note: '拼外國音，例 ウォ wo', say: 'ウォ' },
+  ー: { r: '長音', note: '前一個音拉長一拍，例 コーヒー kōhī；橫寫是一橫', say: 'コーヒー' },
+};
+
+function smallScript(ch: string): Script | undefined {
+  if (SMALL_CHARS.h.includes(ch)) return 'h';
+  if (SMALL_CHARS.k.includes(ch)) return 'k';
+  return undefined;
+}
+
+/** 範圍代號整理成固定順序（小字放最後） */
+function normalizeWriteRows(rows: string[]): string[] {
+  const out = normalizeRows(rows);
+  return rows.includes('small') ? [...out, 'small'] : out;
+}
+
+/** 練習範圍內的字（手寫也練 ぢ、づ、を和小字，測驗則不出） */
 function writingChars(rows: string[], script: Script): string[] {
-  const chosen = new Set(normalizeRows(rows));
+  const chosen = new Set(normalizeWriteRows(rows));
   const out: string[] = [];
   for (const row of ALL_ROWS) {
     if (!chosen.has(row.id === 'nn' ? 'w' : row.id)) continue;
@@ -27,7 +66,15 @@ function writingChars(rows: string[], script: Script): string[] {
       if (getStrokePaths(ch)) out.push(ch);
     }
   }
+  if (chosen.has('small')) {
+    for (const ch of SMALL_CHARS[script]) if (getStrokePaths(ch)) out.push(ch);
+  }
   return out;
+}
+
+/** 聽發音：小字單獨念不出來，改念例子 */
+function sayFor(ch: string): string {
+  return SMALL_INFO[ch]?.say ?? ch;
 }
 
 interface WritePrefs {
@@ -38,7 +85,7 @@ interface WritePrefs {
 
 function loadPrefs(): WritePrefs {
   const raw = readJSON('nk.write') as Partial<WritePrefs> | undefined;
-  const rows = Array.isArray(raw?.rows) ? normalizeRows(raw!.rows.filter((r): r is string => typeof r === 'string')) : [];
+  const rows = Array.isArray(raw?.rows) ? normalizeWriteRows(raw!.rows.filter((r): r is string => typeof r === 'string')) : [];
   return {
     script: raw?.script === 'k' ? 'k' : 'h',
     rows: rows.length ? rows : ['a', 'k', 's'],
@@ -47,6 +94,7 @@ function loadPrefs(): WritePrefs {
 }
 
 export default function Writing() {
+  usePageTitle('手寫描字');
   const [params, setParams] = useSearchParams();
   const writing = useStore(writingStore);
   const lessons = useStore(lessonStore);
@@ -60,6 +108,8 @@ export default function Writing() {
       const row = inf.row.id === 'nn' ? 'w' : inf.row.id;
       return { ...p, script: inf.script, rows: p.rows.includes(row) ? p.rows : [row] };
     }
+    const small = ch ? smallScript(ch) : undefined;
+    if (small) return { ...p, script: small, rows: p.rows.includes('small') ? p.rows : ['small'] };
     return p;
   });
   const chars = useMemo(() => writingChars(prefs.rows, prefs.script), [prefs.rows, prefs.script]);
@@ -91,6 +141,7 @@ export default function Writing() {
   };
 
   const inf = kanaInfo(current);
+  const small = SMALL_INFO[current];
   const stat = writing[current];
   const strokes = getStrokePaths(current)?.length ?? 0;
   const upcoming = nextLesson(lessons);
@@ -100,13 +151,13 @@ export default function Writing() {
   const toggleRow = (id: string) => {
     const has = prefs.rows.includes(id);
     if (has && prefs.rows.length === 1) return;
-    setPrefs((p) => ({ ...p, rows: has ? p.rows.filter((r) => r !== id) : ALL_ROW_IDS.filter((r) => r === id || p.rows.includes(r)) }));
+    setPrefs((p) => ({ ...p, rows: has ? p.rows.filter((r) => r !== id) : WRITE_ROW_IDS.filter((r) => r === id || p.rows.includes(r)) }));
   };
 
   const onComplete = (r: TraceResult) => {
     recordWriting(r.char, prefs.mode, r.mistakes);
     setResult(r);
-    speak(r.char);
+    speak(sayFor(r.char));
   };
 
   return (
@@ -142,9 +193,9 @@ export default function Writing() {
         <div className="set-row">
           <span className="set-l">範圍</span>
           <div className="rchips" role="group" aria-label="練習範圍">
-            {ROW_CHOICES.map((r, i) => (
+            {WRITE_ROWS.map((r, i) => (
               <span key={r.id} className="rchip-wrap">
-                {i > 0 && r.group !== ROW_CHOICES[i - 1].group ? <span className="rsep" aria-hidden="true" /> : null}
+                {i > 0 && r.group !== WRITE_ROWS[i - 1].group ? <span className="rsep" aria-hidden="true" /> : null}
                 <button type="button" className="rchip" aria-pressed={prefs.rows.includes(r.id)} lang="ja" onClick={() => toggleRow(r.id)}>
                   {prefs.script === 'k' ? r.k : r.h}
                 </button>
@@ -193,7 +244,7 @@ export default function Writing() {
             <button type="button" className="btn" onClick={() => setResetKey((k) => k + 1)}>
               <Icon name="refresh" size={17} /> 重寫
             </button>
-            <button type="button" className="btn" onClick={() => speak(current)}>
+            <button type="button" className="btn" onClick={() => speak(sayFor(current))}>
               <Icon name="speaker" size={17} /> 聽發音
             </button>
           </div>
@@ -205,9 +256,9 @@ export default function Writing() {
               {current}
             </span>
             <div>
-              <p className="ws-r">{inf?.cell.r}</p>
+              <p className="ws-r">{inf?.cell.r ?? small?.r}</p>
               <p className="small">
-                {strokes} 畫{inf && inf.kind === 'sei' ? ` · ${originText(inf.cell, inf.script)}` : ''}
+                {strokes} 畫{inf && inf.kind === 'sei' ? ` · ${originText(inf.cell, inf.script)}` : small ? ` · ${small.note}` : ''}
               </p>
             </div>
           </div>

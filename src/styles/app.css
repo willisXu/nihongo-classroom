@@ -97,7 +97,7 @@ main { outline: none; padding-bottom: 32px; }
 
 .bottombar { display: none; }
 
-.vnote-toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); width: min(680px, calc(100% - 32px)); z-index: 50; }
+.vnote-toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); width: min(680px, calc(100% - 32px)); z-index: 50; display: grid; gap: 8px; }
 .vnote-toast .vnote { box-shadow: 0 10px 30px -12px var(--scrim); border: 1px solid var(--line); }
 .vnote { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; background: var(--mark-soft); border-radius: var(--r); padding: 10px 14px; font-size: 14px; }
 .vnote p { flex: 1 1 280px; min-width: 0; }
@@ -142,7 +142,7 @@ main { outline: none; padding-bottom: 32px; }
   border: 1px solid var(--line); border-radius: 50%; background: var(--sheet); color: var(--accent); cursor: pointer;
 }
 .iconbtn:hover, .iconbtn.is-playing { border-color: var(--accent); background: var(--accent-soft); }
-.kbd { display: inline-block; font-size: 11px; border: 1px solid currentColor; border-radius: 4px; padding: 0 5px; opacity: 0.7; line-height: 1.5; margin-left: 4px; font-family: var(--font-body); }
+.kbd { display: inline-block; font-size: 11px; border: 1px solid color-mix(in srgb, currentColor 55%, transparent); border-radius: 4px; padding: 0 5px; line-height: 1.5; margin-left: 4px; font-family: var(--font-body); }
 
 .playbtn {
   display: inline-flex; align-items: center; gap: 6px; appearance: none; border: 1px solid var(--accent); color: var(--accent);
@@ -724,6 +724,31 @@ table.jlpt { min-width: 560px; }
   .chat-head { flex-direction: column; }
   .usage-line { margin-left: 0; }
 }
+/* ============ 鍵盤焦點、對比、手機輸入 ============ */
+/* 外層有 overflow 的元件，焦點框畫在內側才不會被裁掉 */
+.segc button:focus-visible, .tabs .tab:focus-visible { outline-offset: -3px; }
+#main:focus { outline: none; }
+.table-scroll:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.toc a:focus-visible { outline-offset: 1px; }
+.sec-h:focus { outline: none; }
+/* 很長的單字列表：畫面外的群組先不排版，捲到才畫 */
+.vgroup { content-visibility: auto; contain-intrinsic-size: auto 900px; }
+.err-detail { overflow-wrap: anywhere; color: var(--ink-3); }
+/* 選單的選項文字很長（語音名稱、模型說明）時，選單本身可以縮窄，不撐破版面 */
+select { min-width: 0; text-overflow: ellipsis; }
+.apikey, .model-pick, .block { grid-template-columns: minmax(0, 1fr); }
+/* iPhone 的 Safari 遇到小於 16px 的輸入框會自動放大畫面 */
+@media (max-width: 720px) {
+  select, input[type='text'], input[type='search'], input[type='password'], textarea { font-size: 16px; }
+}
+/* 深色模式：螢光筆底色上的小字改用主要文字色，對比才夠 */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) :is(.s-kanji, .s-hira, .s-kata) rt,
+  :root:not([data-theme='light']) .db-seg span { color: var(--ink); }
+}
+:root[data-theme='dark'] :is(.s-kanji, .s-hira, .s-kata) rt,
+:root[data-theme='dark'] .db-seg span { color: var(--ink); }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
 }

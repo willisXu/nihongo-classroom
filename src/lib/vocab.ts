@@ -29,9 +29,34 @@ export function displayForm(item: VocabItem): string {
   return item.kanji ?? item.kana;
 }
 
-/** 'all' 或牌組代號 → 卡片 id 清單 */
+/**
+ * 單字要念的文字：一律念假名。
+ * 同一個漢字常有好幾種念法（四＝よん／し、一日＝いちにち／ついたち），
+ * 單獨把漢字丟給語音引擎，念出來的不一定是這張卡要教的讀音。
+ * 「〜にん」這類接尾詞的「〜」不念。
+ */
+export function speechText(item: Pick<VocabItem, 'kana'>): string {
+  return item.kana.replace(/[〜～]/g, '').trim();
+}
+
+/**
+ * 'all' 或牌組代號 → 卡片 id 清單。
+ * 「全部牌組」裡，同一個字（假名＋漢字相同）出現在好幾個牌組時只留第一張，不會同一個字複習兩次。
+ */
 export function deckItemIds(deckId: string): string[] {
-  if (deckId === 'all') return DECKS.flatMap((d) => d.items.map((i) => i.id));
+  if (deckId === 'all') {
+    const seen = new Set<string>();
+    const ids: string[] = [];
+    for (const d of DECKS) {
+      for (const it of d.items) {
+        const key = `${it.kana}|${it.kanji ?? ''}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        ids.push(it.id);
+      }
+    }
+    return ids;
+  }
   return DECKS.find((d) => d.id === deckId)?.items.map((i) => i.id) ?? [];
 }
 

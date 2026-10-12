@@ -3,6 +3,7 @@ import { lessonStore } from '../state';
 import { useStore } from '../state/store';
 import { lessonsDone } from '../lib/progress';
 import { LESSONS } from '../data/lessons';
+import { usePageTitle } from '../lib/title';
 
 const PHASES = [
   {
@@ -65,6 +66,7 @@ const TIPS = [
 ];
 
 export default function Roadmap() {
+  usePageTitle('學習地圖');
   const progress = useStore(lessonStore);
   const done = lessonsDone(progress);
   const phaseNow = done < LESSONS.length ? 0 : 1;
@@ -160,7 +162,7 @@ export default function Roadmap() {
       <section className="block" aria-labelledby="h-jlpt">
         <h2 id="h-jlpt">檢定時程（JLPT 台灣考區）</h2>
         <p>日本語能力試驗在台灣由語言訓練測驗中心（LTTC）承辦，每年 7 月和 12 月的第一個週日各考一次，紙筆作答，共五級，N1 最難、N5 最簡單。</p>
-        <div className="table-scroll">
+        <div className="table-scroll" tabIndex={0} role="region" aria-label="JLPT 時程表（可左右捲動）">
           <table className="jlpt">
             <thead>
               <tr>

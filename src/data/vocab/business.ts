@@ -6,7 +6,7 @@ export const business: Deck = {
   description: '自我介紹、公司用語、電話和會議的基本說法，以及職場最常聽到的客套話。',
   items: [
     // 自我介紹
-    { id: 'business-0001', kana: 'はじめまして', kanji: '初めまして', zh: '初次見面', pos: 'expression', topic: '自我介紹', note: '第一次見面的開場白，後面接自己的名字' },
+    { id: 'business-0001', kana: 'はじめまして', zh: '初次見面', pos: 'expression', topic: '自我介紹', note: '第一次見面的開場白，後面接自己的名字；漢字寫作「初めまして」' },
     { id: 'business-0002', kana: '〜ともうします', kanji: '〜と申します', zh: '我叫〜（謙讓說法）', pos: 'expression', topic: '自我介紹', note: '謙讓語，自我介紹時比「〜です」更正式' },
     { id: 'business-0003', kana: 'よろしくおねがいいたします', kanji: 'よろしくお願いいたします', zh: '請多多指教；麻煩您了', pos: 'expression', topic: '自我介紹', note: '「いたします」是謙讓語，比「よろしくお願いします」更正式；Email 結尾也用' },
     { id: 'business-0004', kana: 'よろしくおねがいします', kanji: 'よろしくお願いします', zh: '請多指教；拜託了', pos: 'expression', topic: '自我介紹', note: '一般的禮貌說法，同事之間或一般場合用；更正式時說「よろしくお願いいたします」' },

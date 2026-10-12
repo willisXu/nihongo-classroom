@@ -7,6 +7,7 @@ import { studyDayKey } from '../lib/date';
 import { lessonsDone } from '../lib/progress';
 import { Meter } from '../components/Controls';
 import { Icon } from '../components/Icon';
+import { usePageTitle } from '../lib/title';
 
 const DECK_NOTE: Record<string, string> = {
   n5: '先背這組：檢定和日常都用得到。',
@@ -16,6 +17,7 @@ const DECK_NOTE: Record<string, string> = {
 };
 
 export default function Vocab() {
+  usePageTitle('單字牌組');
   const now = Date.now();
   const srs = useStore(srsStore);
   const settings = useStore(settingsStore);

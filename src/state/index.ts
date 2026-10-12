@@ -270,6 +270,13 @@ export function addUsage(model: string, input: number, output: number) {
   logActivity('tutor');
 }
 
+/* ---------------- 上次匯出備份的時間（提醒用，不放進備份檔） ---------------- */
+export const lastExportStore = createStore<number>('nk.lastExport', () => 0, (raw) => num(raw));
+
+export function markExported() {
+  lastExportStore.set(Date.now());
+}
+
 /* ---------------- 備份：匯出／匯入（不含 API 金鑰） ---------------- */
 const BACKUP_STORES = [settingsStore, kanaStore, lessonStore, writingStore, srsStore, activityStore, usageStore];
 

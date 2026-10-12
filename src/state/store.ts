@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 
-/** localStorage 讀寫：私密視窗或封鎖網站資料時會丟例外，一律吞掉，頁面照常運作。 */
+/** localStorage 讀寫：封鎖網站資料或空間已滿時會丟例外；讀取失敗當作沒有資料，寫入失敗會記下來提醒使用者。 */
 export function readJSON(key: string): unknown {
   try {
     const raw = localStorage.getItem(key);
@@ -10,11 +10,39 @@ export function readJSON(key: string): unknown {
   }
 }
 
+/* ---------- 存檔失敗偵測：封鎖網站資料、空間已滿等情況要讓使用者知道 ---------- */
+let saveFailed = false;
+const healthListeners = new Set<() => void>();
+function markSaveFailed() {
+  if (saveFailed) return;
+  saveFailed = true;
+  healthListeners.forEach((l) => l());
+}
+
+export const storageHealth = {
+  /** 這次開啟網站後，有沒有存檔失敗過 */
+  failed: (): boolean => saveFailed,
+  subscribe(listener: () => void): () => void {
+    healthListeners.add(listener);
+    return () => healthListeners.delete(listener);
+  },
+  /** 開站時先試寫一次，及早發現存不進去的瀏覽器 */
+  probe(): void {
+    try {
+      localStorage.setItem('nk.probe', '1');
+      localStorage.removeItem('nk.probe');
+    } catch {
+      markSaveFailed();
+    }
+  },
+};
+
 export function writeJSON(key: string, value: unknown): void {
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch {
-    /* 存不進去就算了，資料仍在記憶體裡 */
+    // 頁面照常運作（資料仍在記憶體裡），但要提醒使用者重新整理後會不見
+    markSaveFailed();
   }
 }
 

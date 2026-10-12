@@ -15,7 +15,7 @@
   --accent: #2c4f94;      /* 藍：所有可以按的東西 */
   --accent-soft: #e4ebf7;
   --on-accent: #ffffff;
-  --mark: #c8362a;        /* 老師的紅筆 */
+  --mark: #bf3328;        /* 老師的紅筆（淺紅底上的小字也要有 4.5:1 對比） */
   --mark-soft: #fbe6e2;
   --ok: #2f7d4f;          /* 答對、熟悉（語意色） */
   --ok-soft: #dcefe2;

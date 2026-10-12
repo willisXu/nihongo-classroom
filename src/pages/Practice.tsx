@@ -14,6 +14,7 @@ import { Masu, Segmented } from '../components/Controls';
 import { Hanamaru } from '../components/Hanamaru';
 import { Icon } from '../components/Icon';
 import { PracticeTabs } from '../components/PracticeTabs';
+import { usePageTitle } from '../lib/title';
 
 interface QuizPrefs {
   script: QuizScript;
@@ -39,6 +40,7 @@ interface Q {
 }
 
 export default function Practice() {
+  usePageTitle('假名測驗');
   const [params, setParams] = useSearchParams();
   const stats = useStore(kanaStore);
   const lessons = useStore(lessonStore);

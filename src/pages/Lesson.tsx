@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { LESSONS, lessonById } from '../data/lessons';
 import { rowById, originText } from '../data/kana';
 import type { KanaRow, LessonBlock, LessonWord, Script } from '../data/types';
@@ -12,11 +12,60 @@ import { Rich } from '../components/Rich';
 import { Masu, Stamp, Switch } from '../components/Controls';
 import { SpeakButton, usePlayFlash } from '../components/Speak';
 import { Icon } from '../components/Icon';
+import { usePageTitle } from '../lib/title';
+
+const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/** 捲到課文的某一段，並把焦點放在段落標題（鍵盤和讀屏軟體才會從那裡接著讀） */
+function goToSection(id: string, smooth: boolean) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.scrollIntoView({ behavior: smooth && !reduceMotion() ? 'smooth' : 'auto', block: 'start' });
+  el.querySelector<HTMLElement>('h2')?.focus({ preventScroll: true });
+}
 
 export default function LessonPage() {
   const { id } = useParams();
   const lesson = lessonById(Number(id));
   const progress = useStore(lessonStore);
+  const location = useLocation();
+  const navigate = useNavigate();
+  usePageTitle(lesson ? `第 ${lesson.id} 課 ${lesson.title}` : '找不到這一課');
+
+  // 網址帶段落（例如分享的連結 #/lessons/1#beats）就捲到那一段；第一次進來直接跳過去，之後用平滑捲動
+  const hashRuns = useRef(0);
+  useEffect(() => {
+    const target = decodeURIComponent(location.hash.slice(1));
+    const smooth = hashRuns.current++ > 0;
+    if (!target) return;
+    // 等版面的「換頁回到頂端」做完再捲
+    let cancelled = false;
+    const t = window.setTimeout(() => goToSection(target, smooth), 0);
+    // 直接打開分享連結時，字型載入後版面會變長，載完再對齊一次
+    if (!smooth) void document.fonts?.ready.then(() => !cancelled && goToSection(target, false));
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [location.hash]);
+
+  // 「完成這一課」和「改回未完成」互換時，焦點留在換上來的按鈕
+  const toggleRef = useRef<HTMLButtonElement>(null);
+  const refocusToggle = useRef(false);
+  const isDoneNow = !!(lesson && progress.done[lesson.id]);
+  useEffect(() => {
+    if (!refocusToggle.current) return;
+    refocusToggle.current = false;
+    toggleRef.current?.focus();
+  }, [isDoneNow]);
+
+  /** 目錄連結：更新網址（可以複製分享），捲到那一段 */
+  const tocClick = (e: MouseEvent<HTMLAnchorElement>, sectionId: string) => {
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; // 另開分頁照瀏覽器預設
+    e.preventDefault();
+    if (location.hash === `#${sectionId}`) goToSection(sectionId, true);
+    else navigate({ hash: sectionId }, { replace: true });
+  };
 
   if (!lesson) {
     return (
@@ -50,25 +99,13 @@ export default function LessonPage() {
         <ol className="toc">
           {lesson.sections.map((s) => (
             <li key={s.id}>
-              <a
-                href={`#${s.id}`}
-                onClick={(e) => {
-                  e.preventDefault();
-                  document.getElementById(s.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }}
-              >
+              <a href={`#/lessons/${lesson.id}#${s.id}`} onClick={(e) => tocClick(e, s.id)}>
                 {s.title}
               </a>
             </li>
           ))}
           <li>
-            <a
-              href="#homework"
-              onClick={(e) => {
-                e.preventDefault();
-                document.getElementById('homework')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              }}
-            >
+            <a href={`#/lessons/${lesson.id}#homework`} onClick={(e) => tocClick(e, 'homework')}>
               作業
             </a>
           </li>
@@ -85,7 +122,7 @@ export default function LessonPage() {
 
       {lesson.sections.map((s, i) => (
         <section key={s.id} id={s.id} className="block" aria-labelledby={`h-${s.id}`}>
-          <h2 id={`h-${s.id}`}>
+          <h2 id={`h-${s.id}`} className="sec-h" tabIndex={-1}>
             <span className="secnum" aria-hidden="true">
               {i + 1}
             </span>
@@ -98,7 +135,7 @@ export default function LessonPage() {
       ))}
 
       <section id="homework" className="block" aria-labelledby="h-homework">
-        <h2 id="h-homework">
+        <h2 id="h-homework" className="sec-h" tabIndex={-1}>
           <span className="secnum" aria-hidden="true">
             {lesson.sections.length + 1}
           </span>
@@ -125,13 +162,29 @@ export default function LessonPage() {
               <p className="done-note">
                 <Icon name="check" size={18} /> 這一課已完成
               </p>
-              <button type="button" className="linkbtn" onClick={() => setLessonDone(lesson.id, false)}>
+              <button
+                ref={toggleRef}
+                type="button"
+                className="linkbtn"
+                onClick={() => {
+                  refocusToggle.current = true;
+                  setLessonDone(lesson.id, false);
+                }}
+              >
                 改回未完成
               </button>
             </>
           ) : (
             <>
-              <button type="button" className="btn btn-primary" onClick={() => setLessonDone(lesson.id, true)}>
+              <button
+                ref={toggleRef}
+                type="button"
+                className="btn btn-primary"
+                onClick={() => {
+                  refocusToggle.current = true;
+                  setLessonDone(lesson.id, true);
+                }}
+              >
                 <Icon name="check" size={17} /> 完成第 {lesson.id} 課
               </button>
               <p className="small">
@@ -319,7 +372,7 @@ function Block({ block }: { block: LessonBlock }) {
       );
     case 'table':
       return (
-        <div className="table-scroll">
+        <div className="table-scroll" tabIndex={0} role="region" aria-label="表格（可左右捲動）">
           <table className="ltable">
             <thead>
               <tr>
@@ -431,12 +484,12 @@ function KanaButton({ ch, romaji: r, ghost }: { ch: string; romaji: string; ghos
     <button
       type="button"
       className={`mbtn ${on ? 'is-playing' : ''}`}
-      aria-label={`播放 ${ch}（${r}）`}
       onClick={() => {
         speak(ch);
         flash();
       }}
     >
+      <span className="sr-only">播放 </span>
       <Masu ch={ch} ghost={ghost} />
       <span className="romaji">{r}</span>
     </button>

@@ -1,19 +1,20 @@
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, useEffect } from 'react';
 import { HashRouter, Route, Routes, Link } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import Home from './pages/Home';
 import Lessons from './pages/Lessons';
-import LessonPage from './pages/Lesson';
-import Chart from './pages/Chart';
-import Practice from './pages/Practice';
 import Vocab from './pages/Vocab';
-import Deck from './pages/Deck';
-import Review from './pages/Review';
 import { settingsStore, type ThemePref } from './state';
 import { useStore } from './state/store';
+import { usePageTitle } from './lib/title';
 
-// 用到 Claude SDK 或筆順引擎的頁面分開載入
+// 首頁和兩個列表頁跟著主程式載入；其他頁面點進去才載入（筆順資料、Claude SDK 等不拖慢首頁）
+const LessonPage = lazy(() => import('./pages/Lesson'));
+const Chart = lazy(() => import('./pages/Chart'));
+const Practice = lazy(() => import('./pages/Practice'));
 const Writing = lazy(() => import('./pages/Writing'));
+const Deck = lazy(() => import('./pages/Deck'));
+const Review = lazy(() => import('./pages/Review'));
 const Tutor = lazy(() => import('./pages/Tutor'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Roadmap = lazy(() => import('./pages/Roadmap'));
@@ -25,6 +26,7 @@ export function applyTheme(theme: ThemePref) {
 }
 
 function NotFound() {
+  usePageTitle('找不到這一頁');
   return (
     <div className="wrap">
       <header className="ph">
@@ -37,39 +39,30 @@ function NotFound() {
   );
 }
 
-function Loading() {
-  return (
-    <div className="wrap">
-      <p className="loading">載入中…</p>
-    </div>
-  );
-}
-
 export default function App() {
   const settings = useStore(settingsStore);
   useEffect(() => applyTheme(settings.theme), [settings.theme]);
 
   return (
     <HashRouter>
-      <Suspense fallback={<Loading />}>
-        <Routes>
-          <Route element={<Layout />}>
-            <Route index element={<Home />} />
-            <Route path="lessons" element={<Lessons />} />
-            <Route path="lessons/:id" element={<LessonPage />} />
-            <Route path="chart" element={<Chart />} />
-            <Route path="practice" element={<Practice />} />
-            <Route path="writing" element={<Writing />} />
-            <Route path="vocab" element={<Vocab />} />
-            <Route path="vocab/:deck" element={<Deck />} />
-            <Route path="review/:deck" element={<Review />} />
-            <Route path="tutor" element={<Tutor />} />
-            <Route path="roadmap" element={<Roadmap />} />
-            <Route path="settings" element={<Settings />} />
-            <Route path="*" element={<NotFound />} />
-          </Route>
-        </Routes>
-      </Suspense>
+      <Routes>
+        {/* 載入中與錯誤畫面在 Layout 裡處理，換頁時頁首和導覽列不會消失 */}
+        <Route element={<Layout />}>
+          <Route index element={<Home />} />
+          <Route path="lessons" element={<Lessons />} />
+          <Route path="lessons/:id" element={<LessonPage />} />
+          <Route path="chart" element={<Chart />} />
+          <Route path="practice" element={<Practice />} />
+          <Route path="writing" element={<Writing />} />
+          <Route path="vocab" element={<Vocab />} />
+          <Route path="vocab/:deck" element={<Deck />} />
+          <Route path="review/:deck" element={<Review />} />
+          <Route path="tutor" element={<Tutor />} />
+          <Route path="roadmap" element={<Roadmap />} />
+          <Route path="settings" element={<Settings />} />
+          <Route path="*" element={<NotFound />} />
+        </Route>
+      </Routes>
     </HashRouter>
   );
 }

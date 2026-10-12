@@ -3,36 +3,32 @@ import { Link, useParams } from 'react-router-dom';
 import { vocabById } from '../data/vocab';
 import { saveCard, settingsStore, srsStore, updateSettings } from '../state';
 import { useStore, readJSON, writeJSON } from '../state/store';
-import { buildQueue, formatMinutes, newCard, previewLabel, review, GRADES, type Grade, type CardState } from '../lib/srs';
+import {
+  LEARN_AHEAD_MS, buildSession, formatMinutes, newCard, pickNext, previewLabel, review, GRADES, type CardState, type Grade, type Pending,
+} from '../lib/srs';
 import { studyDayKey, studyDayStart, addDays } from '../lib/date';
 import { romaji } from '../lib/romaji';
 import { speak } from '../lib/speech';
-import { POS_LABEL, VERB_GROUP_LABEL, deckItemIds, deckTitle } from '../lib/vocab';
+import { POS_LABEL, VERB_GROUP_LABEL, deckItemIds, deckTitle, speechText } from '../lib/vocab';
 import { SpeakIcon } from '../components/Speak';
 import { Switch } from '../components/Controls';
 import { Icon } from '../components/Icon';
+import { usePageTitle } from '../lib/title';
 
 const GRADE_LABEL: Record<Grade, string> = { again: '忘記了', hard: '有點難', good: '記得', easy: '很簡單' };
-/** 學習中的卡片若在這段時間內到期，就留在這一輪（可以提早看） */
-const LEARN_AHEAD_MS = 20 * 60_000;
 
-interface Pending {
-  id: string;
-  due: number;
+/** 今天還能學幾張新卡 */
+function newLimitNow(now: number): number {
+  const freshToday = srsStore.get().days[studyDayKey(now)]?.fresh ?? 0;
+  return Math.max(0, settingsStore.get().newPerDay - freshToday);
 }
 
-/** 牌組改變時整個重新開始 */
+/** 牌組改變或按「繼續複習」時整個重新開始一輪 */
 export default function ReviewRoute() {
   const { deck = 'all' } = useParams();
-  return <Review key={deck} deck={deck} />;
-}
-
-function pickNext(main: string[], learning: Pending[], now: number): string | null {
-  const dueL = learning.filter((p) => p.due <= now).sort((a, b) => a.due - b.due)[0];
-  if (dueL) return dueL.id;
-  if (main.length) return main[0];
-  const ahead = learning.filter((p) => p.due <= now + LEARN_AHEAD_MS).sort((a, b) => a.due - b.due)[0];
-  return ahead?.id ?? null;
+  const [round, setRound] = useState(0);
+  usePageTitle(`單字複習：${deckTitle(deck)}`);
+  return <Review key={`${deck}:${round}`} deck={deck} onRestart={() => setRound((r) => r + 1)} />;
 }
 
 /** 互動元件上的按鍵交給元件自己處理 */
@@ -43,26 +39,15 @@ function isTextEntry(t: EventTarget | null): boolean {
   return t instanceof Element && !!t.closest('textarea, select, [contenteditable="true"], input:not([type="checkbox"]):not([type="radio"])');
 }
 
-function Review({ deck }: { deck: string }) {
+function Review({ deck, onRestart }: { deck: string; onRestart: () => void }) {
   const settings = useStore(settingsStore);
   const ids = useMemo(() => deckItemIds(deck), [deck]);
   const [autoplay, setAutoplay] = useState<boolean>(() => readJSON('nk.autoplay') !== false);
 
-  // 開場時決定這一輪的卡片（之後才到期的複習卡下一輪再出現）
+  // 開場時決定這一輪的卡片（之後才到期的卡片，在結束畫面按「繼續複習」開下一輪）
   const [session] = useState(() => {
     const now = Date.now();
-    const srs = srsStore.get();
-    const freshToday = srs.days[studyDayKey(now)]?.fresh ?? 0;
-    const newLimit = Math.max(0, settingsStore.get().newPerDay - freshToday);
-    const q = buildQueue(srs.cards, ids, now, newLimit);
-    // 學習中、幾分鐘內就到期的卡片也放進這一輪
-    const learning: Pending[] = [];
-    for (const id of ids) {
-      const c = srs.cards[id];
-      if (c && c.reps > 0 && c.step >= 0 && c.due <= now + LEARN_AHEAD_MS) learning.push({ id, due: c.due });
-    }
-    const main = [...q.review, ...q.fresh];
-    return { main, learning, first: pickNext(main, learning, now) };
+    return buildSession(srsStore.get().cards, ids, now, newLimitNow(now));
   });
   const [main, setMain] = useState<string[]>(session.main);
   const [learning, setLearning] = useState<Pending[]>(session.learning);
@@ -85,7 +70,7 @@ function Review({ deck }: { deck: string }) {
     setFlipped(false);
     setNow(Date.now());
     const it = currentId ? vocabById(currentId) : undefined;
-    if (it && autoplayRef.current) speak(it.kanji ?? it.kana);
+    if (it && autoplayRef.current) speak(speechText(it));
   }, [currentId, turn]);
 
   // 手機上翻面後，把評分按鈕捲進畫面
@@ -128,7 +113,7 @@ function Review({ deck }: { deck: string }) {
         grade(GRADES[Number(e.key) - 1]);
       } else if (e.key === 'r' || e.key === 'R') {
         e.preventDefault();
-        speak(item.kanji ?? item.kana);
+        speak(speechText(item));
       }
     };
     window.addEventListener('keydown', onKey);
@@ -139,18 +124,41 @@ function Review({ deck }: { deck: string }) {
   const newLeft = main.filter((id) => !cards[id] || cards[id].reps === 0).length;
   const reviewLeft = main.length - newLeft;
 
-  // 這一輪結束後，今天稍晚還會到期的學習中卡片
+  // 結束畫面每 30 秒（和切回這個分頁時）重新檢查一次：又有卡片到期就可以接著複習
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (item) return;
+    const timer = window.setInterval(() => setTick((n) => n + 1), 30_000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') setTick((n) => n + 1);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [item]);
+
+  // 現在再開一輪會有幾張卡片（這一輪開始之後才到期的、學習中的）
+  const readyNow = useMemo(() => {
+    if (item) return 0;
+    const t = Date.now();
+    const s = buildSession(srsStore.get().cards, ids, t, newLimitNow(t));
+    return s.main.length + s.learning.length;
+  }, [item, ids, cards, tick]); // tick：定時重新計算
+
+  // 今天稍晚才會到期的學習中卡片
   const laterToday = useMemo(() => {
     if (item) return null;
     const t = Date.now();
     const end = addDays(studyDayStart(t), 1);
     const due = ids
       .map((id) => cards[id])
-      .filter((c): c is CardState => !!c && c.reps > 0 && c.step >= 0 && c.due > t && c.due < end)
+      .filter((c): c is CardState => !!c && c.reps > 0 && c.step >= 0 && c.due > t + LEARN_AHEAD_MS && c.due < end)
       .map((c) => c.due)
       .sort((a, b) => a - b);
     return due.length ? { n: due.length, wait: due[0] - t } : null;
-  }, [item, ids, cards]);
+  }, [item, ids, cards, tick]);
 
   return (
     <div className="wrap review-wrap">
@@ -195,8 +203,8 @@ function Review({ deck }: { deck: string }) {
             </>
           ) : (
             <>
-              <h2>現在沒有要複習的卡片</h2>
-              {!laterToday ? (
+              <h2>{readyNow ? '又有卡片可以複習了' : '現在沒有要複習的卡片'}</h2>
+              {!laterToday && !readyNow ? (
                 <p>
                   {settingsStore.get().newPerDay === 0
                     ? '每天新卡設定為 0 張，到單字牌組頁調整後就能學新卡。'
@@ -205,13 +213,19 @@ function Review({ deck }: { deck: string }) {
               ) : null}
             </>
           )}
+          {readyNow ? <p>還有 {readyNow} 張卡片現在就可以複習（剛到期或快到期的學習中卡片）。</p> : null}
           {laterToday ? (
             <p className="small">
-              還有 {laterToday.n} 張學習中的卡片，約 {formatMinutes(laterToday.wait)}後到期，到時候再回來這一頁。
+              還有 {laterToday.n} 張學習中的卡片，約 {formatMinutes(laterToday.wait)}後到期；這一頁開著的話，到期時會出現「繼續複習」。
             </p>
           ) : null}
           <div className="btn-row">
-            <Link className="btn btn-primary" to="/vocab">
+            {readyNow ? (
+              <button type="button" className="btn btn-primary" onClick={onRestart}>
+                繼續複習 <Icon name="arrow-right" size={17} />
+              </button>
+            ) : null}
+            <Link className={`btn ${readyNow ? '' : 'btn-primary'}`} to="/vocab">
               回單字牌組
             </Link>
             <Link className="btn" to="/tutor">
@@ -236,7 +250,7 @@ function Review({ deck }: { deck: string }) {
               </p>
             ) : null}
             {settings.showRomaji ? <p className="f-r">{romaji(item.kana)}</p> : null}
-            <SpeakIcon text={item.kanji ?? item.kana} label="再聽一次" />
+            <SpeakIcon text={speechText(item)} label="再聽一次" />
           </div>
           {flipped ? (
             <div className="flash-back">

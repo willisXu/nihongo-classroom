@@ -10,7 +10,9 @@ import { getStrokePaths } from '../lib/strokes';
 import { Masu, Segmented, Switch } from '../components/Controls';
 import { SpeakButton } from '../components/Speak';
 import { Icon } from '../components/Icon';
+import { PracticeTabs } from '../components/PracticeTabs';
 import { readJSON, writeJSON } from '../state/store';
+import { usePageTitle } from '../lib/title';
 
 interface ChartPrefs {
   script: Script;
@@ -28,8 +30,10 @@ function loadPrefs(): ChartPrefs {
 }
 
 export default function Chart() {
+  usePageTitle('五十音表');
   const [prefs, setPrefs] = useState<ChartPrefs>(loadPrefs);
-  const [sel, setSel] = useState('あ');
+  // 上次選的是片假名，就從「ア」開始
+  const [sel, setSel] = useState(() => (prefs.script === 'k' ? 'ア' : 'あ'));
   const [sheetOpen, setSheetOpen] = useState(false);
   const writing = useStore(writingStore);
   const s = prefs.script;
@@ -59,7 +63,6 @@ export default function Chart() {
         type="button"
         className={`gj-cell ${opts.yoon ? 'is-yoon' : ''} ${writing[ch] ? 'is-written' : ''}`}
         aria-pressed={sel === ch}
-        aria-label={`${ch}，${c.r}`}
         onClick={() => pick(ch)}
       >
         {g && prefs.ghost ? (
@@ -70,13 +73,14 @@ export default function Chart() {
         <span className="gj-k" lang="ja">
           {ch}
         </span>
-        {prefs.romaji ? <span className="gj-r">{c.r}</span> : null}
+        {prefs.romaji ? <span className="gj-r">{c.r}</span> : <span className="sr-only">{c.r}</span>}
       </button>
     );
   };
 
   return (
     <div className="wrap">
+      <PracticeTabs />
       <header className="ph">
         <p className="eyebrow">參考表</p>
         <h1>五十音表</h1>

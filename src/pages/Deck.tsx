@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { memo, useDeferredValue, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { deckById } from '../data/vocab';
 import type { VocabItem } from '../data/types';
@@ -7,10 +7,11 @@ import { useStore } from '../state/store';
 import type { CardState } from '../lib/srs';
 import { romaji } from '../lib/romaji';
 import { daysBetween } from '../lib/date';
-import { POS_LABEL, VERB_GROUP_LABEL, groupByTopic } from '../lib/vocab';
+import { POS_LABEL, VERB_GROUP_LABEL, groupByTopic, speechText } from '../lib/vocab';
 import { SpeakIcon } from '../components/Speak';
 import { Switch } from '../components/Controls';
 import { Icon } from '../components/Icon';
+import { usePageTitle } from '../lib/title';
 
 const PLAIN: Record<string, string> = { ā: 'a', ī: 'i', ū: 'u', ē: 'e', ō: 'o' };
 /** 搜尋用的拼音寫法：kōhī、kohi、koohii 都算 */
@@ -19,6 +20,11 @@ function romajiKeys(kana: string): string[] {
   const short = r.replace(/[āīūēō]/g, (c) => PLAIN[c]);
   const long = r.replace(/[āīūēō]/g, (c) => PLAIN[c] + PLAIN[c]);
   return [r, short, long, short.replace(/[' -]/g, '')];
+}
+
+/** 每個單字可以被搜尋到的文字（假名、漢字、中文、各種拼音），換牌組時算一次就好 */
+function searchText(it: VocabItem): string {
+  return [it.kana, it.kanji ?? '', it.zh.toLowerCase(), ...romajiKeys(it.kana)].join('\n');
 }
 
 function statusOf(card: CardState | undefined, now: number): { label: string; cls: string } {
@@ -36,28 +42,25 @@ export default function Deck() {
   const settings = useStore(settingsStore);
   const [query, setQuery] = useState('');
   const [topic, setTopic] = useState<string>('');
-  const now = Date.now();
+  // 打字時先更新輸入框，列表晚一點再跟上，打字不會卡
+  const deferredQuery = useDeferredValue(query);
+  // 這一頁開著的期間用同一個時間點算狀態，列表項目才能沿用上次的畫面
+  const [now] = useState(() => Date.now());
+  usePageTitle(deck ? deck.title : '找不到這個牌組');
 
   const groups = useMemo(() => (deck ? groupByTopic(deck.items) : []), [deck]);
+  const index = useMemo(() => new Map(deck ? deck.items.map((it) => [it.id, searchText(it)]) : []), [deck]);
   const filtered = useMemo(() => {
     if (!deck) return [];
-    const q = query.trim().toLowerCase();
+    const q = deferredQuery.trim().toLowerCase();
     return groups
       .filter((g) => !topic || g.topic === topic)
       .map((g) => ({
         topic: g.topic,
-        items: g.items.filter((it) => {
-          if (!q) return true;
-          return (
-            it.kana.includes(q) ||
-            (it.kanji ?? '').includes(q) ||
-            it.zh.toLowerCase().includes(q) ||
-            romajiKeys(it.kana).some((k) => k.includes(q))
-          );
-        }),
+        items: q ? g.items.filter((it) => index.get(it.id)!.includes(q)) : g.items,
       }))
       .filter((g) => g.items.length);
-  }, [groups, query, topic, deck]);
+  }, [groups, deferredQuery, topic, deck, index]);
 
   if (!deck) {
     return (
@@ -124,7 +127,7 @@ export default function Deck() {
           <h2 className="h-sub">{g.topic}</h2>
           <ul className="vlist">
             {g.items.map((it) => (
-              <VocabRow key={it.id} item={it} showRomaji={settings.showRomaji} status={statusOf(srs.cards[it.id], now)} />
+              <VocabRow key={it.id} item={it} showRomaji={settings.showRomaji} card={srs.cards[it.id]} now={now} />
             ))}
           </ul>
         </section>
@@ -134,12 +137,24 @@ export default function Deck() {
   );
 }
 
-function VocabRow({ item, showRomaji, status }: { item: VocabItem; showRomaji: boolean; status: { label: string; cls: string } }) {
+/** 單字一列；資料沒變就不重畫（牌組可能有幾百列） */
+const VocabRow = memo(function VocabRow({
+  item,
+  showRomaji,
+  card,
+  now,
+}: {
+  item: VocabItem;
+  showRomaji: boolean;
+  card: CardState | undefined;
+  now: number;
+}) {
   const [open, setOpen] = useState(false);
+  const status = statusOf(card, now);
   const hasMore = !!(item.ex || item.note);
   return (
     <li className="vrow">
-      <SpeakIcon text={item.kanji ?? item.kana} label={`播放 ${item.kana}`} />
+      <SpeakIcon text={speechText(item)} label={`播放 ${item.kana}`} />
       <div className="v-main">
         <p className="v-ja" lang="ja">
           {item.kanji ? (
@@ -189,4 +204,4 @@ function VocabRow({ item, showRomaji, status }: { item: VocabItem; showRomaji: b
       </div>
     </li>
   );
-}
+});

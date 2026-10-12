@@ -13,7 +13,8 @@ export default defineConfig({
   server: { port: PORT, strictPort: true },
   preview: { port: PORT, strictPort: true },
   build: {
-    chunkSizeWarningLimit: 1200,
+    // 首頁的程式含全部單字資料（約 630 kB）；超過 700 kB 就提醒，避免不知不覺越來越大
+    chunkSizeWarningLimit: 700,
     // 把打包進網站的 npm 套件（React、React Router、Anthropic SDK…）的授權全文
     // 輸出成 dist/THIRD-PARTY-LICENSES.md，和 index.html 放在一起發布。
     // 不用預設的 .vite/license.md：GitHub Pages 上傳時會略過以「.」開頭的資料夾。

@@ -154,6 +154,46 @@ export function buildQueue(
 }
 
 /** 牌組統計 */
+/* ---------------- 一輪複習 ---------------- */
+
+/** 學習中的卡片若在這段時間內到期，就留在這一輪（可以提早看） */
+export const LEARN_AHEAD_MS = 20 * MIN_MS;
+
+export interface Pending {
+  id: string;
+  due: number;
+}
+
+export interface Session {
+  /** 到期的複習卡和今天還能學的新卡，依序出現 */
+  main: string[];
+  /** 學習中、已到期或很快就到期的卡片 */
+  learning: Pending[];
+  /** 第一張要看的卡片；null 代表這一輪沒有卡片 */
+  first: string | null;
+}
+
+/** 下一張：已到期的學習中卡片優先，其次是複習卡和新卡，最後才提早看快到期的學習中卡片 */
+export function pickNext(main: string[], learning: Pending[], now: number): string | null {
+  const dueL = learning.filter((p) => p.due <= now).sort((a, b) => a.due - b.due)[0];
+  if (dueL) return dueL.id;
+  if (main.length) return main[0];
+  const ahead = learning.filter((p) => p.due <= now + LEARN_AHEAD_MS).sort((a, b) => a.due - b.due)[0];
+  return ahead?.id ?? null;
+}
+
+/** 開一輪複習要看的卡片 */
+export function buildSession(cards: Record<string, CardState | undefined>, ids: string[], now: number, newLimit: number): Session {
+  const q = buildQueue(cards, ids, now, newLimit);
+  const learning: Pending[] = [];
+  for (const id of ids) {
+    const c = cards[id];
+    if (c && c.reps > 0 && c.step >= 0 && c.due <= now + LEARN_AHEAD_MS) learning.push({ id, due: c.due });
+  }
+  const main = [...q.review, ...q.fresh];
+  return { main, learning, first: pickNext(main, learning, now) };
+}
+
 export function deckStats(cards: Record<string, CardState | undefined>, ids: string[], now: number) {
   let seen = 0;
   let due = 0;

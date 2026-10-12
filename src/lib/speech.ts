@@ -20,7 +20,16 @@ let state: SpeechState = { supported, ready: !supported, voices: [], hasJapanese
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
 
-const PREFERRED = /nanami|keita|kyoko|o-ren|otoya|google|haruka|ayumi|sayaka|ichiro/i;
+/**
+ * 自動挑語音的優先順序：自然的線上語音（Edge 的 Nanami、Chrome 的 Google 日本語、蘋果的 Kyoko）優先，
+ * Windows 內建的舊語音（Haruka 等）放後面。瀏覽器列出語音的順序不一定，所以要排序，不能只取第一個符合的。
+ */
+const VOICE_RANK = [/nanami/i, /keita/i, /google/i, /kyoko/i, /o-ren/i, /otoya/i, /natural|online|neural|premium|enhanced/i, /haruka|ayumi|sayaka|ichiro/i];
+
+export function voiceRank(name: string): number {
+  const i = VOICE_RANK.findIndex((re) => re.test(name));
+  return i === -1 ? VOICE_RANK.length : i;
+}
 
 function refresh() {
   if (!supported) return;
@@ -72,7 +81,7 @@ function pickVoice(): SpeechSynthesisVoice | undefined {
     const chosen = state.voices.find((v) => v.voiceURI === voiceURI);
     if (chosen) return chosen;
   }
-  return state.voices.find((v) => PREFERRED.test(v.name)) ?? state.voices[0];
+  return [...state.voices].sort((a, b) => voiceRank(a.name) - voiceRank(b.name))[0];
 }
 
 /** 念出日文。回傳 false 表示這台裝置不能發音。 */

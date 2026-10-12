@@ -4,8 +4,10 @@ import { lessonStore } from '../state';
 import { useStore } from '../state/store';
 import { lessonsDone, nextLesson } from '../lib/progress';
 import { Icon } from '../components/Icon';
+import { usePageTitle } from '../lib/title';
 
 export default function Lessons() {
+  usePageTitle('五十音課程');
   const progress = useStore(lessonStore);
   const next = nextLesson(progress);
   const done = lessonsDone(progress);

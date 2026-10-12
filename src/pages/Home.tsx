@@ -2,7 +2,9 @@ import { Link } from 'react-router-dom';
 import { useMemo } from 'react';
 import { LESSONS } from '../data/lessons';
 import { DECKS } from '../data/vocab';
-import { activityStore, apiKeyStore, kanaLevel, kanaStore, lessonStore, settingsStore, srsStore, writingStore } from '../state';
+import {
+  activityStore, apiKeyStore, kanaLevel, kanaStore, lastExportStore, lessonStore, settingsStore, srsStore, writingStore,
+} from '../state';
 import { useStore } from '../state/store';
 import { countMastered, HIRA_KEYS, KATA_KEYS, lessonsDone, nextLesson, streak, todayActivity } from '../lib/progress';
 import { deckStats } from '../lib/srs';
@@ -11,12 +13,32 @@ import { Icon } from '../components/Icon';
 import { Meter } from '../components/Controls';
 import { SCENARIOS, PURPOSE_LABEL } from '../data/tutor';
 import { buildPool } from '../lib/kanaQuiz';
+import { usePageTitle } from '../lib/title';
 
-/** 2027 年 7 月 JLPT 預計日期（官方尚未公告，依每年 7 月第一個週日推估） */
-const JLPT_DATE = new Date(2027, 6, 4, 13, 0).getTime();
+/** 某月第一個週日 13:00（JLPT 在台灣通常是 7 月、12 月的第一個週日） */
+function firstSunday(year: number, monthIndex: number): number {
+  const d = new Date(year, monthIndex, 1, 13, 0);
+  d.setDate(1 + ((7 - d.getDay()) % 7));
+  return d.getTime();
+}
+
+/** 目標考期從 2027 年 7 月開始（官方尚未公告，依慣例推估）；考完就換成下一次 */
+function nextJlpt(now: number): { at: number; month: 7 | 12 } {
+  for (let y = 2027; y < 2100; y++) {
+    for (const month of [7, 12] as const) {
+      const at = firstSunday(y, month - 1);
+      if (daysBetween(now, at) >= 0) return { at, month };
+    }
+  }
+  return { at: firstSunday(2100, 6), month: 7 };
+}
+
+const BACKUP_EVERY_DAYS = 14;
 
 export default function Home() {
+  usePageTitle(null);
   const now = Date.now();
+  const lastExport = useStore(lastExportStore);
   const lessons = useStore(lessonStore);
   const kana = useStore(kanaStore);
   const srs = useStore(srsStore);
@@ -64,7 +86,13 @@ export default function Home() {
   const writeDone = buildPool(writeLesson.quiz.rows, writeLesson.quiz.script, 'see').length - writeChars.length;
 
   const suggested = SCENARIOS.filter((_, i) => i % 3 === new Date(now).getDate() % 3).slice(0, 3);
-  const jlptDays = daysBetween(now, JLPT_DATE);
+  const jlpt = nextJlpt(now);
+  const jlptDays = daysBetween(now, jlpt.at);
+  const jlptDate = new Date(jlpt.at);
+  // 學過幾天之後，提醒定期匯出備份（紀錄只存在這個瀏覽器）
+  const studyDays = Object.keys(activity).length;
+  const sinceExport = lastExport ? daysBetween(lastExport, now) : null;
+  const needBackup = studyDays >= 3 && (sinceExport === null || sinceExport >= BACKUP_EVERY_DAYS);
 
   return (
     <div className="wrap">
@@ -161,6 +189,20 @@ export default function Home() {
         </div>
 
         <div className="home-side">
+          {needBackup ? (
+            <section className="card home-card home-backup" aria-labelledby="h-backup">
+              <h2 id="h-backup">記得備份學習紀錄</h2>
+              <p className="muted">
+                {sinceExport === null ? '你已經學了 ' + studyDays + ' 天，還沒匯出過備份。' : `上次匯出備份是 ${sinceExport} 天前。`}
+                紀錄只存在這個瀏覽器，清除瀏覽資料或換裝置就會不見。
+              </p>
+              <div className="btn-row">
+                <Link className="btn btn-sm" to="/settings">
+                  去匯出備份
+                </Link>
+              </div>
+            </section>
+          ) : null}
           <section className="card home-card" aria-labelledby="h-kana">
             <div className="card-head">
               <h2 id="h-kana">假名熟悉度</h2>
@@ -245,11 +287,18 @@ export default function Home() {
 
           <section className="card home-card home-jlpt" aria-labelledby="h-jlpt">
             <h2 id="h-jlpt">JLPT 倒數</h2>
-            <p>
-              距離 2027 年 7 月的日本語能力試驗還有 <b className="num">{jlptDays}</b> 天
-            </p>
+            {jlptDays === 0 ? (
+              <p>
+                今天就是 {jlptDate.getFullYear()} 年 {jlpt.month} 月的日本語能力試驗，加油！
+              </p>
+            ) : (
+              <p>
+                距離 {jlptDate.getFullYear()} 年 {jlpt.month} 月的日本語能力試驗還有 <b className="num">{jlptDays}</b> 天
+              </p>
+            )}
             <p className="small">
-              考試日預計 7/4（週日），報名預計 3 月中下旬，以語言訓練測驗中心公告為準。<Link to="/roadmap">看學習地圖</Link>
+              考試日預計 {jlpt.month}/{jlptDate.getDate()}（週日），報名預計 {jlpt.month === 7 ? '3 月中下旬' : '8 月下旬前後'}
+              ，以語言訓練測驗中心公告為準。<Link to="/roadmap">看學習地圖</Link>
             </p>
           </section>
         </div>
