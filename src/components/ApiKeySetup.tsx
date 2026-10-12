@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { addUsage, apiKeyStore, settingsStore, updateSettings, type ModelId } from '../state';
 import { useStore } from '../state/store';
-import { MODELS, testConnection, toTutorError } from '../lib/claude';
+import { MODELS, normalizeApiKey, testConnection, toTutorError } from '../lib/claude';
 import { Icon } from './Icon';
 
 /** API 金鑰與模型設定（AI 家教頁和設定頁共用） */
@@ -14,13 +14,10 @@ export function ApiKeySetup({ compact = false }: { compact?: boolean }) {
   const [confirmRemove, setConfirmRemove] = useState(false);
 
   const save = async () => {
-    const key = draft.trim();
-    if (!key) {
-      setStatus({ tone: 'mark', text: '請先貼上 API 金鑰。' });
-      return;
-    }
-    if (!key.startsWith('sk-ant-')) {
-      setStatus({ tone: 'mark', text: 'Anthropic 的 API 金鑰以 sk-ant- 開頭，請確認有沒有貼錯。' });
+    // 去掉貼上時夾帶的換行、空白和看不見的字元，再檢查格式
+    const { key, error } = normalizeApiKey(draft);
+    if (error) {
+      setStatus({ tone: 'mark', text: error });
       return;
     }
     setStatus({ tone: 'busy', text: '正在測試連線…' });

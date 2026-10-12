@@ -246,6 +246,49 @@ export function quizUserMessage(ctx: QuizContext): string {
   });
 }
 
+/* ---------------- 從分頁紀錄還原時的檢查 ---------------- */
+const isRec = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
+const text = (v: unknown): string => (typeof v === 'string' ? v : '');
+const items = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+
+/** 檢查並清理對「我」那句話的回饋；格式不對就回傳 null */
+export function sanitizeFeedback(raw: unknown): ConversationTurn['feedback'] | null {
+  if (!isRec(raw) || typeof raw.ok !== 'boolean') return null;
+  return { ok: raw.ok, corrected: text(raw.corrected), explanation: text(raw.explanation) };
+}
+
+/** 檢查並清理一則會話回覆；連回覆的句子都沒有就回傳 null */
+export function sanitizeTurn(raw: unknown): ConversationTurn | null {
+  if (!isRec(raw) || typeof raw.reply !== 'string') return null;
+  return {
+    reply: raw.reply,
+    reading: text(raw.reading),
+    translation: text(raw.translation),
+    feedback: sanitizeFeedback(raw.feedback) ?? { ok: true, corrected: '', explanation: '' },
+    suggestions: items(raw.suggestions).flatMap((s) =>
+      isRec(s) && typeof s.ja === 'string' && s.ja.trim() ? [{ ja: s.ja, reading: text(s.reading), zh: text(s.zh) }] : [],
+    ),
+    done: raw.done === true,
+  };
+}
+
+/** 檢查並清理一則批改結果；沒有更正後的句子就回傳 null */
+export function sanitizeCorrection(raw: unknown): Correction | null {
+  if (!isRec(raw) || typeof raw.corrected !== 'string') return null;
+  const verdict = raw.verdict === 'correct' || raw.verdict === 'minor' || raw.verdict === 'wrong' ? raw.verdict : 'minor';
+  return {
+    verdict,
+    corrected: raw.corrected,
+    reading: text(raw.reading),
+    translation: text(raw.translation),
+    issues: items(raw.issues).flatMap((i) => (isRec(i) ? [{ part: text(i.part), fix: text(i.fix), why: text(i.why) }] : [])),
+    alternatives: items(raw.alternatives).flatMap((a) =>
+      isRec(a) && typeof a.ja === 'string' && a.ja.trim() ? [{ style: text(a.style), ja: a.ja, zh: text(a.zh) }] : [],
+    ),
+    tip: text(raw.tip),
+  };
+}
+
 /** 檢查並清理模型給的題目 */
 export function sanitizeQuiz(raw: unknown): QuizQuestion[] {
   if (!raw || typeof raw !== 'object' || !Array.isArray((raw as { questions?: unknown }).questions)) return [];
