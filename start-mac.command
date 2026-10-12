@@ -6,6 +6,12 @@ if ! command -v node >/dev/null 2>&1; then
   open "https://nodejs.org/"
   exit 1
 fi
+NODE_MAJOR=$(node -v | sed -E 's/^v([0-9]+).*/\1/')
+if [ "$NODE_MAJOR" -lt 22 ]; then
+  echo "你的 Node.js 版本太舊（需要 22.12 以上）。請到 https://nodejs.org/ 安裝最新的 LTS 版。"
+  open "https://nodejs.org/"
+  exit 1
+fi
 if [ ! -d node_modules ]; then
   echo "第一次執行，正在安裝套件，約需 1 到 2 分鐘..."
   npm install || { echo "安裝失敗，請檢查網路連線後再試一次。"; exit 1; }
