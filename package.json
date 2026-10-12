@@ -5,7 +5,7 @@
   "description": "日文自學教室：零基礎五十音課程、手寫描字、單字間隔複習與 AI 日文家教",
   "type": "module",
   "scripts": {
-    "start": "vite build --logLevel warn && vite preview --open",
+    "start": "node scripts/start.mjs",
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",

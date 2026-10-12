@@ -17,28 +17,34 @@
 
 ## 快速開始
 
-需要先安裝 [Node.js](https://nodejs.org/) 22.12 以上的版本（裝 LTS 版即可）。
+需要先安裝 [Node.js](https://nodejs.org/) **22.12 以上**的版本（裝 LTS 版即可）。
 
 ### Windows
 
-雙擊資料夾裡的 **`start-windows.bat`**。第一次會自動安裝套件（約 1～2 分鐘），接著建置網站，瀏覽器會自動開啟 `http://localhost:5288`。
+雙擊資料夾裡的 **`start-windows.bat`**，建置好之後瀏覽器會自動開啟 `http://localhost:5288`。
 
 ### macOS
 
-在終端機執行：
+在 Finder 雙擊 **`start-mac.command`**（第一次可能要在「系統設定 → 隱私權與安全性」允許），或在終端機執行：
 
 ```bash
 cd nihongo-classroom
 ./start-mac.command
 ```
 
-或直接在 Finder 雙擊 `start-mac.command`（第一次可能要在「系統設定 → 隱私權與安全性」允許）。
+### 啟動檔會自動處理的事
+
+- **第一次執行**會先安裝套件（約 1～2 分鐘，需要網路），再建置網站、打開瀏覽器。
+- 套件**沒裝完整**（例如上次安裝到一半斷線）或**套件有更新**時，會自動重新安裝，不用自己刪資料夾。安裝失敗的話，確認網路後再雙擊一次就好。
+- 網站**已經在執行**時再雙擊一次，只會直接幫你打開瀏覽器，不會重複啟動。
+- 使用期間請讓那個視窗開著；關掉視窗（或按 Ctrl+C），網站就會停止。
+- 如果 5288 這個連接埠被別的程式占用，會說明原因後停下來（學習紀錄跟著連接埠走，所以不會改用別的埠）。
 
 ### 手動執行
 
 ```bash
-npm install
-npm start          # 建置後開啟 http://localhost:5288（日常使用）
+npm start          # 和雙擊啟動檔一樣：需要時自動安裝套件，建置後開啟 http://localhost:5288
+npm ci             # 只安裝套件（要用下面幾個指令前先跑一次）
 npm run dev        # 開發模式，改程式會即時更新，同樣是 http://localhost:5288
 npm run build      # 型別檢查＋建置到 dist/
 npm test           # 單元測試與內容檢查
@@ -110,7 +116,11 @@ src/
   state/               localStorage 狀態（設定、進度、紀錄、備份）
   components/          共用元件（練習格、描字畫布、發音鈕…）
   pages/               各頁面
-tests/                 Vitest：排程、筆畫比對、假名測驗、課程與單字內容檢查
+scripts/
+  start.mjs            啟動程式（啟動檔和 npm start 都跑這支：檢查 Node、連接埠、安裝套件、建置）
+  start-lib.mjs        啟動程式用的小工具（只用 Node 內建模組）
+  fetch-kanjivg.mjs    下載 KanjiVG 筆順，產生 src/data/strokes.json
+tests/                 Vitest：排程、筆畫比對、假名測驗、課程與單字內容檢查、啟動程式
 ```
 
 ### 內容檢查
@@ -132,8 +142,11 @@ tests/                 Vitest：排程、筆畫比對、假名測驗、課程與
 
 ## 授權
 
-- 程式碼：MIT（見 `LICENSE`）。
-- 筆順資料 `src/data/strokes.json` 取自 [KanjiVG](https://kanjivg.tagaini.net/)，© Ulrich Apel，以 [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) 授權，這個檔案沿用相同授權。
+- 程式碼：MIT（見 [`LICENSE`](LICENSE)）。
+- 以下檔案取自或衍生自 [KanjiVG](https://kanjivg.tagaini.net/)（© Ulrich Apel），以 [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0/) 授權，沿用相同授權、不適用 MIT：
+  - `src/data/strokes.json`：假名筆順資料
+  - `public/favicon.svg`：網站圖示（「あ」的筆畫）
 - 字型 Klee One、LXGW WenKai TC 以 SIL Open Font License 1.1 授權，透過 Fontsource 套件引入。
+- 打包進網站的 npm 套件（React、React Router、Anthropic SDK 等）的授權全文，建置時會自動產生成 `dist/THIRD-PARTY-LICENSES.md`，和 `index.html` 一起發布（線上版：<https://willisxu.github.io/nihongo-classroom/THIRD-PARTY-LICENSES.md>）。
 
-詳見 `THIRD_PARTY_NOTICES.md`。
+詳見 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。
