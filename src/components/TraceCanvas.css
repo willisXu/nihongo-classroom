@@ -1,0 +1,225 @@
+/*
+ * 筆順描字練習格：原稿紙的一格（格線＋虛線十字）。
+ * 顏色一律取自 tokens.css；SVG 裡的長度是字面單位（viewBox 0 0 109 109）。
+ */
+.trace {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  font-family: var(--font-body);
+}
+
+.trace-svg {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  background: var(--sheet);
+  border: 1.5px solid var(--grid);
+  border-radius: 4px;
+  overflow: hidden;
+  /* 在格子裡寫字時頁面不要捲動、不要選字、不要跳出長按選單 */
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  cursor: crosshair;
+  transition: border-color 0.3s ease;
+}
+
+.trace-svg:focus {
+  outline: none;
+}
+
+.trace-svg:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.trace--busy .trace-svg {
+  cursor: progress;
+}
+
+.trace--done .trace-svg {
+  cursor: default;
+  border-color: var(--ok);
+}
+
+/* 指標事件一律落在格子本身，座標換算與指標捕捉都以它為準 */
+.trace-svg * {
+  pointer-events: none;
+}
+
+.trace-cross line {
+  stroke: var(--guide);
+  stroke-width: 0.6;
+  stroke-dasharray: 2.6 2.2;
+}
+
+.trace-stroke {
+  fill: none;
+  stroke-width: 4.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.trace-ghost .trace-stroke,
+.trace-hint {
+  stroke: var(--ghost);
+}
+
+.trace-ink {
+  transition: opacity 0.2s ease;
+}
+
+.trace-ink--hidden {
+  opacity: 0;
+}
+
+.trace-ink .trace-stroke {
+  stroke: var(--ink);
+  animation: trace-snap 0.35s ease-out;
+}
+
+.trace-demo .trace-stroke {
+  stroke: var(--accent);
+  animation-name: trace-draw;
+  animation-timing-function: ease-in-out;
+  animation-fill-mode: both;
+}
+
+.trace-demo .trace-stroke--static {
+  animation: none;
+}
+
+.trace-live,
+.trace-fail {
+  fill: none;
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.trace-live {
+  stroke: var(--accent);
+}
+
+.trace-fail {
+  stroke: var(--mark);
+  animation: trace-fade 0.6s ease-in forwards;
+}
+
+.trace-start circle {
+  fill: var(--accent);
+}
+
+.trace-start text {
+  fill: var(--on-accent);
+  font-family: var(--font-body);
+  font-size: 5.6px;
+  font-weight: 700;
+}
+
+.trace-start-pop {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: trace-pop 0.24s ease-out;
+}
+
+.trace-status {
+  min-height: 1.5em;
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  text-align: center;
+  color: var(--ink-2);
+}
+
+.trace-msg {
+  display: inline-block;
+  animation: trace-msg-in 0.2s ease-out;
+}
+
+.trace-msg--mark {
+  color: var(--mark);
+}
+
+.trace-msg--ok {
+  color: var(--ok);
+  font-weight: 700;
+}
+
+.trace-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@keyframes trace-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes trace-fade {
+  0%,
+  35% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+/* 吸附成標準筆畫時，從書寫中的顏色轉成墨色 */
+@keyframes trace-snap {
+  from {
+    stroke: var(--accent);
+  }
+}
+
+@keyframes trace-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+}
+
+@keyframes trace-msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trace-svg,
+  .trace-ink {
+    transition: none;
+  }
+
+  .trace-ink .trace-stroke,
+  .trace-start-pop,
+  .trace-msg,
+  .trace-fail {
+    animation: none;
+  }
+
+  /* 示範改成整個字直接出現（元件也會改用靜態版本） */
+  .trace-demo .trace-stroke {
+    animation: none;
+    stroke-dashoffset: 0 !important;
+  }
+}

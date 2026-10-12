@@ -1,0 +1,259 @@
+import { Link } from 'react-router-dom';
+import { useMemo } from 'react';
+import { LESSONS } from '../data/lessons';
+import { DECKS } from '../data/vocab';
+import { activityStore, apiKeyStore, kanaLevel, kanaStore, lessonStore, settingsStore, srsStore, writingStore } from '../state';
+import { useStore } from '../state/store';
+import { countMastered, HIRA_KEYS, KATA_KEYS, lessonsDone, nextLesson, streak, todayActivity } from '../lib/progress';
+import { deckStats } from '../lib/srs';
+import { daysBetween, formatDateZh, studyDayKey } from '../lib/date';
+import { Icon } from '../components/Icon';
+import { Meter } from '../components/Controls';
+import { SCENARIOS, PURPOSE_LABEL } from '../data/tutor';
+import { buildPool } from '../lib/kanaQuiz';
+
+/** 2027 年 7 月 JLPT 預計日期（官方尚未公告，依每年 7 月第一個週日推估） */
+const JLPT_DATE = new Date(2027, 6, 4, 13, 0).getTime();
+
+export default function Home() {
+  const now = Date.now();
+  const lessons = useStore(lessonStore);
+  const kana = useStore(kanaStore);
+  const srs = useStore(srsStore);
+  const writing = useStore(writingStore);
+  const activity = useStore(activityStore);
+  const settings = useStore(settingsStore);
+  const apiKey = useStore(apiKeyStore);
+
+  const next = nextLesson(lessons);
+  const done = lessonsDone(lessons);
+  const hira = countMastered(kana, HIRA_KEYS);
+  const kata = countMastered(kana, KATA_KEYS);
+  const days = streak(activity, now);
+  const today = todayActivity(activity, now);
+
+  const vocab = useMemo(() => {
+    let due = 0;
+    let seen = 0;
+    const perDeck = DECKS.map((d) => {
+      const s = deckStats(srs.cards, d.items.map((i) => i.id), now);
+      due += s.due;
+      seen += s.seen;
+      return { deck: d, ...s };
+    });
+    const freshToday = srs.days[studyDayKey(now)]?.fresh ?? 0;
+    const newLeft = Math.max(0, settings.newPerDay - freshToday);
+    return { due, seen, perDeck, newLeft };
+  }, [srs, settings.newPerDay, now]);
+
+  const weak = useMemo(
+    () =>
+      Object.entries(kana)
+        .filter(([, e]) => e.w > 0 && e.s < 3)
+        .sort((a, b) => b[1].w - b[1].c * 0.25 - (a[1].w - a[1].c * 0.25))
+        .slice(0, 8)
+        .map(([k]) => k.slice(2)),
+    [kana],
+  );
+
+  // 手寫建議：目前這一課還沒寫過的字
+  const writeLesson = next ?? LESSONS[LESSONS.length - 1];
+  const writeChars = buildPool(writeLesson.quiz.rows, writeLesson.quiz.script, 'see')
+    .map((i) => i.ch)
+    .filter((ch) => !writing[ch]);
+  const writeDone = buildPool(writeLesson.quiz.rows, writeLesson.quiz.script, 'see').length - writeChars.length;
+
+  const suggested = SCENARIOS.filter((_, i) => i % 3 === new Date(now).getDate() % 3).slice(0, 3);
+  const jlptDays = daysBetween(now, JLPT_DATE);
+
+  return (
+    <div className="wrap">
+      <header className="ph">
+        <p className="eyebrow">{formatDateZh(now)}</p>
+        <h1>今天的學習</h1>
+        <p className="today-line">
+          <span className="streak">
+            <Icon name="flame" size={18} />
+            {days > 0 ? `連續學習 ${days} 天` : '今天開始第一天'}
+          </span>
+          <span>假名練習 {today.kana ?? 0} 題</span>
+          <span>單字複習 {today.review ?? 0} 張</span>
+          <span>手寫 {today.writing ?? 0} 字</span>
+        </p>
+      </header>
+
+      <div className="home-grid">
+        <div className="home-main">
+          <section className="card home-card home-lesson" aria-labelledby="h-next">
+            <p className="eyebrow">五十音課程 · 已完成 {done}/{LESSONS.length}</p>
+            {next ? (
+              <>
+                <h2 id="h-next">
+                  第 {next.id} 課　<span lang="ja">{next.title}</span>
+                </h2>
+                <p className="muted">{next.headline}</p>
+                <div className="lesson-dots" aria-hidden="true">
+                  {LESSONS.map((l) => (
+                    <span key={l.id} className={`ldot ${lessons.done[l.id] ? 'done' : ''} ${l.id === next.id ? 'now' : ''}`}>
+                      {l.id}
+                    </span>
+                  ))}
+                </div>
+                <div className="btn-row">
+                  <Link className="btn btn-primary" to={`/lessons/${next.id}`}>
+                    {done === 0 && next.id === 1 ? '開始第 1 課' : `繼續第 ${next.id} 課`}
+                    <Icon name="arrow-right" size={17} />
+                  </Link>
+                  <Link className="btn" to={`/practice?lesson=${next.id}`}>
+                    練這一課的假名
+                  </Link>
+                </div>
+              </>
+            ) : (
+              <>
+                <h2 id="h-next">五十音全部學完了</h2>
+                <p className="muted">接下來每天複習 N5 單字，再用 AI 家教練習會話。</p>
+                <div className="btn-row">
+                  <Link className="btn btn-primary" to="/vocab">
+                    去背單字 <Icon name="arrow-right" size={17} />
+                  </Link>
+                  <Link className="btn" to="/tutor">
+                    和 AI 家教聊天
+                  </Link>
+                </div>
+              </>
+            )}
+          </section>
+
+          <section className="card home-card" aria-labelledby="h-review">
+            <div className="card-head">
+              <h2 id="h-review">單字複習</h2>
+              <Link to="/vocab" className="more">
+                全部牌組
+              </Link>
+            </div>
+            <div className="bignums">
+              <div>
+                <span className="bignum">{vocab.due}</span>
+                <span className="bignum-l">張到期</span>
+              </div>
+              <div>
+                <span className="bignum">{vocab.newLeft}</span>
+                <span className="bignum-l">張新卡可學</span>
+              </div>
+              <div>
+                <span className="bignum">{vocab.seen}</span>
+                <span className="bignum-l">張學過</span>
+              </div>
+            </div>
+            <ul className="deck-mini">
+              {vocab.perDeck.map((d) => (
+                <li key={d.deck.id}>
+                  <Link to={`/review/${d.deck.id}`}>
+                    <span>{d.deck.title}</span>
+                    <span className={`pill ${d.due ? 'pill-accent' : ''}`}>{d.due ? `${d.due} 到期` : `${d.unseen} 張未學`}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+            {done < 6 ? <p className="small">建議先學完平假名（第 1–6 課）再開始背單字，看得懂假名會輕鬆很多。</p> : null}
+          </section>
+        </div>
+
+        <div className="home-side">
+          <section className="card home-card" aria-labelledby="h-kana">
+            <div className="card-head">
+              <h2 id="h-kana">假名熟悉度</h2>
+              <Link to="/practice" className="more">
+                去練習
+              </Link>
+            </div>
+            <div className="meter-rows">
+              <div className="meter-row">
+                <span>平假名</span>
+                <Meter value={hira} max={46} label="平假名熟悉" />
+                <span className="num">{hira}/46</span>
+              </div>
+              <div className="meter-row">
+                <span>片假名</span>
+                <Meter value={kata} max={46} label="片假名熟悉" />
+                <span className="num">{kata}/46</span>
+              </div>
+            </div>
+            {weak.length ? (
+              <>
+                <p className="small">最常答錯</p>
+                <div className="weak">
+                  {weak.map((ch) => (
+                    <span key={ch} className={`wchip lv${kanaLevel(kana, (/[゠-ヿ]/.test(ch) ? 'k:' : 'h:') + ch)}`} lang="ja">
+                      {ch}
+                    </span>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <p className="small">連續答對 3 次的字算「熟悉」。</p>
+            )}
+          </section>
+
+          <section className="card home-card" aria-labelledby="h-write">
+            <div className="card-head">
+              <h2 id="h-write">手寫描字</h2>
+              <Link to={`/writing?lesson=${writeLesson.id}`} className="more">
+                去寫字
+              </Link>
+            </div>
+            <p className="muted">
+              第 {writeLesson.id} 課的字寫過 {writeDone} 個
+              {writeChars.length ? `，還有 ${writeChars.length} 個沒寫：` : '，全部寫過了。'}
+            </p>
+            {writeChars.length ? (
+              <div className="weak">
+                {writeChars.slice(0, 10).map((ch) => (
+                  <Link key={ch} to={`/writing?lesson=${writeLesson.id}&char=${encodeURIComponent(ch)}`} className="wchip" lang="ja">
+                    {ch}
+                  </Link>
+                ))}
+              </div>
+            ) : null}
+          </section>
+
+          <section className="card home-card" aria-labelledby="h-tutor">
+            <div className="card-head">
+              <h2 id="h-tutor">AI 家教</h2>
+              <Link to="/tutor" className="more">
+                全部情境
+              </Link>
+            </div>
+            {apiKey ? (
+              <ul className="deck-mini">
+                {suggested.map((s) => (
+                  <li key={s.id}>
+                    <Link to={`/tutor?scenario=${s.id}`}>
+                      <span>{s.title}</span>
+                      <span className="pill">{PURPOSE_LABEL[s.purpose]}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="muted">
+                用 Claude 陪你練會話、批改句子。需要你自己的 Anthropic API 金鑰，<Link to="/tutor">設定方法</Link>。
+              </p>
+            )}
+          </section>
+
+          <section className="card home-card home-jlpt" aria-labelledby="h-jlpt">
+            <h2 id="h-jlpt">JLPT 倒數</h2>
+            <p>
+              距離 2027 年 7 月的日本語能力試驗還有 <b className="num">{jlptDays}</b> 天
+            </p>
+            <p className="small">
+              考試日預計 7/4（週日），報名預計 3 月中下旬，以語言訓練測驗中心公告為準。<Link to="/roadmap">看學習地圖</Link>
+            </p>
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}

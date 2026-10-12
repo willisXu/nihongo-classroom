@@ -1,0 +1,37 @@
+{
+  "name": "nihongo-classroom",
+  "private": true,
+  "version": "0.1.0",
+  "description": "日文自學教室：零基礎五十音課程、手寫描字、單字間隔複習與 AI 日文家教",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "strokes": "node scripts/fetch-kanjivg.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.133.0",
+    "@fontsource/klee-one": "^5.3.1",
+    "@fontsource/lxgw-wenkai-tc": "^5.3.1",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-router-dom": "^7.18.4",
+    "svg-path-properties": "^2.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.3"
+  },
+  "engines": {
+    "node": ">=22.12"
+  },
+  "license": "MIT"
+}

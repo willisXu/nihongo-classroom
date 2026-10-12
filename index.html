@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="description" content="零基礎日文自學：五十音課程、手寫描字、單字間隔複習與 AI 日文家教。" />
+    <meta name="theme-color" content="#f5f8f3" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1a2e28" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <title>日文自學教室</title>
+    <script>
+      // 在畫面出現前套用使用者選的主題，避免閃一下
+      try {
+        var s = JSON.parse(localStorage.getItem('nk.settings') || '{}');
+        if (s.theme === 'light' || s.theme === 'dark') document.documentElement.setAttribute('data-theme', s.theme);
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <noscript>這個網站需要啟用 JavaScript。</noscript>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

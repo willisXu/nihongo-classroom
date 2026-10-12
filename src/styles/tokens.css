@@ -1,0 +1,91 @@
+/*
+ * 設計概念：練習帳（ノート）。
+ * 淺色 = 綠格線的筆記紙＋藍黑墨水，深色 = 教室黑板＋黃色與紅色粉筆。
+ * 所有顏色都從這裡的 token 取用，元件不寫死顏色。
+ */
+:root {
+  --paper: #f5f8f3;       /* 筆記紙，帶一點綠 */
+  --sheet: #ffffff;       /* 卡片、格子等浮起的表面 */
+  --ink: #1c2440;         /* 藍黑墨水 */
+  --ink-2: #4a5470;
+  --ink-3: #5e6780;
+  --grid: #8dbaa3;        /* 原稿紙的綠格線 */
+  --guide: #c7dccf;       /* 格子裡的虛線十字 */
+  --line: #dae5dd;
+  --accent: #2c4f94;      /* 藍：所有可以按的東西 */
+  --accent-soft: #e4ebf7;
+  --on-accent: #ffffff;
+  --mark: #c8362a;        /* 老師的紅筆 */
+  --mark-soft: #fbe6e2;
+  --ok: #2f7d4f;          /* 答對、熟悉（語意色） */
+  --ok-soft: #dcefe2;
+  --hl-kanji: #fbe6a0;    /* 螢光筆 */
+  --hl-hira: #cbead7;
+  --hl-kata: #d2e1f8;
+  --ghost: rgba(28, 36, 64, 0.1);
+  --knob: #ffffff;
+  --lift: 0 1px 0 rgba(28, 36, 64, 0.04), 0 6px 18px -10px rgba(28, 36, 64, 0.22);
+  --scrim: rgba(28, 36, 64, 0.35);
+
+  --font-kana: 'Klee One', 'UD Digi Kyokasho N-R', 'UD デジタル 教科書体 N-R', 'Hiragino Mincho ProN', 'Yu Mincho', serif;
+  --font-display: 'LXGW WenKai TC', 'Klee One', 'Kaiti TC', 'BiauKai', 'DFKai-SB', serif;
+  --font-body: 'PingFang TC', 'Microsoft JhengHei', 'Noto Sans TC', 'Noto Sans CJK TC', 'Heiti TC', system-ui, sans-serif;
+  --font-print: 'Hiragino Sans', 'Yu Gothic', 'Meiryo', 'Noto Sans JP', sans-serif;
+
+  --r: 10px;
+  --header-h: 56px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --paper: #1a2e28;
+    --sheet: #213932;
+    --ink: #eaf0eb;
+    --ink-2: #bdcec4;
+    --ink-3: #98afa3;
+    --grid: #5c8c77;
+    --guide: #35574c;
+    --line: #2c4740;
+    --accent: #f0d06a;
+    --accent-soft: rgba(240, 208, 106, 0.15);
+    --on-accent: #1a2e28;
+    --mark: #f3998b;
+    --mark-soft: rgba(243, 153, 139, 0.14);
+    --ok: #8fd6a8;
+    --ok-soft: rgba(143, 214, 168, 0.16);
+    --hl-kanji: rgba(240, 208, 106, 0.22);
+    --hl-hira: rgba(126, 210, 163, 0.2);
+    --hl-kata: rgba(140, 180, 240, 0.24);
+    --ghost: rgba(234, 240, 235, 0.12);
+    --knob: #eaf0eb;
+    --lift: none;
+    --scrim: rgba(0, 0, 0, 0.5);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme='dark'] {
+  --paper: #1a2e28;
+  --sheet: #213932;
+  --ink: #eaf0eb;
+  --ink-2: #bdcec4;
+  --ink-3: #98afa3;
+  --grid: #5c8c77;
+  --guide: #35574c;
+  --line: #2c4740;
+  --accent: #f0d06a;
+  --accent-soft: rgba(240, 208, 106, 0.15);
+  --on-accent: #1a2e28;
+  --mark: #f3998b;
+  --mark-soft: rgba(243, 153, 139, 0.14);
+  --ok: #8fd6a8;
+  --ok-soft: rgba(143, 214, 168, 0.16);
+  --hl-kanji: rgba(240, 208, 106, 0.22);
+  --hl-hira: rgba(126, 210, 163, 0.2);
+  --hl-kata: rgba(140, 180, 240, 0.24);
+  --ghost: rgba(234, 240, 235, 0.12);
+  --knob: #eaf0eb;
+  --lift: none;
+  --scrim: rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
+}
