@@ -23,5 +23,7 @@ export default defineConfig({
     // 輸出成 dist/THIRD-PARTY-LICENSES.md，和 index.html 放在一起發布。
     // 不用預設的 .vite/license.md：GitHub Pages 上傳時會略過以「.」開頭的資料夾。
     license: { fileName: 'THIRD-PARTY-LICENSES.md' },
+    // 第一次建置時裁切字型要幾秒，不要印出「外掛花太久」的英文警告（之後有快取就很快）
+    rolldownOptions: { checks: { bundlerTimings: false } },
   },
 });
