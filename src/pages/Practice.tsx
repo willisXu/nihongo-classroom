@@ -9,6 +9,7 @@ import {
   type QuizItem, type QuizMode, type QuizOption, type QuizScript,
 } from '../lib/kanaQuiz';
 import { countMastered, HIRA_KEYS, KATA_KEYS, nextLesson } from '../lib/progress';
+import { weakKanaKeys } from '../lib/mistakes';
 import { speak } from '../lib/speech';
 import { Masu, Segmented } from '../components/Controls';
 import { Hanamaru } from '../components/Hanamaru';
@@ -49,7 +50,14 @@ export default function Practice() {
     const l = lessonById(Number(params.get('lesson')));
     return l ? { ...p, script: l.quiz.script, rows: normalizeRows(l.quiz.rows) } : p;
   });
-  const pool = useMemo(() => buildPool(prefs.rows, prefs.script, prefs.mode), [prefs]);
+  // 錯題練習（從錯題本進來）：只出答錯過、還沒連對 3 次的字；進來時決定是哪些字，練熟的會陸續跳過
+  const [focus, setFocus] = useState<string[] | null>(() => (params.get('focus') === 'weak' ? weakKanaKeys(kanaStore.get()) : null));
+  const fullPool = useMemo(() => buildPool(ALL_ROW_IDS, 'mix', prefs.mode), [prefs.mode]);
+  const pool = useMemo(
+    () => (focus ? fullPool.filter((it) => focus.includes(it.key)) : buildPool(prefs.rows, prefs.script, prefs.mode)),
+    [focus, fullPool, prefs],
+  );
+  const focusLeft = focus ? pool.filter((it) => (stats[it.key]?.s ?? 0) < 3).length : 0;
   const [q, setQ] = useState<Q>({ item: null, options: [], picked: null, hint: false });
   const [round, setRound] = useState({ n: 0, right: 0, streak: 0 });
   const lastKey = useRef<string | null>(null);
@@ -62,24 +70,28 @@ export default function Practice() {
     writeJSON('nk.quiz', prefs);
   }, [prefs]);
 
-  // 從課程頁帶參數進來後，把網址清乾淨
+  // 從課程頁、錯題本帶參數進來後，把網址清乾淨
   useEffect(() => {
-    if (params.get('lesson')) setParams({}, { replace: true });
+    if (params.get('lesson') || params.get('focus')) setParams({}, { replace: true });
   }, [params, setParams]);
 
   const next = useCallback(
     (fromUser: boolean) => {
       window.clearTimeout(timer.current);
-      if (pool.length < 2) {
+      const latest = kanaStore.get();
+      // 錯題練習：連對 3 次的字就不再出；剩一個字也可以練
+      const live = focus ? pool.filter((it) => (latest[it.key]?.s ?? 0) < 3) : pool;
+      if (focus ? live.length === 0 : pool.length < 2) {
         setQ({ item: null, options: [], picked: null, hint: false });
         return;
       }
-      const item = pickItem(pool, kanaStore.get(), lastKey.current);
+      const item = pickItem(live, latest, lastKey.current);
       lastKey.current = item.key;
-      setQ({ item, options: makeOptions(item, pool, prefs.mode), picked: null, hint: false });
+      // 干擾選項從完整的五十音挑（錯題只有幾個字時才有像樣的選項）
+      setQ({ item, options: makeOptions(item, focus ? fullPool : pool, prefs.mode), picked: null, hint: false });
       if (prefs.mode === 'listen' && (fromUser || armed.current)) speak(item.ch);
     },
-    [pool, prefs.mode],
+    [pool, fullPool, focus, prefs.mode],
   );
 
   // 範圍或題型改變時重新開始
@@ -162,8 +174,19 @@ export default function Practice() {
 
       <div className="practice-layout">
         <div className="quiz-col">
+          {focus ? (
+            <div className="focus-bar" role="status">
+              <p>
+                <b>錯題練習</b>：只出答錯過、還沒連對 3 次的字
+                {focus.length ? `（還有 ${focusLeft} 個）` : ''}。連對 3 次就會從<Link to="/mistakes">錯題本</Link>拿掉。
+              </p>
+              <button type="button" className="linkbtn" onClick={() => setFocus(null)}>
+                回到一般測驗
+              </button>
+            </div>
+          ) : null}
           <div className="settings">
-            <div className="set-row">
+            <div className={`set-row${focus ? ' is-hidden' : ''}`}>
               <span className="set-l">文字</span>
               <Segmented
                 label="出題文字"
@@ -191,7 +214,7 @@ export default function Practice() {
                 ]}
               />
             </div>
-            <div className="set-row">
+            <div className={`set-row${focus ? ' is-hidden' : ''}`}>
               <span className="set-l">範圍</span>
               <div className="rchips" role="group" aria-label="出題範圍">
                 {ROW_CHOICES.map((r, i) => (
@@ -204,7 +227,7 @@ export default function Practice() {
                 ))}
               </div>
             </div>
-            <div className="quick">
+            <div className={`quick${focus ? ' is-hidden' : ''}`}>
               {lessonChoices.map((l) => (
                 <button
                   key={l.id}
@@ -235,7 +258,16 @@ export default function Practice() {
               </span>
             </div>
             {!item ? (
-              <p className="q-fb">範圍太小了，請在上面多選幾行。</p>
+              focus ? (
+                <div className="q-fb">
+                  <p>{focus.length ? '錯題都練熟了！每個字都連對 3 次了。' : '目前沒有答錯的字。'}</p>
+                  <button type="button" className="btn btn-primary" onClick={() => setFocus(null)}>
+                    回到一般測驗
+                  </button>
+                </div>
+              ) : (
+                <p className="q-fb">範圍太小了，請在上面多選幾行。</p>
+              )
             ) : (
               <>
                 <div className="q-prompt">
@@ -406,10 +438,9 @@ function MasteryGrid({ stats, script }: { stats: KanaStats; script: 'h' | 'k' })
 }
 
 function WeakList({ stats }: { stats: KanaStats }) {
-  const weak = Object.entries(stats)
-    .filter(([, e]) => e.w > 0 && e.s < 3)
-    .sort((a, b) => b[1].w - b[1].c * 0.25 - (a[1].w - a[1].c * 0.25))
-    .slice(0, 10);
+  const weak = weakKanaKeys(stats)
+    .slice(0, 10)
+    .map((k) => [k, stats[k]] as const);
   return (
     <div>
       <p className="mg-title">最常答錯</p>
@@ -418,9 +449,10 @@ function WeakList({ stats }: { stats: KanaStats }) {
           {weak.map(([k, e]) => {
             const ch = k.slice(2);
             return (
-              <button key={k} type="button" className="wchip" onClick={() => speak(ch)} aria-label={`${ch}，答錯 ${e.w} 次，點一下聽發音`}>
+              <button key={k} type="button" className="wchip" onClick={() => speak(ch)}>
                 <span lang="ja">{ch}</span>
                 <small>錯 {e.w}</small>
+                <span className="sr-only">次，點一下聽發音</span>
               </button>
             );
           })}

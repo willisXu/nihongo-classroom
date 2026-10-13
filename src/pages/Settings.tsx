@@ -8,10 +8,23 @@ import { useSpeech, speak } from '../lib/speech';
 import { estimateCost, modelInfo } from '../lib/claude';
 import { daysBetween } from '../lib/date';
 import { usePageTitle } from '../lib/title';
+import { googleCalendarUrl, reminderIcs } from '../lib/reminder';
 import { ApiKeySetup } from '../components/ApiKeySetup';
 import { AppInstall } from '../components/AppInstall';
 import { Segmented, Switch } from '../components/Controls';
 import { Icon } from '../components/Icon';
+
+/** 讓瀏覽器下載一個檔案 */
+function saveFile(blob: Blob, name: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 export default function Settings() {
   usePageTitle('設定');
@@ -27,17 +40,18 @@ export default function Settings() {
   const exportAgo = lastExport ? daysBetween(lastExport, Date.now()) : null;
   const totalCost = Object.entries(usage.byModel).reduce((sum, [m, u]) => sum + estimateCost(m, u.input, u.output), 0);
 
+  // 每天提醒：行事曆行程附上這個網站的網址（線上版或本機版都對）
+  const reminder = { time: settings.remindAt, url: `${location.origin}${location.pathname}`, now: Date.now() };
+  const downloadReminder = () => {
+    saveFile(new Blob([reminderIcs(reminder)], { type: 'text/calendar;charset=utf-8' }), 'nihongo-daily-reminder.ics');
+  };
+
   const download = () => {
-    const blob = new Blob([exportBackup()], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
     const d = new Date();
-    a.href = url;
-    a.download = `nihongo-classroom-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}.json`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    saveFile(
+      new Blob([exportBackup()], { type: 'application/json' }),
+      `nihongo-classroom-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}.json`,
+    );
     markExported();
     setMsg({ tone: 'ok', text: '已下載備份檔。到另一台裝置打開這個網站，用「匯入備份」就能接著學。' });
   };
@@ -126,6 +140,32 @@ export default function Settings() {
         <Switch id="set-romaji" checked={settings.showRomaji} onChange={(v) => updateSettings({ showRomaji: v })}>
           顯示羅馬拼音（熟悉假名後建議關掉）
         </Switch>
+      </section>
+
+      <section className="block" aria-labelledby="h-remind">
+        <h2 id="h-remind">每天提醒</h2>
+        <p>
+          選一個每天固定學日文的時間，加到行事曆，時間到了手機會提醒你。會建立一個每天重複、20 分鐘的「日文自學」行程，附上這個網站的連結；不想要了，到行事曆刪掉這個行程就好。
+        </p>
+        <div className="btn-row">
+          <label className="inline-select" htmlFor="remind-time">
+            時間
+            <input
+              id="remind-time"
+              type="time"
+              value={settings.remindAt}
+              onChange={(e) => {
+                if (/^\d{2}:\d{2}$/.test(e.target.value)) updateSettings({ remindAt: e.target.value });
+              }}
+            />
+          </label>
+          <a className="btn btn-primary" href={googleCalendarUrl(reminder)} target="_blank" rel="noopener noreferrer">
+            加到 Google 行事曆
+          </a>
+          <button type="button" className="btn" onClick={downloadReminder}>
+            下載行事曆檔（iPhone、Outlook）
+          </button>
+        </div>
       </section>
 
       <section className="block" aria-labelledby="h-ai">

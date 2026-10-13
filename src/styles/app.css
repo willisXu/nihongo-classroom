@@ -183,7 +183,7 @@ main { outline: none; padding-bottom: 32px; }
 .switch input:checked::after { transform: translateX(14px); }
 
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
-select, input[type='text'], input[type='search'], input[type='password'], textarea {
+select, input[type='text'], input[type='search'], input[type='password'], input[type='time'], textarea {
   border: 1px solid var(--line); background: var(--sheet); border-radius: 8px; padding: 6px 10px; font-size: 15px; max-width: 100%;
 }
 textarea { width: 100%; resize: vertical; line-height: 1.6; }
@@ -205,6 +205,23 @@ select:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 
 /* ============ 今日 ============ */
 .today-line { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 14px; color: var(--ink-2); }
+.tasks { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 2px; }
+.task { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px dashed var(--line); }
+.task:first-child { border-top: 0; }
+.task-mark { flex: none; width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--grid); display: grid; place-items: center; color: var(--on-accent); }
+.task.is-done .task-mark { background: var(--ok); border-color: var(--ok); }
+.task-body { flex: 1; min-width: 0; display: grid; gap: 4px; }
+.task-title { font-weight: 600; }
+.task.is-done .task-title { color: var(--ink-2); }
+.task-detail { font-size: 13.5px; color: var(--ink-2); }
+.task-body .meter-bar { max-width: 220px; }
+.today-done { display: flex; align-items: center; gap: 14px; background: var(--ok-soft); border-radius: var(--r); padding: 10px 14px; }
+.today-maru { position: relative; flex: none; width: 52px; height: 52px; }
+.today-maru .hanamaru { left: 0; top: 0; right: auto; width: 100%; height: 100%; }
+.focus-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 14px; background: var(--accent-soft); border-radius: var(--r); padding: 10px 14px; font-size: 14.5px; margin-bottom: 12px; }
+.focus-bar p { flex: 1 1 260px; min-width: 0; }
+.is-hidden { display: none !important; }
+.pill-ok { border-color: var(--ok); color: var(--ok); }
 .streak { display: inline-flex; align-items: center; gap: 4px; color: var(--mark); font-weight: 500; }
 .home-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 18px; align-items: start; margin-top: 10px; }
 .home-main, .home-side { display: grid; gap: 18px; min-width: 0; }
@@ -382,6 +399,11 @@ table.jlpt { min-width: 560px; }
 .ptabs { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 18px; }
 .ptab { display: inline-flex; align-items: center; gap: 6px; padding: 5px 13px; border-radius: 999px; border: 1px solid var(--line); background: var(--sheet); color: var(--ink-2); text-decoration: none; font-size: 14px; }
 .ptab.active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+@media (max-width: 480px) {
+  /* 手機上四個分頁排成兩行兩個，不會剩一個掉到第二行 */
+  .ptabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ptab { justify-content: center; }
+}
 .practice-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 28px; align-items: start; margin-top: 8px; }
 .quiz-col { display: grid; gap: 14px; min-width: 0; }
 .settings { display: grid; gap: 10px; margin-top: 4px; }
@@ -532,6 +554,17 @@ table.jlpt { min-width: 560px; }
 .grade-good { border-color: var(--accent); }
 .grade-easy .g-label { color: var(--ok); }
 .review-done { display: grid; gap: 10px; margin-top: 10px; }
+.drill-grades { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 420px; }
+.drill-foot { justify-content: space-between; }
+.mk-words { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; max-width: 46em; }
+.mk-words li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px dashed var(--line); }
+.mk-words li:first-child { border-top: 0; }
+.mk-body { display: grid; gap: 2px; min-width: 0; }
+.mk-body p { overflow-wrap: anywhere; }
+.mk-w { font-family: var(--font-kana); font-weight: 600; font-size: 20px; margin-right: 10px; }
+.mk-k { font-family: var(--font-kana); font-size: 14px; color: var(--ink-2); }
+.mk-zh { font-size: 14.5px; color: var(--ink-2); }
+.mk-n { font-size: 12.5px; color: var(--mark); white-space: nowrap; }
 
 /* ============ AI 家教 ============ */
 .setup-card { display: grid; gap: 12px; max-width: 760px; margin-top: 12px; }
@@ -741,7 +774,7 @@ select { min-width: 0; text-overflow: ellipsis; }
 .apikey, .model-pick, .block { grid-template-columns: minmax(0, 1fr); }
 /* iPhone 的 Safari 遇到小於 16px 的輸入框會自動放大畫面 */
 @media (max-width: 720px) {
-  select, input[type='text'], input[type='search'], input[type='password'], textarea { font-size: 16px; }
+  select, input[type='text'], input[type='search'], input[type='password'], input[type='time'], textarea { font-size: 16px; }
 }
 /* 深色模式：螢光筆底色上的小字改用主要文字色，對比才夠 */
 @media (prefers-color-scheme: dark) {

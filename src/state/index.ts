@@ -22,6 +22,8 @@ export interface Settings {
   tutorLevel: TutorLevel | 'auto';
   showTranslation: boolean;
   showReading: boolean;
+  /** 每天提醒的時間（HH:MM），產生行事曆提醒用 */
+  remindAt: string;
 }
 
 const defaultSettings = (): Settings => ({
@@ -34,6 +36,7 @@ const defaultSettings = (): Settings => ({
   tutorLevel: 'auto',
   showTranslation: true,
   showReading: true,
+  remindAt: '20:30',
 });
 
 export const settingsStore = createStore<Settings>('nk.settings', defaultSettings, (raw) => {
@@ -49,6 +52,7 @@ export const settingsStore = createStore<Settings>('nk.settings', defaultSetting
     tutorLevel: oneOf(raw.tutorLevel, ['auto', 'kana', 'n5', 'n4'] as const, d.tutorLevel),
     showTranslation: bool(raw.showTranslation, d.showTranslation),
     showReading: bool(raw.showReading, d.showReading),
+    remindAt: typeof raw.remindAt === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(raw.remindAt) ? raw.remindAt : d.remindAt,
   };
 });
 
@@ -216,6 +220,39 @@ export function saveCard(id: string, card: CardState, wasNew: boolean) {
   logActivity('review');
 }
 
+/* ---------------- 錯題本：單字卡按「忘記了」的紀錄 ---------------- */
+export interface VocabMiss {
+  /** 按「忘記了」的次數 */
+  n: number;
+  /** 最後一次忘記的時間 */
+  t: number;
+  /** 在錯題本按「記住了」的時間；比 t 晚就不算錯題 */
+  ok: number;
+}
+export type VocabMisses = Record<string, VocabMiss>;
+
+export const missStore = createStore<VocabMisses>('nk.misses', () => ({}), (raw) => {
+  const out: VocabMisses = {};
+  if (!isObj(raw)) return out;
+  for (const [id, v] of Object.entries(raw)) if (isObj(v)) out[id] = { n: num(v.n), t: num(v.t), ok: num(v.ok) };
+  return out;
+});
+
+export function recordVocabMiss(id: string) {
+  missStore.set((m) => {
+    const e = m[id] ?? { n: 0, t: 0, ok: 0 };
+    return { ...m, [id]: { ...e, n: e.n + 1, t: Date.now() } };
+  });
+}
+
+/** 錯題本裡按「記住了」：之後再忘記才會回到錯題本 */
+export function clearVocabMiss(id: string) {
+  missStore.set((m) => {
+    const e = m[id] ?? { n: 0, t: 0, ok: 0 };
+    return { ...m, [id]: { ...e, ok: Date.now() } };
+  });
+}
+
 /* ---------------- 每日活動（連續天數） ---------------- */
 export type ActivityKind = 'kana' | 'writing' | 'review' | 'lesson' | 'tutor';
 export type Activity = Record<string, Partial<Record<ActivityKind, number>>>;
@@ -278,7 +315,7 @@ export function markExported() {
 }
 
 /* ---------------- 備份：匯出／匯入（不含 API 金鑰） ---------------- */
-const BACKUP_STORES = [settingsStore, kanaStore, lessonStore, writingStore, srsStore, activityStore, usageStore];
+const BACKUP_STORES = [settingsStore, kanaStore, lessonStore, writingStore, srsStore, missStore, activityStore, usageStore];
 
 export function exportBackup(): string {
   const data: Record<string, unknown> = {};
@@ -308,6 +345,6 @@ export function importBackup(text: string): number {
 }
 
 export function resetAllProgress() {
-  for (const s of [kanaStore, lessonStore, writingStore, srsStore, activityStore, usageStore]) s.reset();
+  for (const s of [kanaStore, lessonStore, writingStore, srsStore, missStore, activityStore, usageStore]) s.reset();
 }
 

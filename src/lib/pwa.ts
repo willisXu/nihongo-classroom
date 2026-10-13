@@ -115,7 +115,11 @@ export function initPwa(): void {
     return;
   }
   const register = () => {
-    navigator.serviceWorker.register('./sw.js').then(watch, () => patch({ offline: 'failed' }));
+    navigator.serviceWorker.register('./sw.js').then(
+      // 有些環境（例如擋掉 service worker 的瀏覽器設定）會回傳空值
+      (reg) => (reg ? watch(reg) : patch({ offline: 'unsupported' })),
+      () => patch({ offline: 'failed' }),
+    );
   };
   // 等頁面載完再註冊：背景下載離線檔案時，不和第一次開啟的畫面搶網路
   if (document.readyState === 'complete') register();

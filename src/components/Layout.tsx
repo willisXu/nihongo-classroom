@@ -22,9 +22,9 @@ const SECONDARY: { to: string; label: string; icon: IconName }[] = [
   { to: '/settings', label: '設定', icon: 'gear' },
 ];
 
-/** 練習底下的三個頁面（假名測驗、手寫描字、五十音表）都算「練習」 */
+/** 練習底下的頁面（假名測驗、手寫描字、五十音表、錯題本）都算「練習」 */
 function isPracticePath(path: string) {
-  return path.startsWith('/practice') || path.startsWith('/writing') || path.startsWith('/chart');
+  return path.startsWith('/practice') || path.startsWith('/writing') || path.startsWith('/chart') || path.startsWith('/mistakes');
 }
 
 function Loading() {

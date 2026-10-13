@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { vocabById } from '../data/vocab';
-import { saveCard, settingsStore, srsStore, updateSettings } from '../state';
+import { recordVocabMiss, saveCard, settingsStore, srsStore, updateSettings } from '../state';
 import { useStore, readJSON, writeJSON } from '../state/store';
 import {
   LEARN_AHEAD_MS, buildSession, formatMinutes, newCard, pickNext, previewLabel, review, GRADES, type CardState, type Grade, type Pending,
@@ -87,6 +87,8 @@ function Review({ deck, onRestart }: { deck: string; onRestart: () => void }) {
       const wasNew = before.reps === 0;
       const after = review(before, g, t);
       saveCard(currentId, after, wasNew);
+      // 按「忘記了」的卡片收進錯題本
+      if (g === 'again') recordVocabMiss(currentId);
       const m = main.filter((x) => x !== currentId);
       let l = learning.filter((p) => p.id !== currentId);
       if (after.step >= 0 && after.due <= t + LEARN_AHEAD_MS) l = [...l, { id: currentId, due: after.due }];

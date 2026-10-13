@@ -18,6 +18,7 @@ const Review = lazy(() => import('./pages/Review'));
 const Tutor = lazy(() => import('./pages/Tutor'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Roadmap = lazy(() => import('./pages/Roadmap'));
+const Mistakes = lazy(() => import('./pages/Mistakes'));
 
 export function applyTheme(theme: ThemePref) {
   const root = document.documentElement;
@@ -52,6 +53,7 @@ export default function App() {
           <Route path="lessons" element={<Lessons />} />
           <Route path="lessons/:id" element={<LessonPage />} />
           <Route path="chart" element={<Chart />} />
+          <Route path="mistakes" element={<Mistakes />} />
           <Route path="practice" element={<Practice />} />
           <Route path="writing" element={<Writing />} />
           <Route path="vocab" element={<Vocab />} />

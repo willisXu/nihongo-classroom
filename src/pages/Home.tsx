@@ -3,14 +3,17 @@ import { useMemo } from 'react';
 import { LESSON_META as LESSONS } from '../data/lessons/meta';
 import { DECK_META, metaItemIds } from '../data/vocab/meta';
 import {
-  activityStore, apiKeyStore, kanaLevel, kanaStore, lastExportStore, lessonStore, settingsStore, srsStore, writingStore,
+  activityStore, apiKeyStore, kanaLevel, kanaStore, lastExportStore, lessonStore, missStore, settingsStore, srsStore, writingStore,
 } from '../state';
 import { useStore } from '../state/store';
-import { countMastered, HIRA_KEYS, KATA_KEYS, lessonsDone, nextLesson, streak, todayActivity } from '../lib/progress';
+import { countMastered, HIRA_KEYS, KATA_KEYS, lessonsDone, nextLesson, streak } from '../lib/progress';
+import { todayTasks } from '../lib/today';
+import { mistakeCount, weakKanaKeys } from '../lib/mistakes';
 import { deckStats } from '../lib/srs';
 import { daysBetween, formatDateZh, studyDayKey } from '../lib/date';
 import { Icon } from '../components/Icon';
 import { Meter } from '../components/Controls';
+import { Hanamaru } from '../components/Hanamaru';
 import { SCENARIOS, PURPOSE_LABEL } from '../data/scenarios';
 import { buildPool } from '../lib/kanaQuiz';
 import { usePageTitle } from '../lib/title';
@@ -46,13 +49,17 @@ export default function Home() {
   const activity = useStore(activityStore);
   const settings = useStore(settingsStore);
   const apiKey = useStore(apiKeyStore);
+  const misses = useStore(missStore);
 
   const next = nextLesson(lessons);
   const done = lessonsDone(lessons);
   const hira = countMastered(kana, HIRA_KEYS);
   const kata = countMastered(kana, KATA_KEYS);
   const days = streak(activity, now);
-  const today = todayActivity(activity, now);
+  const tasks = todayTasks({ activity, kana, lessons, srs, newPerDay: settings.newPerDay, now });
+  const tasksDone = tasks.filter((t) => t.done).length;
+  const allDone = tasks.length > 0 && tasksDone === tasks.length;
+  const mistakes = mistakeCount(kana, misses, srs.cards, writing);
 
   const vocab = useMemo(() => {
     let due = 0;
@@ -68,15 +75,7 @@ export default function Home() {
     return { due, seen, perDeck, newLeft };
   }, [srs, settings.newPerDay, now]);
 
-  const weak = useMemo(
-    () =>
-      Object.entries(kana)
-        .filter(([, e]) => e.w > 0 && e.s < 3)
-        .sort((a, b) => b[1].w - b[1].c * 0.25 - (a[1].w - a[1].c * 0.25))
-        .slice(0, 8)
-        .map(([k]) => k.slice(2)),
-    [kana],
-  );
+  const weak = useMemo(() => weakKanaKeys(kana).slice(0, 8).map((k) => k.slice(2)), [kana]);
 
   // 手寫建議：目前這一課還沒寫過的字
   const writeLesson = next ?? LESSONS[LESSONS.length - 1];
@@ -104,14 +103,58 @@ export default function Home() {
             <Icon name="flame" size={18} />
             {days > 0 ? `連續學習 ${days} 天` : '今天開始第一天'}
           </span>
-          <span>假名練習 {today.kana ?? 0} 題</span>
-          <span>單字複習 {today.review ?? 0} 次</span>
-          <span>手寫 {today.writing ?? 0} 字</span>
         </p>
       </header>
 
       <div className="home-grid">
         <div className="home-main">
+          <section className="card home-card home-today" aria-labelledby="h-today">
+            <div className="card-head">
+              <h2 id="h-today">今天的任務</h2>
+              <span className={`pill ${allDone ? 'pill-ok' : ''}`}>
+                {tasksDone}/{tasks.length} 完成
+              </span>
+            </div>
+            {allDone ? (
+              <div className="today-done" role="status">
+                <span className="today-maru">
+                  <Hanamaru show />
+                </span>
+                <p>
+                  <b>今天的任務都完成了！</b>
+                  {days > 1 ? `已經連續學習 ${days} 天。` : ''}還有時間的話，可以繼續上課，或到錯題本加強。
+                </p>
+              </div>
+            ) : null}
+            <ul className="tasks">
+              {tasks.map((t) => (
+                <li key={t.id} className={`task${t.done ? ' is-done' : ''}`}>
+                  <span className="task-mark" aria-hidden="true">
+                    {t.done ? <Icon name="check" size={16} /> : null}
+                  </span>
+                  <div className="task-body">
+                    <p className="task-title">
+                      {t.title}
+                      <span className="sr-only">{t.done ? '（已完成）' : '（還沒完成）'}</span>
+                    </p>
+                    <p className="task-detail">{t.detail}</p>
+                    {t.goal ? <Meter value={Math.min(t.value ?? 0, t.goal)} max={t.goal} label={`${t.title}進度`} /> : null}
+                  </div>
+                  {!t.done ? (
+                    <Link className="btn btn-sm" to={t.to}>
+                      {t.action}
+                    </Link>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+            {mistakes ? (
+              <p className="small">
+                <Link to="/mistakes">錯題本</Link>有 {mistakes} 題可以加強。
+              </p>
+            ) : null}
+          </section>
+
           <section className="card home-card home-lesson" aria-labelledby="h-next">
             <p className="eyebrow">五十音課程 · 已完成 {done}/{LESSONS.length}</p>
             {next ? (
@@ -224,7 +267,9 @@ export default function Home() {
             </div>
             {weak.length ? (
               <>
-                <p className="small">最常答錯</p>
+                <p className="small">
+                  最常答錯 · <Link to="/mistakes">到錯題本練這些字</Link>
+                </p>
                 <div className="weak">
                   {weak.map((ch) => (
                     <span key={ch} className={`wchip lv${kanaLevel(kana, (/[゠-ヿ]/.test(ch) ? 'k:' : 'h:') + ch)}`} lang="ja">

@@ -2,7 +2,7 @@ import type { ReactElement, SVGProps } from 'react';
 
 export type IconName =
   | 'speaker' | 'home' | 'book' | 'pencil' | 'cards' | 'chat' | 'grid' | 'map' | 'gear'
-  | 'target' | 'check' | 'close' | 'arrow-right' | 'arrow-left' | 'refresh' | 'play' | 'flame' | 'eye' | 'send' | 'stop';
+  | 'target' | 'check' | 'close' | 'arrow-right' | 'arrow-left' | 'refresh' | 'play' | 'flame' | 'eye' | 'send' | 'stop' | 'note';
 
 const PATHS: Record<IconName, ReactElement> = {
   speaker: (
@@ -13,6 +13,14 @@ const PATHS: Record<IconName, ReactElement> = {
     </>
   ),
   home: <path d="M4 11.5 12 5l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5h-5v5H5a1 1 0 0 1-1-1z" />,
+  // 錯題本：筆記本加書籤
+  note: (
+    <>
+      <rect x="5" y="3.5" width="14" height="17" rx="2" />
+      <path d="M8.5 3.5v17" />
+      <path d="M12.5 3.5v6.5l2-1.6 2 1.6V3.5" />
+    </>
+  ),
   book: (
     <>
       <path d="M4 5.5c2.5-1 5.5-1 8 .8 2.5-1.8 5.5-1.8 8-.8V19c-2.5-1-5.5-1-8 .8-2.5-1.8-5.5-1.8-8-.8z" />
