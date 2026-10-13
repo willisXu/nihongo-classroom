@@ -78,7 +78,10 @@ function ask<T>(opts: {
   });
 }
 
-/** 剛送出後的這段時間不理會「停止」：連點兩下送出時，第二下會落在同一個位置剛換上的「停止」 */
+/**
+ * 剛送出後的這段時間不理會「停止」：連點兩下送出時，第二下會落在同一個位置剛換上的「停止」。
+ * 只有會話的輸入框需要（批改、出題的「停止」在原本按鈕的旁邊，不會誤按，按了就要停）。
+ */
 const STOP_GUARD_MS = 600;
 
 function useStopGuard() {
@@ -148,6 +151,20 @@ export default function Tutor() {
   const lessons = useStore(lessonStore);
   const online = useOnline();
 
+  // 在這一頁設定好金鑰時，設定的區塊會整個換成家教畫面（「連線成功」來不及看到、焦點也會掉）：
+  // 另外顯示一行成功訊息，焦點放在那裡
+  const [keyJustSaved, setKeyJustSaved] = useState(false);
+  const keySavedRef = useRef<HTMLParagraphElement>(null);
+  const hadKey = useRef(!!apiKey);
+  useEffect(() => {
+    if (apiKey && !hadKey.current) setKeyJustSaved(true);
+    if (!apiKey) setKeyJustSaved(false);
+    hadKey.current = !!apiKey;
+  }, [apiKey]);
+  useEffect(() => {
+    if (keyJustSaved && focusLost()) keySavedRef.current?.focus({ preventScroll: true });
+  }, [keyJustSaved]);
+
   useEffect(() => {
     if (params.get('scenario') || params.get('mode')) setParams({}, { replace: true });
   }, [params, setParams]);
@@ -174,6 +191,12 @@ export default function Tutor() {
         <div className="vnote offline-note" role="status">
           <p>現在沒有網路。AI 家教要連上網路才能用；課程、練習和單字卡離線也能用。</p>
         </div>
+      ) : null}
+
+      {keyJustSaved && apiKey ? (
+        <p className="key-status tone-ok" role="status" tabIndex={-1} ref={keySavedRef}>
+          <Icon name="check" size={16} /> 金鑰設定好了，連線測試成功。選一個模式開始吧。
+        </p>
       ) : null}
 
       {!apiKey ? (
@@ -323,6 +346,11 @@ function Conversation({
   const [boot] = useState(() => bootChat(scenarioParam.current));
   const [scenario, setScenario] = useState<Scenario | null>(boot.start ?? boot.saved?.scenario ?? null);
   const [entries, setEntries] = useState<ChatEntry[]>(boot.saved?.entries ?? []);
+  /**
+   * 讀螢幕軟體只念最新的一則回覆（和對我那句話的回饋）。整串對話不設成播報區：
+   * 打開「假名讀音」「中文翻譯」時每個泡泡都會多出一行，整段對話會被重念一次。
+   */
+  const [heard, setHeard] = useState<{ id: number; ok: boolean; corrected: string; ja: string; zh: string } | null>(null);
   /** 已送出的對話紀錄；最後一則若是 user，代表還在等（或等失敗了，可以重試或改送別句） */
   const [history, setHistory] = useState<Msg[]>(boot.saved?.history ?? []);
   const [input, setInput] = useState(boot.saved?.input ?? '');
@@ -390,6 +418,15 @@ function Conversation({
         out.push({ role: 'ai', turn });
         return out;
       });
+      // AI 的第一句（開場）沒有回應我說的話：畫面上不顯示回饋，播報也不念
+      const answered = msgs[msgs.length - 1]?.content !== OPENING_MESSAGE;
+      setHeard((h) => ({
+        id: (h?.id ?? 0) + 1,
+        ok: answered && turn.feedback.ok,
+        corrected: answered && !turn.feedback.ok ? turn.feedback.corrected : '',
+        ja: turn.reply,
+        zh: settingsStore.get().showTranslation ? turn.translation : '',
+      }));
       // 回覆送到時可能已經切到別的模式：看不到的面板不出聲，免得打斷正在播放的發音
       if (isShown()) speak(turn.reply);
     } catch (e) {
@@ -562,7 +599,22 @@ function Conversation({
         </div>
       </div>
 
-      <div className="chat-list" aria-live="polite">
+      <div className="sr-only" aria-live="polite">
+        {heard ? (
+          <p key={heard.id}>
+            {heard.ok ? '說得很好。' : null}
+            {heard.corrected ? (
+              <>
+                更自然的說法：<span lang="ja">{heard.corrected}</span>
+                {/[。．.!?！？]$/.test(heard.corrected) ? '' : '。'}
+              </>
+            ) : null}
+            AI 說：<span lang="ja">{heard.ja}</span>
+            {heard.zh ? `（${heard.zh}）` : ''}
+          </p>
+        ) : null}
+      </div>
+      <div className="chat-list">
         {entries.map((e, i) =>
           e.role === 'ai' && e.turn ? (
             <div key={i} className="bubble-row ai">
@@ -775,9 +827,8 @@ function Corrector({ level, isShown }: { level: TutorLevel; isShown: () => boole
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<CorrectionItem[]>(saved.results);
   const abort = useAbortOnUnmount();
-  const stopGuard = useStopGuard();
   /** 給螢幕閱讀器念的批改結果（畫面上的結果卡片不會自動念出來） */
-  const [announce, setAnnounce] = useState('');
+  const [announce, setAnnounce] = useState({ id: 0, text: '' });
   const jaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -789,7 +840,6 @@ function Corrector({ level, isShown }: { level: TutorLevel; isShown: () => boole
     if (!text || busy) return;
     const ctrl = new AbortController();
     abort.current = ctrl;
-    stopGuard.arm();
     setBusy(true);
     setError(null);
     try {
@@ -803,7 +853,8 @@ function Corrector({ level, isShown }: { level: TutorLevel; isShown: () => boole
       });
       if (ctrl.signal.aborted) return;
       setResults((r) => [{ id: Date.now(), input: text, result: res.data }, ...r].slice(0, 10));
-      setAnnounce(`批改完成：${(VERDICT[res.data.verdict] ?? VERDICT.minor).label}。${res.data.corrected}`);
+      // 每次都換一個新的段落：再批改一次、結果一樣時也會念
+      setAnnounce((a) => ({ id: a.id + 1, text: `批改完成：${(VERDICT[res.data.verdict] ?? VERDICT.minor).label}。${res.data.corrected}` }));
       // 切到別的模式時不出聲
       if (res.data.corrected && isShown()) speak(res.data.corrected);
     } catch (e) {
@@ -819,7 +870,6 @@ function Corrector({ level, isShown }: { level: TutorLevel; isShown: () => boole
   };
 
   const stop = () => {
-    if (!stopGuard.ready()) return;
     abort.current?.abort();
     abort.current = null;
     setBusy(false);
@@ -857,9 +907,9 @@ function Corrector({ level, isShown }: { level: TutorLevel; isShown: () => boole
           </p>
         ) : null}
       </form>
-      <p className="sr-only" aria-live="polite">
-        {announce}
-      </p>
+      <div className="sr-only" aria-live="polite">
+        {announce.text ? <p key={announce.id}>{announce.text}</p> : null}
+      </div>
 
       {results.map((r) => {
         const v = VERDICT[r.result.verdict] ?? VERDICT.minor;
@@ -953,7 +1003,6 @@ function AiQuiz({ level }: { level: TutorLevel }) {
   const [picked, setPicked] = useState<number | null>(saved.picked);
   const [score, setScore] = useState(saved.score);
   const abort = useAbortOnUnmount();
-  const stopGuard = useStopGuard();
 
   useEffect(() => {
     writeSession('quiz', { focus, questions, idx, picked, score });
@@ -987,12 +1036,11 @@ function AiQuiz({ level }: { level: TutorLevel }) {
     if (busy) return;
     const ctrl = new AbortController();
     abort.current = ctrl;
-    stopGuard.arm();
     setBusy(true);
     setError(null);
     try {
       const res = await ask<unknown>({
-        system: quizSystem(),
+        system: quizSystem(level),
         messages: [
           {
             role: 'user',
@@ -1001,7 +1049,8 @@ function AiQuiz({ level }: { level: TutorLevel }) {
               focus,
               learnedKana: learned,
               weakKana,
-              words: words.map((w) => ({ ja: w.kanji ?? w.kana, kana: w.kana, zh: w.zh })),
+              // 只學過假名：單字也只給假名（給漢字又要它不用漢字，指示互相矛盾）
+              words: words.map((w) => ({ ja: level === 'kana' ? w.kana : (w.kanji ?? w.kana), kana: w.kana, zh: w.zh })),
             }),
           },
         ],
@@ -1028,7 +1077,6 @@ function AiQuiz({ level }: { level: TutorLevel }) {
   };
 
   const stop = () => {
-    if (!stopGuard.ready()) return;
     abort.current?.abort();
     abort.current = null;
     setBusy(false);

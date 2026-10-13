@@ -67,8 +67,11 @@ export function conversationSystem(s: Scenario, level: TutorLevel): string {
     '',
     'Rules:',
     '- Stay in character. Keep each reply to one or two short sentences so the learner can follow.',
+    // 常體（普通形）是 N4 才教：只會假名、N5 的學習者，朋友情境也用簡單的です／ます
     s.casual
-      ? '- You are close friends, so use natural casual speech (plain form), but keep it simple. Never treat the learner\'s です／ます as a mistake. If the learner level says they have only just finished kana, stay with です／ます yourself too, because they have not learned plain forms yet.'
+      ? level === 'n4'
+        ? '- You are close friends, so use natural casual speech (plain form), but keep it simple. Never treat the learner\'s です／ます as a mistake.'
+        : '- You are close friends, but the learner has not learned plain forms yet (they come at N4), so use simple, friendly です／ます yourself and in your suggestions. Never treat the learner\'s です／ます as a mistake.'
       : '- Use polite です／ます speech appropriate to the situation.',
     '- The learner may answer in Japanese, romaji, or Chinese when stuck. Understand what they mean and continue the scene.',
     '- `feedback` is only about the learner\'s most recent message. ok=true when it was natural and correct for the situation. When ok=false, `corrected` is the natural Japanese for what they meant (also when they wrote Chinese or romaji), `reading` is `corrected` written entirely in kana, and `explanation` is one or two short, kind sentences in Traditional Chinese (Taiwan) about the key fix. When ok=true, leave corrected, reading and explanation empty.',
@@ -148,14 +151,24 @@ export interface QuizContext {
   focus: 'mixed' | 'kana' | 'vocab';
 }
 
-export function quizSystem(): string {
+/**
+ * 出題時日文怎麼寫。台灣學習者看得懂漢字：選項只有漢字的話，「中文 → 選日文」靠漢字就答得出來，等於沒考到日文。
+ */
+const QUIZ_SCRIPT_RULE: Record<TutorLevel, string> = {
+  kana: 'Write every piece of Japanese (in prompt, ja, choices and explanation) only in hiragana and katakana, never kanji. The listed words are already given in kana; use them as given.',
+  n5: 'When choices are Japanese, write each one in kana, or as kanji followed by its kana reading in full-width parentheses, e.g. 学校（がっこう）. If the ja field contains kanji, add its kana reading the same way. Never write a question that can be answered just by matching Chinese characters (for example 學校 → 学校): in "Chinese → choose the Japanese" questions the choices must differ in their kana.',
+  n4: 'When choices are Japanese, write each one in kana, or as kanji followed by its kana reading in full-width parentheses, e.g. 学校（がっこう）. If the ja field contains kanji, add its kana reading the same way. Never write a question that can be answered just by matching Chinese characters (for example 學校 → 学校): in "Chinese → choose the Japanese" questions the choices must differ in their kana.',
+};
+
+export function quizSystem(level: TutorLevel): string {
   return [
     'You write short multiple-choice quizzes for a Taiwanese adult learning Japanese (native Traditional Chinese, Taiwan).',
+    `Learner level: ${LEVEL_DESC[level]} ${QUIZ_SCRIPT_RULE[level]}`,
     'Write exactly 5 questions. Use ONLY the kana and words listed in the learner context; do not introduce new vocabulary.',
     'Question types to mix (follow the requested focus): reading (Japanese → Chinese meaning), meaning (Chinese → choose the Japanese), kana recognition (which kana is pronounced X / which romaji), and — only when the level is n5 or n4 — choosing the right particle in a short sentence built from the listed words.',
     'Each question: prompt (the question in Traditional Chinese), ja (the Japanese shown with the question, or empty), choices (exactly 4 short options), choiceLang (what the choices are written in: "ja" for Japanese kana or kanji, "zh" for Traditional Chinese, "romaji" for romaji), answer (0-based index of the correct choice), explanation (one short sentence in Traditional Chinese, mention a memory tip when useful).',
     'Distractors must be plausible but clearly wrong; prefer look-alike kana and related words. Vary the position of the correct answer.',
-    'Never use kanji when the level is "kana". Prioritise the weak kana and the listed words.',
+    'Prioritise the weak kana and the listed words.',
   ].join('\n');
 }
 

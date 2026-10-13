@@ -34,13 +34,29 @@ function client(apiKey: string, maxRetries = 2) {
 }
 
 /**
+ * 用字數估 token：英數大約 4 個字一個 token，中日文大約一個字一個。
+ * 串流到一半停下來時，最後的用量還沒送到（開頭只有輸出 1 個的暫定值），用收到的內容估輸出。
+ * 模型思考的內容只會送出摘要，所以這仍然是偏低的估計。
+ */
+export function estimateTokens(text: string): number {
+  let ascii = 0;
+  let other = 0;
+  for (const ch of text) {
+    if (ch.charCodeAt(0) < 128) ascii++;
+    else other++;
+  }
+  return Math.ceil(ascii / 4 + other);
+}
+
+/**
  * 等串流結束，拿到完整回覆。另外處理兩件事：
  * - 開始回應後太久沒有資料（或超過 limitMs）就停止，回報逾時
- * - 中途取消或出錯時，已經送出的輸入（和產生到一半的輸出）照樣計費：把用量回報出去
+ * - 中途取消或出錯時，已經送出的輸入和產生到一半的輸出照樣計費：把用量回報出去（輸出用收到的內容估）
  */
 async function finish(stream: MessageStream, onUsage?: (input: number, output: number) => void, limitMs?: number): Promise<Anthropic.Message> {
   let stalled = false;
   let idle: ReturnType<typeof setTimeout> | undefined;
+  let received = '';
   const stop = () => {
     stalled = true;
     stream.abort();
@@ -50,13 +66,20 @@ async function finish(stream: MessageStream, onUsage?: (input: number, output: n
     idle = setTimeout(stop, STREAM_LIMITS.stallMs);
   };
   stream.on('connect', kick);
-  stream.on('streamEvent', kick);
+  stream.on('streamEvent', (event) => {
+    kick();
+    if (event.type !== 'content_block_delta') return;
+    const d = event.delta;
+    if (d.type === 'text_delta') received += d.text;
+    else if (d.type === 'thinking_delta') received += d.thinking;
+    else if (d.type === 'input_json_delta') received += d.partial_json;
+  });
   const limit = limitMs ? setTimeout(stop, limitMs) : undefined;
   try {
     return await stream.finalMessage();
   } catch (e) {
     const usage = stream.currentMessage?.usage;
-    if (usage) onUsage?.(usage.input_tokens, usage.output_tokens);
+    if (usage) onUsage?.(usage.input_tokens, Math.max(usage.output_tokens, estimateTokens(received)));
     if (stalled) throw new TutorError(STALL_MESSAGE, 'timeout');
     throw toTutorError(e);
   } finally {

@@ -16,6 +16,7 @@ import { Hanamaru } from '../components/Hanamaru';
 import { Icon } from '../components/Icon';
 import { PracticeTabs } from '../components/PracticeTabs';
 import { usePageTitle } from '../lib/title';
+import { focusLost } from '../lib/flashcard';
 
 interface QuizPrefs {
   script: QuizScript;
@@ -58,6 +59,8 @@ export default function Practice() {
     [focus, fullPool, prefs],
   );
   const focusLeft = focus ? pool.filter((it) => (stats[it.key]?.s ?? 0) < 3).length : 0;
+  // 目前範圍有幾個字熟悉了（課程作業「練到熟悉」看這個數字；濁音、片假名不在右邊的五十音格子裡）
+  const scopeMastered = pool.filter((it) => kanaLevel(stats, it.key) === 2).length;
   // 聽音題不出 を、ヲ（和 お、オ 同音）：錯題裡還有的話，要說清楚，不能說「都練熟了」
   const listenSkipped =
     focus && prefs.mode === 'listen'
@@ -70,6 +73,7 @@ export default function Practice() {
   const armed = useRef(false);
   const timer = useRef<number | undefined>(undefined);
   const nextBtn = useRef<HTMLButtonElement>(null);
+  const questionRef = useRef<HTMLParagraphElement>(null);
   const [confirmReset, setConfirmReset] = useState(false);
 
   useEffect(() => {
@@ -99,6 +103,12 @@ export default function Practice() {
     },
     [pool, fullPool, focus, prefs.mode],
   );
+
+  // 換題時，剛按的按鈕（選項、下一題）已經換掉：焦點放到新題目，讀螢幕軟體會念出第幾題、考什麼。
+  // 剛進頁面、改範圍時不動焦點
+  useEffect(() => {
+    if (q.item && armed.current && focusLost()) questionRef.current?.focus({ preventScroll: true });
+  }, [q.item]);
 
   // 範圍或題型改變時重新開始
   useEffect(() => {
@@ -269,6 +279,11 @@ export default function Practice() {
               <span>
                 連對 <b>{round.streak}</b>
               </span>
+              {!focus && pool.length ? (
+                <span>
+                  範圍內熟悉 <b>{scopeMastered}</b>／{pool.length}
+                </span>
+              ) : null}
             </div>
             {!item ? (
               focus ? (
@@ -295,6 +310,16 @@ export default function Practice() {
               )
             ) : (
               <>
+                <p className="sr-only" ref={questionRef} tabIndex={-1}>
+                  第 {round.n + (answered ? 0 : 1)} 題：
+                  {prefs.mode === 'see' ? (
+                    <>
+                      「<span lang="ja">{item.ch}</span>」怎麼念？
+                    </>
+                  ) : (
+                    '聽發音，選出正確的假名。'
+                  )}
+                </p>
                 <div className="q-prompt">
                   <div className="q-stage">
                     {prefs.mode === 'see' ? (
@@ -335,7 +360,7 @@ export default function Practice() {
                         type="button"
                         className={`opt ${listen ? 'ja' : ''} ${cls}`}
                         lang={listen ? 'ja' : undefined}
-                        disabled={answered}
+                        aria-disabled={answered || undefined}
                         onClick={() => answer(i)}
                       >
                         <span className="n" aria-hidden="true">

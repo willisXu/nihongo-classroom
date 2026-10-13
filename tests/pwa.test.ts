@@ -93,7 +93,7 @@ describe('離線快取：要預先下載哪些檔', () => {
 /* ---------------- service worker 的行為（用假的瀏覽器環境執行 sw.js） ---------------- */
 
 type Listener = (event: unknown) => void;
-type Route = { status?: number; body?: string; delay?: number; redirected?: boolean } | 'offline';
+type Route = { status?: number; body?: string; delay?: number; redirected?: boolean; type?: string } | 'offline';
 
 const LIVE = 'https://example.github.io/nihongo-classroom/';
 const LOCAL = 'http://localhost:5288/';
@@ -108,13 +108,16 @@ const SITE = [
 ];
 
 class FakeCache {
-  entries = new Map<string, { body: string; status: number; redirected?: boolean }>();
+  entries = new Map<string, { body: string; status: number; redirected?: boolean; type?: string }>();
   async match(url: string) {
     const e = this.entries.get(url);
-    return e ? new Response(e.body, { status: e.status }) : undefined;
+    return e ? new Response(e.body, { status: e.status, headers: e.type ? { 'content-type': e.type } : {} }) : undefined;
   }
   async put(url: string, res: Response) {
-    this.entries.set(url, { body: await res.text(), status: res.status, redirected: res.redirected });
+    this.entries.set(url, { body: await res.text(), status: res.status, redirected: res.redirected, type: res.headers.get('content-type') ?? undefined });
+  }
+  async delete(url: string) {
+    return this.entries.delete(url);
   }
 }
 
@@ -154,7 +157,7 @@ function setup(scope: string, routes: Record<string, Route>, site = SITE) {
     const r = routes[url] ?? { status: 404, body: 'not found' };
     if (r === 'offline') return Promise.reject(new TypeError('Failed to fetch'));
     const res = () => {
-      const out = new Response(r.body ?? '', { status: r.status ?? 200 });
+      const out = new Response(r.body ?? '', { status: r.status ?? 200, headers: r.type ? { 'content-type': r.type } : {} });
       // 經過轉址的回應（Response 建構子做不出來，直接改掉）
       if (r.redirected) Object.defineProperty(out, 'redirected', { value: true });
       return out;
@@ -232,11 +235,38 @@ describe('service worker', () => {
     expect(half.entries.get(`${LIVE}index.html`)?.body).toBe(INDEX_HTML);
   });
 
+  it('要的是程式檔、伺服器卻回了網頁（找不到檔時回首頁、Wi-Fi 登入頁）：不存，安裝失敗，之後再試', async () => {
+    const page = { body: '<!doctype html><title>登入</title>', type: 'text/html; charset=utf-8' };
+    const sw = setup(LIVE, { ...online(LIVE), [`${LIVE}assets/Lesson-C3.js`]: page });
+    await expect(sw.lifecycle('install')).rejects.toThrow('內容不對');
+    expect(sw.state().skipped).toBe(false);
+  });
+
+  it('以前存錯的內容：更新時不沿用，開到那一頁時也會丟掉、改從網路拿', async () => {
+    const lesson = `${LIVE}assets/Lesson-C3.js`;
+    const bad = { body: '<!doctype html>', status: 200, type: 'text/html' };
+    // 上一版的快取裡存錯了
+    const routes = online(LIVE);
+    const sw = setup(LIVE, routes);
+    const prev = new FakeCache();
+    prev.entries.set(lesson, bad);
+    sw.stores.set('nk-precache-000000000000', prev);
+    await sw.lifecycle('install');
+    expect(sw.fetched).toContain(lesson); // 沒有沿用錯的，重新下載
+    const cache = [...sw.stores.entries()].find(([n]) => n !== 'nk-precache-000000000000')![1];
+    expect(cache.entries.get(lesson)?.body).toBe('lesson');
+
+    // 這一版的快取被弄壞了：開到那一頁時丟掉、改從網路拿，拿到對的再存回去
+    cache.entries.set(lesson, bad);
+    expect(await (await sw.request(lesson))!.text()).toBe('lesson');
+    expect(cache.entries.get(lesson)?.body).toBe('lesson');
+  });
+
   it('經過轉址的回應重新包過再存（不然開網站時瀏覽器會擋下來）', async () => {
     const sw = setup(LIVE, { ...online(LIVE), [`${LIVE}index.html`]: { body: INDEX_HTML, redirected: true } });
     await sw.lifecycle('install');
     const cache = [...sw.stores.values()][0];
-    expect(cache.entries.get(`${LIVE}index.html`)).toEqual({ body: INDEX_HTML, status: 200, redirected: false });
+    expect(cache.entries.get(`${LIVE}index.html`)).toMatchObject({ body: INDEX_HTML, status: 200, redirected: false });
   });
 
   it('下載失敗會重試一次；兩次都失敗就整個安裝失敗', async () => {

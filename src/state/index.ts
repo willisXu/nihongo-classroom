@@ -146,6 +146,8 @@ export interface LessonProgress {
   done: Record<string, number>;
   /** 作業勾選，key = 課次:第幾項 */
   hw: Record<string, boolean>;
+  /** 每一課第一次完成的時間：取消完成時留著，再勾回去沿用原本的日期，學習日曆也不會多記一課 */
+  first?: Record<string, number>;
 }
 
 export const lessonStore = createStore<LessonProgress>('nk.lessons', () => ({ done: {}, hw: {} }), (raw) => {
@@ -153,17 +155,28 @@ export const lessonStore = createStore<LessonProgress>('nk.lessons', () => ({ do
   if (!isObj(raw)) return out;
   if (isObj(raw.done)) for (const [k, v] of Object.entries(raw.done)) if (typeof v === 'number') out.done[k] = v;
   if (isObj(raw.hw)) for (const [k, v] of Object.entries(raw.hw)) if (v === true) out.hw[k] = true;
+  if (isObj(raw.first)) {
+    const first: Record<string, number> = {};
+    for (const [k, v] of Object.entries(raw.first)) if (typeof v === 'number') first[k] = v;
+    if (Object.keys(first).length) out.first = first;
+  }
   return out;
 });
 
 export function setLessonDone(id: number, done: boolean) {
-  lessonStore.set((p) => {
-    const next = { ...p.done };
-    if (done) next[id] = Date.now();
-    else delete next[id];
-    return { ...p, done: next };
-  });
-  if (done) logActivity('lesson');
+  const p = lessonStore.get();
+  if (!!p.done[id] === done) return;
+  const first = { ...p.first };
+  const already = first[id] ?? p.done[id];
+  const next = { ...p.done };
+  if (done) next[id] = already ?? Date.now();
+  else {
+    if (already) first[id] = already;
+    delete next[id];
+  }
+  lessonStore.set({ ...p, done: next, ...(Object.keys(first).length ? { first } : {}) });
+  // 第一次完成才算一次學習（取消再勾回去不重複記）
+  if (done && !already) logActivity('lesson');
 }
 
 export function setHomework(key: string, value: boolean) {

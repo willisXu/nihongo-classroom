@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { nkFonts } from './scripts/nk-fonts.mjs';
 import { nkPwa } from './scripts/nk-pwa.mjs';
+import { nkLicenses } from './scripts/nk-licenses.mjs';
 
 // 學習紀錄存在瀏覽器的 localStorage，而 localStorage 是跟著「網址＋連接埠」走的。
 // 固定用 5288（開發和預覽都一樣），換次啟動也能接著學；strictPort 讓它不會悄悄換成別的埠。
@@ -13,7 +14,8 @@ export default defineConfig({
   base: './',
   // nkFonts：把兩套中日文字型裁成網站用得到的字（見 scripts/nk-fonts.mjs）
   // nkPwa：產生 sw.js，讓網站可以離線使用、加到主畫面（見 scripts/nk-pwa.mjs）
-  plugins: [react(), nkFonts(), nkPwa()],
+  // nkLicenses：補上套件沒附的授權全文（見 scripts/nk-licenses.mjs）
+  plugins: [react(), nkFonts(), nkPwa(), nkLicenses()],
   server: { port: PORT, strictPort: true },
   preview: { port: PORT, strictPort: true },
   build: {

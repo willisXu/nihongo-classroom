@@ -11,6 +11,8 @@ import {
   polylineLength,
   resample,
   samplePath,
+  shrinkSmallStroke,
+  SMALL_KANA,
   toGlyphSpace,
   type Pt,
   type StrokeJudgement,
@@ -498,5 +500,45 @@ describe('judgeStroke input handling', () => {
       raw.push(s[Math.round(t * (s.length - 1))]);
     }
     expect(judgeStroke(raw, 0, r).ok).toBe(true);
+  });
+});
+
+describe('小字的範本（照第 6 課：寫成一半左右，放在格子左下方）', () => {
+  const PAIRS: [string, string][] = [
+    ['ゃ', 'や'], ['ゅ', 'ゆ'], ['ょ', 'よ'], ['っ', 'つ'],
+    ['ャ', 'ヤ'], ['ュ', 'ユ'], ['ョ', 'ヨ'], ['ッ', 'ツ'],
+  ];
+  const box = (pts: Pt[]) => {
+    const xs = pts.map((p) => p.x);
+    const ys = pts.map((p) => p.y);
+    return { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) };
+  };
+
+  it('縮放：大寫指令（絕對座標）縮放加平移，小寫指令（相對座標）只縮放', () => {
+    expect(shrinkSmallStroke('M10,20c1,2,3,4,5,6')).toBe('M12.28,48.88c0.62,1.24,1.86,2.48,3.1,3.72');
+    expect(shrinkSmallStroke('M16,96c-1.5-2,3,4,5,6')).toBe('M16,96c-0.93,-1.24,1.86,2.48,3.1,3.72');
+  });
+
+  it('每個小字都在格子左下方、大約一般字的一半大', () => {
+    for (const ch of SMALL_KANA) {
+      if (!getStrokePaths(ch)) continue;
+      const b = box(getStrokePoints(ch)!.flat());
+      expect(b.x1, ch).toBeLessThan(62);
+      expect(b.y0, ch).toBeGreaterThan(50);
+      expect(b.y1, ch).toBeLessThan(100);
+      expect(b.x0, ch).toBeGreaterThan(14);
+    }
+    // 一般的字不變
+    expect(getStrokePaths('や')).toEqual(data.strokes['や']);
+  });
+
+  it('照課文把一般的字縮成一半、寫在左下方：每一筆都判對', () => {
+    const half = (p: Pt): Pt => ({ x: 16 + (p.x - 16) * 0.5, y: 96 + (p.y - 96) * 0.5 });
+    for (const [small, big] of PAIRS) {
+      const ref = getStrokePoints(small)!;
+      const written = getStrokePoints(big)!.map((stroke) => stroke.map(half));
+      expect(written.length, small).toBe(ref.length);
+      written.forEach((stroke, i) => expect(judgeStroke(stroke, i, ref).ok, `${small} 第 ${i + 1} 筆`).toBe(true));
+    }
   });
 });

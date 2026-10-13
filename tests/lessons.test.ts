@@ -3,6 +3,11 @@ import { LESSONS } from '../src/data/lessons';
 import { SEION_ROWS, DAKUON_ROWS, rowById } from '../src/data/kana';
 import type { Inline, LessonBlock, LessonWord } from '../src/data/types';
 
+/** 課文裡刻意提早出現的詞（發音說明的例子，不是要學的單字） */
+const TEXT_PREVIEW: Record<number, string[]> = {
+  1: ['です'], // す 在句尾聽不到 u：最常見的例子，で 第 5 課才教
+};
+
 /** 課程詞裡允許的非假名符號 */
 const ALLOWED_MARKS = new Set([' ', '　', '、', '。', '！', '？', '・', '〜']);
 
@@ -84,6 +89,29 @@ describe('lessons', () => {
             expect(bad, `第 ${lesson.id} 課「${s.title}」的「${w.ja}」用到還沒學的字：${bad.join(' ')}`).toEqual([]);
           }
         }
+      });
+
+      it('words in the text ([[…]]) and katakana examples only use kana learned so far', () => {
+        const bad: string[] = [];
+        const check = (where: string, word: string) => {
+          const miss = Array.from(word).filter((c) => /[\u3040-\u30ff]/.test(c) && !allowed.has(c));
+          if (miss.length) bad.push(`${where}「${word}」：${miss.join(' ')}`);
+        };
+        const texts: Inline[] = [lesson.summary, ...lesson.homework];
+        for (const s of lesson.sections) for (const b of s.blocks) texts.push(...blockTexts(b));
+        for (const t of texts) {
+          // [[漢字|かな]] 看讀音；[[かな|念法]] 看字本身（例如 なつは 標出念 なつわ）
+          for (const m of t.matchAll(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g)) {
+            const word = /[\u3400-\u9fff]/.test(m[1]) && m[2] ? m[2] : m[1];
+            if (!TEXT_PREVIEW[lesson.id]?.includes(word)) check('課文', word);
+          }
+        }
+        // 片假名課的字表：每個字的例字（五十音表也用同一組例字）
+        for (const s of lesson.sections) for (const b of s.blocks) {
+          if (b.type !== 'kana' || b.script !== 'k') continue;
+          for (const r of b.rows) for (const c of rowById(r)?.cells ?? []) if (c?.kx) check(`${c.k} 的例字`, c.kx[0]);
+        }
+        expect(bad, `第 ${lesson.id} 課`).toEqual([]);
       });
 
       it('inline markup is well-formed', () => {

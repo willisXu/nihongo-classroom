@@ -1,0 +1,4 @@
+# Windows 的批次檔用 CRLF 換行：只有 LF 時，cmd 有時會找不到 goto 要跳的標籤
+*.bat text eol=crlf
+# macOS 的啟動檔是 bash 腳本，一定要 LF
+*.command text eol=lf

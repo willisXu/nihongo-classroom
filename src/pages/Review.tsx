@@ -29,7 +29,20 @@ export default function ReviewRoute() {
   const { deck = 'all' } = useParams();
   const [round, setRound] = useState(0);
   usePageTitle(`單字複習：${deckTitle(deck)}`);
-  return <Review key={`${deck}:${round}`} deck={deck} onRestart={() => setRound((r) => r + 1)} />;
+  return <Review key={`${deck}:${round}`} deck={deck} restarted={round > 0} onRestart={() => setRound((r) => r + 1)} />;
+}
+
+/**
+ * 這一輪開始之後，另一個分頁（或另一個開著的複習頁）已經複習過這張卡：不要再出。
+ * 不然同一張卡會被評兩次，間隔被拉得太長，「複習時記得」也重複算。
+ * - 主要的卡（到期的複習卡、新卡）：最後複習時間和這一輪開始時不一樣
+ * - 學習中的卡：到期時間和排進這一輪時不一樣
+ */
+function mainTaken(id: string, base: Map<string, number>, cards: Record<string, CardState | undefined>): boolean {
+  return (cards[id]?.last ?? 0) !== (base.get(id) ?? 0);
+}
+function learningTaken(p: Pending, cards: Record<string, CardState | undefined>): boolean {
+  return cards[p.id]?.due !== p.due;
 }
 
 /** 互動元件上的按鍵交給元件自己處理 */
@@ -40,8 +53,10 @@ function isTextEntry(t: EventTarget | null): boolean {
   return t instanceof Element && !!t.closest('textarea, select, [contenteditable="true"], input:not([type="checkbox"]):not([type="radio"])');
 }
 
-function Review({ deck, onRestart }: { deck: string; onRestart: () => void }) {
+function Review({ deck, restarted, onRestart }: { deck: string; restarted: boolean; onRestart: () => void }) {
   const settings = useStore(settingsStore);
+  // 其他分頁改了單字卡紀錄也會更新（見下面「另一個分頁已經複習過」）
+  const srs = useStore(srsStore);
   // 開場時決定牌組內容（全部牌組要看哪些重複的字已經學過）
   const ids = useMemo(() => deckItemIds(deck, srsStore.get().cards), [deck]);
   const [autoplay, setAutoplay] = useState<boolean>(() => readJSON('nk.autoplay') !== false);
@@ -49,7 +64,10 @@ function Review({ deck, onRestart }: { deck: string; onRestart: () => void }) {
   // 開場時決定這一輪的卡片（之後才到期的卡片，在結束畫面按「繼續複習」開下一輪）
   const [session] = useState(() => {
     const now = Date.now();
-    return buildSession(srsStore.get().cards, ids, now, newLimitNow(now));
+    const cards = srsStore.get().cards;
+    const s = buildSession(cards, ids, now, newLimitNow(now));
+    // 每張主要的卡在這一輪開始時的最後複習時間
+    return { ...s, base: new Map(s.main.map((id) => [id, cards[id]?.last ?? 0])) };
   });
   const [main, setMain] = useState<string[]>(session.main);
   const [learning, setLearning] = useState<Pending[]>(session.learning);
@@ -65,7 +83,7 @@ function Review({ deck, onRestart }: { deck: string; onRestart: () => void }) {
   const doneRef = useRef<HTMLHeadingElement>(null);
 
   const item = currentId ? vocabById(currentId) : undefined;
-  const card: CardState | undefined = currentId ? srsStore.get().cards[currentId] : undefined;
+  const card: CardState | undefined = currentId ? srs.cards[currentId] : undefined;
   const isNew = !card || card.reps === 0;
   const early = !!card && card.reps > 0 && card.due > now;
 
@@ -83,8 +101,11 @@ function Review({ deck, onRestart }: { deck: string; onRestart: () => void }) {
   // 剛按的按鈕消失時，焦點放到答案（螢幕閱讀器會念出來）；評分後放回下一張的「顯示答案」，結束時放到結束畫面的標題
   const shown = useRef({ flipped, currentId });
   useEffect(() => {
-    // 第一次顯示（剛進頁面）不動焦點
-    if (shown.current.flipped === flipped && shown.current.currentId === currentId) return;
+    // 第一次顯示（剛進頁面）不動焦點；按「繼續複習」重新開始的話，那顆按鈕已經不見了，焦點放到「顯示答案」
+    if (shown.current.flipped === flipped && shown.current.currentId === currentId) {
+      if (restarted && focusLost()) (showRef.current ?? doneRef.current)?.focus({ preventScroll: true });
+      return;
+    }
     shown.current = { flipped, currentId };
     if (flipped) {
       revealAnswer(meaningRef.current, actionsRef.current);
@@ -92,13 +113,40 @@ function Review({ deck, onRestart }: { deck: string; onRestart: () => void }) {
     } else if (focusLost()) {
       (showRef.current ?? doneRef.current)?.focus({ preventScroll: true });
     }
-  }, [flipped, currentId]);
+  }, [flipped, currentId, restarted]);
+
+  // 另一個分頁已經複習過的卡片從這一輪拿掉；正在看的這張也是的話，直接換下一張
+  useEffect(() => {
+    const m = main.filter((id) => !mainTaken(id, session.base, srs.cards));
+    const l = learning.filter((p) => !learningTaken(p, srs.cards));
+    if (m.length === main.length && l.length === learning.length) return;
+    setMain(m);
+    setLearning(l);
+    if (currentId && !m.includes(currentId) && !l.some((p) => p.id === currentId)) {
+      setFlipped(false);
+      setCurrentId(pickNext(m, l, Date.now()));
+      setTurn((n) => n + 1);
+    }
+  }, [srs, main, learning, currentId, session.base]);
 
   const grade = useCallback(
     (g: Grade) => {
       if (!currentId || !flipped) return;
       const t = Date.now();
-      const before = srsStore.get().cards[currentId] ?? newCard(t);
+      const cardsNow = srsStore.get().cards;
+      const pending = learning.find((p) => p.id === currentId);
+      // 剛好在另一個分頁評過分（上面的整理還沒輪到）：這次不算，換下一張
+      if (pending ? learningTaken(pending, cardsNow) : mainTaken(currentId, session.base, cardsNow)) {
+        const m = main.filter((x) => x !== currentId);
+        const l = learning.filter((p) => p.id !== currentId);
+        setMain(m);
+        setLearning(l);
+        setFlipped(false);
+        setCurrentId(pickNext(m, l, t));
+        setTurn((n) => n + 1);
+        return;
+      }
+      const before = cardsNow[currentId] ?? newCard(t);
       const wasNew = before.reps === 0;
       const after = review(before, g, t);
       saveCard(currentId, after, wasNew, { due: before.reps > 0 && before.step === -1, forgot: g === 'again' });
@@ -115,7 +163,7 @@ function Review({ deck, onRestart }: { deck: string; onRestart: () => void }) {
       setCurrentId(pickNext(m, l, t));
       setTurn((n) => n + 1);
     },
-    [currentId, flipped, main, learning],
+    [currentId, flipped, main, learning, session.base],
   );
 
   useEffect(() => {
@@ -140,7 +188,7 @@ function Review({ deck, onRestart }: { deck: string; onRestart: () => void }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [item, flipped, grade]);
 
-  const cards = srsStore.get().cards;
+  const cards = srs.cards;
   const newLeft = main.filter((id) => !cards[id] || cards[id].reps === 0).length;
   const reviewLeft = main.length - newLeft;
 

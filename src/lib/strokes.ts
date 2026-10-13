@@ -35,9 +35,45 @@ export function hasStrokes(ch: string): boolean {
   return Object.hasOwn(STROKES, ch);
 }
 
+/**
+ * 小字（ゃ ゅ ょ っ、ャ ュ ョ ッ、ァ ィ ゥ ェ ォ…）的範本位置。
+ * KanjiVG 的小字是一般字的八成大、置中靠下；課文教的是寫成一半左右、橫寫時放在格子左下方，
+ * 照課文寫會被判位置、形狀錯。所以把小字以左下角附近為中心縮小（約一般字的一半）。
+ */
+export const SMALL_KANA = new Set([...'ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮ']);
+const SMALL_SCALE = 0.62;
+const SMALL_ANCHOR: Pt = { x: 16, y: 96 };
+
+/** 把一筆 SVG path 縮小到小字的位置：大寫（絕對座標）縮放加平移，小寫（相對座標）只縮放 */
+export function shrinkSmallStroke(d: string): string {
+  return d.replace(/([A-Za-z])([^A-Za-z]*)/g, (_, cmd: string, args: string) => {
+    if (/[HVAhva]/.test(cmd)) throw new Error(`小字的筆畫不支援 ${cmd} 指令`);
+    const nums = (args.match(/-?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/gi) ?? []).map(Number);
+    const abs = cmd === cmd.toUpperCase();
+    const out = nums.map((v, i) => {
+      if (!abs) return v * SMALL_SCALE;
+      const o = i % 2 === 0 ? SMALL_ANCHOR.x : SMALL_ANCHOR.y;
+      return o + (v - o) * SMALL_SCALE;
+    });
+    return cmd + out.map((v) => Number(v.toFixed(2))).join(',');
+  });
+}
+
+const smallCache = new Map<string, readonly string[]>();
+/** 這個字的筆畫（小字已經縮到左下方） */
+function strokesOf(ch: string): readonly string[] {
+  if (!SMALL_KANA.has(ch)) return STROKES[ch];
+  let out = smallCache.get(ch);
+  if (!out) {
+    out = STROKES[ch].map(shrinkSmallStroke);
+    smallCache.set(ch, out);
+  }
+  return out;
+}
+
 /** 取得一個字各筆畫的 SVG path（依書寫順序）；沒有資料時回傳 undefined */
 export function getStrokePaths(ch: string): string[] | undefined {
-  return hasStrokes(ch) ? [...STROKES[ch]] : undefined;
+  return hasStrokes(ch) ? [...strokesOf(ch)] : undefined;
 }
 
 /** SVG path 的總長度 */
@@ -79,7 +115,7 @@ export function getStrokePoints(ch: string, n = 48): Pt[][] | undefined {
   const key = `${ch}\u0000${n}`;
   let pts = pointCache.get(key);
   if (!pts) {
-    pts = STROKES[ch].map((d) => samplePath(d, n));
+    pts = strokesOf(ch).map((d) => samplePath(d, n));
     pointCache.set(key, pts);
   }
   return pts;

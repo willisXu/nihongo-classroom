@@ -23,7 +23,9 @@ export declare function expectedStamp(root: string, platform?: string, arch?: st
 export declare function depsInstalled(root: string): boolean;
 export declare function writeStamp(root: string): void;
 export declare function removeStamp(root: string): void;
-export declare function runNpmCi(root: string): Promise<boolean>;
+/** 'ok'：裝好了；'missing'：找不到 npm 指令；'failed'：其他失敗（多半是網路） */
+export declare function runNpmCi(root: string): Promise<'ok' | 'missing' | 'failed'>;
+export declare function isCommandMissing(code: number | null): boolean;
 
 export declare const LOCK_NAME: string;
 export declare const LOCK_HEARTBEAT_MS: number;

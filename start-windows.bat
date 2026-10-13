@@ -9,7 +9,8 @@ set "NODEV=0"
 for /f "tokens=1 delims=." %%v in ('node -v') do set "NODEV=%%v"
 set "NODEV=%NODEV:v=%"
 if %NODEV% LSS 22 goto oldnode
-node scripts\start.mjs
+rem call: if node is a .cmd shim (some version managers), control still returns here so errors stay visible
+call node scripts\start.mjs
 rem Any non-zero code, including negative Windows crash codes, keeps the window open
 if %errorlevel% neq 0 goto failed
 exit /b 0

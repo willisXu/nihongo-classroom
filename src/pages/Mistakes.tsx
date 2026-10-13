@@ -26,6 +26,14 @@ export default function Mistakes() {
   const [allWords, setAllWords] = useState(false);
   const drillBtn = useRef<HTMLButtonElement>(null);
   const vocabHeading = useRef<HTMLHeadingElement>(null);
+  const wordListRef = useRef<HTMLUListElement>(null);
+  // 按「顯示全部」後那顆按鈕會不見：焦點放到新出現的第一個字（它的「念」按鈕）
+  const showingMore = useRef(false);
+  useEffect(() => {
+    if (!allWords || !showingMore.current) return;
+    showingMore.current = false;
+    wordListRef.current?.children[WORDS_SHOWN]?.querySelector('button')?.focus();
+  }, [allWords]);
 
   // 結束加強練習回到清單時，焦點放回「加強練習」（都練完了就放到單字的標題）
   const wasDrilling = useRef(false);
@@ -96,7 +104,7 @@ export default function Mistakes() {
             </div>
             {words.length ? (
               <>
-                <ul className="mk-words">
+                <ul className="mk-words" ref={wordListRef}>
                   {(allWords ? words : words.slice(0, WORDS_SHOWN)).map((m) => {
                     const it = vocabById(m.id)!;
                     return (
@@ -121,7 +129,14 @@ export default function Mistakes() {
                   })}
                 </ul>
                 {!allWords && words.length > WORDS_SHOWN ? (
-                  <button type="button" className="linkbtn" onClick={() => setAllWords(true)}>
+                  <button
+                    type="button"
+                    className="linkbtn"
+                    onClick={() => {
+                      showingMore.current = true;
+                      setAllWords(true);
+                    }}
+                  >
                     顯示全部 {words.length} 個
                   </button>
                 ) : null}

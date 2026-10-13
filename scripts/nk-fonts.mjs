@@ -471,7 +471,8 @@ export function nkFonts() {
       return { code: code.replace(/,\s*url\([^)]+\.woff\)\s*format\(['"]woff['"]\)/g, ''), map: null };
     },
     generateBundle() {
-      this.emitFile({ type: 'asset', fileName: 'FONT-LICENSES.txt', source: fontLicenses() });
+      // 開頭加 BOM：本機版（vite preview）送出 .txt 時沒有標明編碼，瀏覽器才不會把中文當成別的編碼顯示成亂碼
+      this.emitFile({ type: 'asset', fileName: 'FONT-LICENSES.txt', source: `\uFEFF${fontLicenses()}` });
     },
   };
 }

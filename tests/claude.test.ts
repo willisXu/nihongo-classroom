@@ -4,7 +4,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { TIMEOUT_MESSAGE, TutorError, callJSON, normalizeApiKey, testConnection, toTutorError as toTutorErrorLazy } from '../src/lib/claude';
 // 錯誤對照表在真正呼叫 API 的模組裡（含 SDK）；claude.ts 的 toTutorError 在 SDK 載入後會交給它
-import { STREAM_LIMITS, toTutorError } from '../src/lib/claude-api';
+import { STREAM_LIMITS, estimateTokens, toTutorError } from '../src/lib/claude-api';
 
 const KEY = 'sk-ant-api03-Ab_cd-EF12';
 
@@ -286,6 +286,32 @@ describe('callJSON (streaming)', () => {
     expect(usage, '已經送出的輸入照樣計費，要記進用量').toEqual([[5, 1]]);
     await new Promise((r) => setTimeout(r, 50));
     expect(closed).toHaveLength(1); // 連線真的關掉了
+  });
+
+  it('estimates the output of a reply stopped halfway from what was already streamed', async () => {
+    handler = (_req, res) => {
+      sseHead(res);
+      sseEvent(res, 'message_start', {
+        type: 'message_start',
+        message: { id: 'm', type: 'message', role: 'assistant', model: 'claude-sonnet-5-5', content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 5, output_tokens: 1 } },
+      });
+      sseEvent(res, 'content_block_start', { type: 'content_block_start', index: 0, content_block: { type: 'thinking', thinking: '', signature: '' } });
+      sseEvent(res, 'content_block_delta', { type: 'content_block_delta', index: 0, delta: { type: 'thinking_delta', thinking: 'The learner asked for ramen.' } });
+      sseEvent(res, 'content_block_stop', { type: 'content_block_stop', index: 0 });
+      sseEvent(res, 'content_block_start', { type: 'content_block_start', index: 1, content_block: { type: 'text', text: '' } });
+      sseEvent(res, 'content_block_delta', { type: 'content_block_delta', index: 1, delta: { type: 'text_delta', text: '{"reply":"いらっしゃいませ' } });
+      // 之後停住，等使用者按停止
+    };
+    const ctrl = new AbortController();
+    const usage: number[][] = [];
+    const pending = callJSON({ ...base, signal: ctrl.signal, onUsage: (i, o) => usage.push([i, o]) });
+    await new Promise((r) => setTimeout(r, 150));
+    ctrl.abort();
+    expect((await failure(pending)).kind).toBe('aborted');
+    // 英數字：思考 28 個＋ {"reply":" 10 個，共 38 個 ÷ 4 = 9.5；假名 いらっしゃいませ 8 個 → 17.5，進位成 18
+    expect(usage).toEqual([[5, 18]]);
+    expect(estimateTokens('abcd')).toBe(1);
+    expect(estimateTokens('らーめん')).toBe(4);
   });
 
   it('stops a stream that stalls after it started, and still reports the billed usage', async () => {

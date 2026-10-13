@@ -81,4 +81,24 @@ describe('程度規則', () => {
     expect(correctionSystem('kana')).not.toMatch(/`reply`|5–12 kana/);
     expect(correctionSystem('n5')).not.toMatch(/ALL Japanese you produce/);
   });
+
+  it('AI 出題也照程度：只會假名不用漢字；N5／N4 的日文選項要看得出讀音，不出看漢字就答得出來的題', async () => {
+    const { quizSystem } = await import('../src/data/tutor');
+    expect(quizSystem('kana')).toMatch(/only in hiragana and katakana, never kanji/);
+    for (const level of ['n5', 'n4'] as const) {
+      expect(quizSystem(level)).toMatch(/kana reading/);
+      expect(quizSystem(level)).toMatch(/matching Chinese characters/);
+      expect(quizSystem(level)).not.toMatch(/never kanji/);
+    }
+  });
+
+  it('朋友情境：常體是 N4 才教，只會假名和 N5 的程度用です／ます', async () => {
+    const { conversationSystem, SCENARIOS } = await import('../src/data/tutor');
+    const casual = SCENARIOS.find((s) => s.casual)!;
+    for (const level of ['kana', 'n5'] as const) {
+      expect(conversationSystem(casual, level)).toMatch(/has not learned plain forms yet/);
+      expect(conversationSystem(casual, level)).not.toMatch(/use natural casual speech/);
+    }
+    expect(conversationSystem(casual, 'n4')).toMatch(/use natural casual speech \(plain form\)/);
+  });
 });

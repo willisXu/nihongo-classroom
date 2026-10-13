@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { addUsage, apiKeyStore, settingsStore, updateSettings, type ModelId } from '../state';
 import { useStore } from '../state/store';
 import { MODELS, normalizeApiKey, testConnection, toTutorError } from '../lib/claude';
 import { Icon } from './Icon';
+import { focusLost } from '../lib/flashcard';
 
 /** API 金鑰與模型設定（AI 家教頁和設定頁共用） */
 export function ApiKeySetup({ compact = false }: { compact?: boolean }) {
@@ -14,6 +15,25 @@ export function ApiKeySetup({ compact = false }: { compact?: boolean }) {
   const [confirmRemove, setConfirmRemove] = useState(false);
   // 貼上時預設遮起來（螢幕分享、錄影時不會露出整串金鑰）；用遮罩而不用密碼欄，瀏覽器才不會跳出「儲存密碼」
   const [reveal, setReveal] = useState(false);
+
+  // 按下的按鈕被換掉時（儲存、移除、確認、取消），焦點放到接下來會用的地方，不要掉到頁面最上面
+  const changeRef = useRef<HTMLButtonElement>(null);
+  const removeRef = useRef<HTMLButtonElement>(null);
+  const confirmRef = useRef<HTMLButtonElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const view = `${saved && !editing ? 'saved' : 'form'}:${confirmRemove}`;
+  const lastView = useRef(view);
+  useEffect(() => {
+    const prev = lastView.current;
+    if (prev === view) return;
+    lastView.current = view;
+    if (!focusLost()) return;
+    if (!(saved && !editing)) inputRef.current?.focus();
+    else if (confirmRemove) confirmRef.current?.focus();
+    // 「確定移除？」按了取消：回到原本的「移除」
+    else if (prev === 'saved:true') removeRef.current?.focus();
+    else changeRef.current?.focus();
+  }, [view, saved, editing, confirmRemove]);
 
   const save = async () => {
     // 去掉貼上時夾帶的換行、空白和看不見的字元，再檢查格式
@@ -56,7 +76,7 @@ export function ApiKeySetup({ compact = false }: { compact?: boolean }) {
           <span className="key-mask">
             <Icon name="check" size={16} /> 已設定金鑰（…{saved.slice(-4)}）
           </span>
-          <button type="button" className="linkbtn" onClick={() => setEditing(true)}>
+          <button type="button" className="linkbtn" ref={changeRef} onClick={() => setEditing(true)}>
             更換
           </button>
           {confirmRemove ? (
@@ -65,6 +85,7 @@ export function ApiKeySetup({ compact = false }: { compact?: boolean }) {
               <button
                 type="button"
                 className="btn-danger"
+                ref={confirmRef}
                 onClick={() => {
                   apiKeyStore.reset();
                   setConfirmRemove(false);
@@ -79,7 +100,7 @@ export function ApiKeySetup({ compact = false }: { compact?: boolean }) {
               </button>
             </>
           ) : (
-            <button type="button" className="linkbtn" onClick={() => setConfirmRemove(true)}>
+            <button type="button" className="linkbtn" ref={removeRef} onClick={() => setConfirmRemove(true)}>
               移除
             </button>
           )}
@@ -97,6 +118,7 @@ export function ApiKeySetup({ compact = false }: { compact?: boolean }) {
           </label>
           <input
             id="api-key"
+            ref={inputRef}
             type="text"
             className={`key-input ${reveal ? '' : 'masked'}`}
             autoComplete="off"

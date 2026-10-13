@@ -6,7 +6,7 @@ import {
 import { studyDayKey, DAY_MS } from '../src/lib/date';
 import { activityLines, monthLabels } from '../src/components/Charts';
 import type { CardState } from '../src/lib/srs';
-import { activityStore, kanaDaysStore, kanaStore, missStore, recordKana, resetKanaProgress, snapshotKana, type SrsData } from '../src/state';
+import { activityStore, kanaDaysStore, kanaStore, lessonStore, missStore, recordKana, resetKanaProgress, setLessonDone, snapshotKana, type SrsData } from '../src/state';
 
 const NOW = new Date(2026, 9, 13, 12, 0).getTime(); // 2026-10-13（週二）中午
 const key = (daysAgo: number) => studyDayKey(NOW - daysAgo * DAY_MS);
@@ -124,7 +124,7 @@ describe('學習紀錄', () => {
 describe('每天的假名熟悉度紀錄', () => {
   afterEach(() => {
     vi.useRealTimers();
-    for (const st of [kanaStore, kanaDaysStore, activityStore, missStore]) st.reset();
+    for (const st of [kanaStore, kanaDaysStore, activityStore, missStore, lessonStore]) st.reset();
   });
 
   it('作答後記下當天的數字：同一天以最後一次為準，隔天另記一筆', () => {
@@ -146,6 +146,25 @@ describe('每天的假名熟悉度紀錄', () => {
     resetKanaProgress();
     expect(kanaStore.get()).toEqual({});
     expect(kanaDaysStore.get()).toEqual({});
+  });
+
+  it('課程取消完成再勾回去：沿用第一次完成的日期，學習日曆不重複記', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 9, 10, 9, 0));
+    lessonStore.set({ done: {}, hw: {} });
+    activityStore.set({});
+    setLessonDone(1, true);
+    const firstAt = lessonStore.get().done[1];
+    expect(activityStore.get()['2026-10-10']?.lesson).toBe(1);
+    vi.setSystemTime(new Date(2026, 9, 13, 9, 0));
+    setLessonDone(1, true); // 已經完成：不變
+    setLessonDone(1, false);
+    expect(lessonStore.get().done[1]).toBeUndefined();
+    setLessonDone(1, true);
+    expect(lessonStore.get().done[1]).toBe(firstAt);
+    expect(activityStore.get()['2026-10-13']).toBeUndefined();
+    // 存回去再讀出來（備份、重新整理）也記得第一次的日期
+    expect(lessonStore.get().first).toEqual({ 1: firstAt });
   });
 
   it('打開學習紀錄頁時補記今天；還沒練過假名就不記', () => {

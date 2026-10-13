@@ -153,6 +153,7 @@ scripts/
   fetch-kanjivg.mjs    下載 KanjiVG 筆順，產生 src/data/strokes.json
   nk-fonts.mjs         建置時從兩套字型的完整字型檔裁出網站用得到的字，依頁面分成小檔（Vite 外掛，產生 src/fonts/generated/，不進版控）
   nk-pwa.mjs           建置時產生 dist/sw.js（Vite 外掛）：列出要預先下載的檔案，套進 sw-template.js
+  nk-licenses.mjs      建置後補上套件沒附的授權全文（THIRD-PARTY-LICENSES.md）
   sw-template.js       service worker 的程式：預先下載、離線時用快取開網站、新版自動接手
 public/
   manifest.webmanifest 安裝成 App 的名稱、圖示、顏色

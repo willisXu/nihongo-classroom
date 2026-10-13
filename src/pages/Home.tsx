@@ -15,7 +15,6 @@ import { Icon } from '../components/Icon';
 import { Meter } from '../components/Controls';
 import { Hanamaru } from '../components/Hanamaru';
 import { SCENARIOS, PURPOSE_LABEL } from '../data/scenarios';
-import { buildPool } from '../lib/kanaQuiz';
 import { usePageTitle } from '../lib/title';
 import { useNow } from '../lib/useNow';
 
@@ -79,12 +78,10 @@ export default function Home() {
 
   const weak = useMemo(() => weakKanaKeys(kana).slice(0, 8).map((k) => k.slice(2)), [kana]);
 
-  // 手寫建議：目前這一課還沒寫過的字
+  // 手寫建議：目前這一課新教、還沒寫過的字（第 6 課是 ゃ ゅ ょ っ，不是測驗複習的全部平假名）
   const writeLesson = next ?? LESSONS[LESSONS.length - 1];
-  const writeChars = buildPool(writeLesson.quiz.rows, writeLesson.quiz.script, 'see')
-    .map((i) => i.ch)
-    .filter((ch) => !writing[ch]);
-  const writeDone = buildPool(writeLesson.quiz.rows, writeLesson.quiz.script, 'see').length - writeChars.length;
+  const writeChars = writeLesson.newKana.filter((ch) => !writing[ch]);
+  const writeDone = writeLesson.newKana.length - writeChars.length;
 
   const suggested = SCENARIOS.filter((_, i) => i % 3 === new Date(now).getDate() % 3).slice(0, 3);
   const jlpt = nextJlpt(now);

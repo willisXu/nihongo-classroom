@@ -39,6 +39,19 @@ describe('kana quiz', () => {
     }
   });
 
+  it('を and お never appear as each other\'s wrong option (they sound the same)', () => {
+    for (const script of ['h', 'k'] as const) {
+      const pool = buildPool(ALL_ROW_IDS, script, 'see');
+      for (const ch of script === 'h' ? ['を', 'お'] : ['ヲ', 'オ']) {
+        const item = pool.find((it) => it.ch === ch)!;
+        for (let seed = 1; seed <= 200; seed++) {
+          const rs = makeOptions(item, pool, 'see', seeded(seed)).map((o) => o.r);
+          expect(rs.filter((r) => r === 'o' || r === 'wo'), `${ch} seed ${seed}`).toHaveLength(1);
+        }
+      }
+    }
+  });
+
   it('works with a tiny pool', () => {
     const pool = buildPool(['a'], 'h', 'see');
     const opts = makeOptions(pool[0], pool, 'see', seeded(1));

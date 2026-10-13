@@ -26,10 +26,23 @@ const NAV_TIMEOUT_MS = 3000;
 /** assets/ 底下的檔名含內容雜湊：同名就是同一個檔，可以沿用 */
 const isHashed = (url) => new URL(url).pathname.includes('/assets/');
 
+/**
+ * 內容看起來對不對：要的不是網頁（.js、.css、字型、圖示…），伺服器卻回了網頁，就不是要的檔。
+ * 例如本機版重新建置到一半時找不到檔案會回首頁、公共 Wi-Fi 的登入頁。這種內容存進快取的話，
+ * 檔名沒變，之後每一版都會沿用，那一頁就一直打不開。
+ */
+function plausible(url, res) {
+  if (!res || !res.ok) return false;
+  const path = new URL(url).pathname;
+  if (path.endsWith('/') || path.endsWith('.html')) return true;
+  return !/^text\/html/i.test(res.headers.get('content-type') || '');
+}
+
 async function download(url) {
   // 沒有雜湊的檔（index.html、圖示、manifest）一律向伺服器確認是最新版
   const res = await fetch(url, { cache: isHashed(url) ? 'default' : 'no-cache' });
   if (!res.ok) throw new Error(`下載失敗（${res.status}）：${url}`);
+  if (!plausible(url, res)) throw new Error(`下載到的內容不對（伺服器回了網頁）：${url}`);
   // 經過轉址的回應不能拿來回應開網站（瀏覽器會擋下，變成打不開），重新包成一般的回應再存
   if (res.redirected) return new Response(await res.blob(), { status: res.status, statusText: res.statusText, headers: res.headers });
   return res;
@@ -40,10 +53,11 @@ async function precache() {
   const queue = [...URLS];
   const worker = async () => {
     for (let url = queue.shift(); url; url = queue.shift()) {
-      // 上次安裝到一半時已經下載好的：只沿用檔名含雜湊的檔，index.html 這些重新向伺服器確認
-      if (isHashed(url) && (await cache.match(url))) continue;
+      // 上次安裝到一半時已經下載好的：只沿用檔名含雜湊的檔，index.html 這些重新向伺服器確認。
+      // 沿用之前也檢查內容（以前存進去的錯內容在這裡換掉）
+      if (isHashed(url) && plausible(url, await cache.match(url))) continue;
       const prev = isHashed(url) ? await caches.match(url) : undefined; // 上一版就有的同一個檔
-      if (prev) {
+      if (plausible(url, prev)) {
         await cache.put(url, prev);
         continue;
       }
@@ -104,8 +118,15 @@ async function navigate(request) {
   return res ?? network;
 }
 
+/** 清單裡的檔：從快取拿；快取裡的內容不對（以前存錯的）就丟掉，改從網路拿，拿到對的再存回去 */
 async function asset(request, url) {
-  return (await fromCache(url)) ?? fetch(request);
+  const cache = await caches.open(CACHE);
+  const cached = await cache.match(url);
+  if (plausible(url, cached)) return cached;
+  if (cached) await cache.delete(url);
+  const res = await fetch(request);
+  if (plausible(url, res)) await cache.put(url, res.clone());
+  return res;
 }
 
 self.addEventListener('fetch', (event) => {

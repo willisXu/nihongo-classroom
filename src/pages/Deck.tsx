@@ -12,6 +12,7 @@ import { SpeakIcon } from '../components/Speak';
 import { Switch } from '../components/Controls';
 import { Icon } from '../components/Icon';
 import { usePageTitle } from '../lib/title';
+import { useNow } from '../lib/useNow';
 
 const PLAIN: Record<string, string> = { ā: 'a', ī: 'i', ū: 'u', ē: 'e', ō: 'o' };
 /** 搜尋用的拼音寫法：kōhī、kohi、koohii 都算 */
@@ -44,8 +45,8 @@ export default function Deck() {
   const [topic, setTopic] = useState<string>('');
   // 打字時先更新輸入框，列表晚一點再跟上，打字不會卡
   const deferredQuery = useDeferredValue(query);
-  // 這一頁開著的期間用同一個時間點算狀態，列表項目才能沿用上次的畫面
-  const [now] = useState(() => Date.now());
+  // 狀態用同一個時間點算，列表項目才能沿用上次的畫面；回到這個分頁、過了凌晨 4 點換日時才更新
+  const now = useNow();
   usePageTitle(deck ? deck.title : '找不到這個牌組');
 
   const groups = useMemo(() => (deck ? groupByTopic(deck.items) : []), [deck]);

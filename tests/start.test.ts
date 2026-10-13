@@ -18,6 +18,7 @@ import {
   checkPort,
   depsInstalled,
   expectedStamp,
+  isCommandMissing,
   isSupportedNode,
   looksLikeThisApp,
   parseNodeVersion,
@@ -174,6 +175,15 @@ describe('start lock (double-clicking the launcher twice)', () => {
     releaseLock(dir, other);
     expect(existsSync(lockFile())).toBe(false);
     expect(() => releaseLock(dir, other)).not.toThrow();
+  });
+});
+
+describe('npm missing', () => {
+  it('recognises "command not found" exit codes from cmd and sh', () => {
+    expect(isCommandMissing(9009)).toBe(true); // Windows cmd
+    expect(isCommandMissing(127)).toBe(true); // macOS / Linux sh
+    expect(isCommandMissing(1)).toBe(false);
+    expect(isCommandMissing(null)).toBe(false);
   });
 });
 

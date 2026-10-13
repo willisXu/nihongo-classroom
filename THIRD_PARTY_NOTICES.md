@@ -37,6 +37,6 @@ SIL Open Font License 1.1 全文：https://openfontlicense.org/open-font-license
 
 這個檔案是建置時產生的，不在 repo 裡（設定見 `vite.config.ts` 的 `build.license`）。
 
-補充：`standardwebhooks`（Anthropic SDK 用到）的 npm 套件沒有附授權全文，所以在 `THIRD-PARTY-LICENSES.md` 裡只看得到「MIT」。它是 MIT 授權，Copyright (c) 2023 Svix，全文見 https://github.com/standard-webhooks/standard-webhooks/blob/main/libraries/LICENSE 。
+補充：`standardwebhooks`（Anthropic SDK 用到）的 npm 套件沒有附授權全文。它是 MIT 授權，Copyright (c) 2023 Svix（全文見 https://github.com/standard-webhooks/standard-webhooks/blob/main/libraries/LICENSE ），建置時由 `scripts/nk-licenses.mjs` 把全文補進 `THIRD-PARTY-LICENSES.md`。
 
 只在開發和建置時使用、不會進到網站裡的工具（Vite、Vitest、TypeScript 等），授權請見各自 `node_modules/<套件>/` 裡的授權檔。

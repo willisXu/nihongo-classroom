@@ -140,7 +140,17 @@ async function main() {
         ? '套件沒有裝完整或需要更新，正在重新安裝（約 1～2 分鐘，需要網路）…'
         : '第一次執行，正在安裝需要的套件（約 1～2 分鐘，需要網路）…',
     );
-    if (!(await runNpmCi(root))) {
+    const installed = await runNpmCi(root);
+    if (installed === 'missing') {
+      complain(
+        '',
+        '找不到 npm（安裝套件用的程式，通常會和 Node.js 一起裝好）。',
+        '請到 https://nodejs.org/ 重新安裝 LTS 版（安裝時保留預設的選項），裝好後再雙擊一次啟動檔。',
+      );
+      openBrowser('https://nodejs.org/');
+      return 1;
+    }
+    if (installed !== 'ok') {
       complain('', '套件安裝失敗。請確認網路連線正常，再雙擊一次啟動檔（會自動重新安裝）。');
       return 1;
     }

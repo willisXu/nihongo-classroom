@@ -8,6 +8,7 @@ import { lessonsDone } from '../lib/progress';
 import { Meter } from '../components/Controls';
 import { Icon } from '../components/Icon';
 import { usePageTitle } from '../lib/title';
+import { useNow } from '../lib/useNow';
 
 const DECK_NOTE: Record<string, string> = {
   n5: '先背這組：檢定和日常都用得到。',
@@ -18,7 +19,8 @@ const DECK_NOTE: Record<string, string> = {
 
 export default function Vocab() {
   usePageTitle('單字牌組');
-  const now = Date.now();
+  // 開著過夜、從背景切回來時重新取時間：過了凌晨 4 點，到期和新卡的數字才會更新
+  const now = useNow();
   const srs = useStore(srsStore);
   const settings = useStore(settingsStore);
   const lessons = useStore(lessonStore);

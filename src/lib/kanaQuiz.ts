@@ -108,7 +108,9 @@ export function makeOptions(item: QuizItem, pool: QuizItem[], mode: QuizMode, ra
     if (!inf || inf.kind === 'yoon') return;
     const c = inf.cell;
     if (c.h === 'ぢ' || c.h === 'づ') return;
-    if (mode === 'listen' && ((c.h === 'を' && item.cell.h === 'お') || (c.h === 'お' && item.cell.h === 'を') || c.h === 'を')) return;
+    // を 和 お 同音（網站其他地方也把 を 標成 o）：兩個字互相不當干擾選項；聽音題 を 一律不出
+    if ((c.h === 'を' && item.cell.h === 'お') || (c.h === 'お' && item.cell.h === 'を')) return;
+    if (mode === 'listen' && c.h === 'を') return;
     const opt = { ch: s === 'h' ? c.h : c.k, r: c.r, ok: false };
     if (opt.r === item.r || out.some((o) => o.r === opt.r || o.ch === opt.ch)) return;
     out.push(opt);

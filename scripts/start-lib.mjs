@@ -243,7 +243,7 @@ export function releaseLock(root, pid = process.pid) {
 /**
  * 執行 npm ci（依 package-lock.json 重新安裝，裝到一半的 node_modules 會先清掉）。
  * Windows 上的 npm 是 npm.cmd，必須透過 shell 執行；整個指令用一個字串傳，路徑由 cwd 指定，
- * 所以資料夾路徑有空白或中文也沒關係。成功回傳 true。
+ * 所以資料夾路徑有空白或中文也沒關係。回傳 'ok'、'missing'（找不到 npm）或 'failed'。
  */
 export function runNpmCi(root) {
   return new Promise((resolve) => {
@@ -251,12 +251,17 @@ export function runNpmCi(root) {
     try {
       child = spawn('npm ci --no-audit --no-fund --no-update-notifier', { cwd: root, stdio: 'inherit', shell: true });
     } catch {
-      resolve(false);
+      resolve('failed');
       return;
     }
-    child.once('error', () => resolve(false));
-    child.once('close', (code) => resolve(code === 0));
+    child.once('error', () => resolve('failed'));
+    child.once('close', (code) => resolve(code === 0 ? 'ok' : isCommandMissing(code) ? 'missing' : 'failed'));
   });
+}
+
+/** 透過 shell 執行時找不到指令的結束代碼：Windows 的 cmd 是 9009，macOS／Linux 的 sh 是 127 */
+export function isCommandMissing(code) {
+  return code === 9009 || code === 127;
 }
 
 /** 用系統預設瀏覽器打開網址的指令（不需要任何套件） */
