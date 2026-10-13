@@ -151,7 +151,7 @@ scripts/
   start.mjs            啟動程式（啟動檔和 npm start 都跑這支：檢查 Node、連接埠、安裝套件、建置）
   start-lib.mjs        啟動程式用的小工具（只用 Node 內建模組）
   fetch-kanjivg.mjs    下載 KanjiVG 筆順，產生 src/data/strokes.json
-  nk-fonts.mjs         建置時把兩套字型裁成網站用得到的字（Vite 外掛，產生 src/fonts/generated/，不進版控）
+  nk-fonts.mjs         建置時從兩套字型的完整字型檔裁出網站用得到的字，依頁面分成小檔（Vite 外掛，產生 src/fonts/generated/，不進版控）
   nk-pwa.mjs           建置時產生 dist/sw.js（Vite 外掛）：列出要預先下載的檔案，套進 sw-template.js
   sw-template.js       service worker 的程式：預先下載、離線時用快取開網站、新版自動接手
 public/
@@ -184,7 +184,7 @@ tests/                 Vitest：排程、筆畫比對、假名測驗、課程與
   - `src/data/strokes.json`：假名筆順資料
   - `public/favicon.svg`：網站圖示（「あ」的筆畫）
   - `public/icons/*.png`：加到主畫面用的 App 圖示（由上面的圖示繪製）
-- 字型 Klee One、LXGW WenKai TC 以 SIL Open Font License 1.1 授權，透過 Fontsource 套件引入；建置時依網站用到的字裁切（`scripts/nk-fonts.mjs`），授權全文跟著網站發布成 `FONT-LICENSES.txt`。
+- 字型 Klee One、LXGW WenKai TC 以 SIL Open Font License 1.1 授權：建置時從 `@expo-google-fonts` 套件的完整字型檔依網站用到的字裁切（`scripts/nk-fonts.mjs`），AI 家教頁另外用 Fontsource 的完整 Klee One 補罕用字；授權全文跟著網站發布成 `FONT-LICENSES.txt`。
 - 打包進網站的 npm 套件（React、React Router、Anthropic SDK 等）的授權全文，建置時會自動產生成 `dist/THIRD-PARTY-LICENSES.md`，和 `index.html` 一起發布（線上版：<https://willisxu.github.io/nihongo-classroom/THIRD-PARTY-LICENSES.md>）。
 
 詳見 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。

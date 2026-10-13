@@ -21,12 +21,12 @@
 
 | 字型 | 著作權 | 授權 | 引入方式 |
 | --- | --- | --- | --- |
-| Klee One（Fontworks） | Copyright 2020 The Klee Project Authors | SIL Open Font License 1.1 | `@fontsource/klee-one`（Fontsource） |
-| LXGW WenKai TC（落霞與孤鶩） | Copyright 2024 The LXGW WenKai Project Authors | SIL Open Font License 1.1 | `@fontsource/lxgw-wenkai-tc`（Fontsource） |
+| Klee One（Fontworks） | Copyright 2020 The Klee Project Authors | SIL Open Font License 1.1 | `@expo-google-fonts/klee-one`（完整字型檔，建置時裁切成 NK Kana）、`@fontsource/klee-one`（AI 家教頁補罕用字的完整字型） |
+| LXGW WenKai TC（落霞與孤鶩） | Copyright 2024 The LXGW WenKai Project Authors | SIL Open Font License 1.1 | `@expo-google-fonts/lxgw-wenkai-tc`（完整字型檔，建置時裁切成 NK Display、NK Meaning） |
 
 SIL Open Font License 1.1 全文：https://openfontlicense.org/open-font-license-official-text/ 。
 
-建置時 `scripts/nk-fonts.mjs` 會把這兩套字型依網站用到的字裁切（subset），另存成 NK Display、NK Kana、NK Meaning 三組 woff2 檔，仍以 SIL Open Font License 1.1 授權；兩套字型的授權全文會一起發布成網站根目錄的 **`FONT-LICENSES.txt`**（線上版：https://willisxu.github.io/nihongo-classroom/FONT-LICENSES.txt ）。
+建置時 `scripts/nk-fonts.mjs` 會從這兩套字型的完整字型檔，依網站用到的字裁切（subset），另存成 NK Display、NK Kana、NK Meaning 三組 woff2 檔，仍以 SIL Open Font License 1.1 授權；兩套字型的授權全文會一起發布成網站根目錄的 **`FONT-LICENSES.txt`**（線上版：https://willisxu.github.io/nihongo-classroom/FONT-LICENSES.txt ）。
 
 ## 打包進網站的 npm 套件
 

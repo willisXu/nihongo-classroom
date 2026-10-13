@@ -1,43 +1,59 @@
 /**
  * 字型瘦身（Vite 外掛）
  *
- * 網站的兩套字型（標題用的霞鶩文楷 LXGW WenKai TC、假名用的 Klee One）是很大的中日文字型，
- * Fontsource 把它們切成一百多片，瀏覽器看頁面上用到哪些字就下載哪幾片，但每一片都有幾百個字，
- * 一頁常常要下載 0.3～1 MB。這個外掛在建置時：
+ * 標題用的霞鶩文楷（LXGW WenKai TC Bold）和假名用的 Klee One SemiBold 都是好幾 MB 的中日文字型。
+ * 這個外掛在建置時，從完整字型檔（@expo-google-fonts 套件裡的 TTF）裁出網站用得到的字，
+ * 再依「哪一頁會用到」分成很多小檔，配合 unicode-range，瀏覽器只下載這一頁需要的那幾個檔：
  *
- *   1. 掃描 src 找出會用到的字（標題字型：畫面文字和標題欄位；假名字型：日文片段，見 collectChars）
- *   2. 把用得到的每一片裁成只剩這些字（subset-font），另存成「NK Display」「NK Kana」兩套字型
- *   3. 產生 src/fonts/generated/nk-fonts.css（不進版控），unicode-range 只列出真的有的字
+ *   1. 收字（collectChars）：標題字型收畫面程式（.tsx）裡的字和資料的標題欄位；假名字型收日文片段；
+ *      單字卡背面的中文解釋另外一套（NK Meaning）。英數、標點、假名整段都收，動態的數字和假名不會缺字。
+ *   2. 分組（groupChars）：英數、假名照碼位分成幾組（BASE_GROUPS）；其他的字跟著用到它的檔案走——
+ *      很多檔都有的字放「常用」一組，其餘放到字最少的那個檔的組裡，照在檔案裡出現的順序排
+ *      （同一課、同一段的字放在一起）。標題字型另外分辨哪些字真的出現在標題裡（displayHotChars：
+ *      從 CSS 找出用標題字型的元素，再到 .tsx 裡找這些元素包住的文字，加上資料的標題欄位）；
+ *      只是收著備用、畫面上其實用內文字型的字，放在「其餘」的組，平常不會下載。
+ *   3. 每組裁成一個 woff2，產生 src/fonts/generated/nk-fonts.css（不進版控）。
  *
- * 這樣每一頁只下載裁過的小檔。AI 家教回覆裡偶爾出現的其他漢字，會往下用原本完整的 Klee One
- * （tokens.css 的字型順序），字形一致。同一片內容沒變就沿用快取（node_modules/.cache/nk-fonts）。
- *
- * 另外把 Fontsource CSS 裡的 .woff 備援拿掉：現在的瀏覽器都支援 woff2，那些檔案只會占空間。
+ * 標題文字如果來自 .tsx 裡的陣列，請用 title: '…' 欄位（DISPLAY_FIELDS），字才會分到那一頁的組。
+ * 分錯組不會缺字，只是那一頁要多下載一個檔。
+ * AI 家教回覆裡出現的其他漢字，會往下用完整的 Klee One（tokens.css 的字型順序，Tutor 頁才載入）。
+ * 同樣的字和字型，裁過的結果沿用快取（node_modules/.cache/nk-fonts）。
  */
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const OUT_DIR = join(ROOT, 'src/fonts/generated');
 const CACHE_DIR = join(ROOT, 'node_modules/.cache/nk-fonts');
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 
+/**
+ * core：幾個檔都有的字算「常用」；chunk：每個檔最多幾個字。
+ * 這兩個數字是實際量過各頁第一次開啟的下載量後選的（常用組太大，每一頁都要多下載；太小，檔案數變多）。
+ * NK Meaning 只在單字卡背面用，照牌組分，不設常用組。
+ */
 export const FAMILIES = [
-  { family: 'NK Display', pkg: 'lxgw-wenkai-tc', css: '700.css', weight: 700, prefix: 'display', chars: 'display' },
-  { family: 'NK Kana', pkg: 'klee-one', css: '600.css', weight: 600, prefix: 'kana', chars: 'ja' },
-  // 單字卡背面的中文解釋：字很多，分開成一套，只有複習頁會下載（其他頁的標題字型不必跟著變大）
-  { family: 'NK Meaning', pkg: 'lxgw-wenkai-tc', css: '700.css', weight: 700, prefix: 'meaning', chars: 'meaning' },
+  { family: 'NK Display', pkg: '@expo-google-fonts/lxgw-wenkai-tc', file: '700Bold/LXGWWenKaiTC_700Bold.ttf', weight: 700, prefix: 'display', chars: 'display', base: 'split', core: 5, chunk: 24 },
+  { family: 'NK Kana', pkg: '@expo-google-fonts/klee-one', file: '600SemiBold/KleeOne_600SemiBold.ttf', weight: 600, prefix: 'kana', chars: 'ja', base: 'whole', core: 8, chunk: 24 },
+  { family: 'NK Meaning', pkg: '@expo-google-fonts/lxgw-wenkai-tc', file: '700Bold/LXGWWenKaiTC_700Bold.ttf', weight: 700, prefix: 'meaning', chars: 'meaning', base: 'split', core: Infinity, chunk: 40 },
 ];
+
+/**
+ * 只留橫排文字會用到的 OpenType 功能。網站沒有直排，也沒有用 font-feature-settings；
+ * Klee One 的 jp78、trad、aalt 這些異體字功能會把每個漢字的異體一起拉進來，檔案大好幾倍。
+ */
+const KEEP_FEATURES = ['ccmp', 'locl', 'liga', 'calt', 'kern'];
 
 /** 資料檔裡會用標題字型顯示的欄位（h1–h3 標題、牌組主題、五十音表的字源） */
 const DISPLAY_FIELDS = /\b(?:title|headline|topic|ho|ko): '([^']*)'/g;
+/** 每一頁都會顯示的元件：它的標題字一律放進常用組 */
+const EVERYWHERE = ['components/Layout.tsx'];
 
 const isKana = (cp) => cp >= 0x3040 && cp <= 0x30ff;
 /** 日文會出現的字：假名、漢字、々、〆 */
 const isJa = (cp) => isKana(cp) || (cp >= 0x3400 && cp <= 0x9fff) || (cp >= 0xf900 && cp <= 0xfaff) || cp === 0x3005 || cp === 0x3006;
-
 
 function walk(dir) {
   return readdirSync(dir).flatMap((name) => {
@@ -71,7 +87,7 @@ export function collectChars(sources) {
       for (const ch of text) if (ch.codePointAt(0) >= 0x20) display.add(ch);
     }
     for (const m of text.matchAll(DISPLAY_FIELDS)) for (const ch of m[1]) display.add(ch);
-    if (/[\\/]data[\\/]vocab[\\/]/.test(file)) for (const m of text.matchAll(/\bzh: '([^']+)'/g)) for (const ch of m[1]) meaning.add(ch);
+    if (/(^|[\\/])data[\\/]vocab[\\/]/.test(file)) for (const m of text.matchAll(/\bzh: '([^']+)'/g)) for (const ch of m[1]) meaning.add(ch);
     // 明確是日文的地方：kanji／ja／say 欄位、[[漢字|かな]] 和 {{かな}} 標記、標了讀音的課文片段
     const jaFields = [/\b(?:kanji|ja|say): '([^']+)'/g, /\[\[([^\]]+)\]\]/g, /\{\{([^}]+)\}\}/g, /text: '([^']+)', ruby: /g];
     for (const re of jaFields) {
@@ -94,22 +110,173 @@ export function collectChars(sources) {
   return { display, ja, meaning };
 }
 
-/** 讀 Fontsource 的 CSS：每一片的 woff2 檔名和 unicode-range */
-export function parseFontsourceCss(css) {
-  return [...css.matchAll(/@font-face\s*{([^}]*)}/g)].map((m) => {
-    const file = /url\(\.\/files\/([^)]+\.woff2)\)/.exec(m[1])?.[1];
-    const range = /unicode-range:\s*([^;}]+)/.exec(m[1])?.[1] ?? '';
-    const ranges = range
-      .split(',')
-      .map((r) => r.trim().replace(/^U\+/i, ''))
-      .filter(Boolean)
-      .map((r) => {
-        if (r.includes('?')) return [parseInt(r.replace(/\?/g, '0'), 16), parseInt(r.replace(/\?/g, 'F'), 16)];
-        const [a, b = a] = r.split('-');
-        return [parseInt(a, 16), parseInt(b, 16)];
-      });
-    return { file, ranges };
-  });
+/* ---------------- 哪些字真的用標題字型顯示 ---------------- */
+
+/**
+ * CSS 裡用到某個字型的選擇器。每個選擇器拆成一層一層的條件（標籤、class），
+ * 例如 `.home-jlpt b` → [{ tag: null, classes: ['home-jlpt'] }, { tag: 'b', classes: [] }]。
+ */
+export function fontSelectors(css, test) {
+  const out = [];
+  const clean = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  for (const [, sel, body] of clean.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    if (!test(body)) continue;
+    for (const s of sel.split(',')) {
+      const parts = s
+        .trim()
+        .split(/\s+/)
+        .filter((p) => p && p !== '>');
+      if (!parts.length || parts.some((p) => p.startsWith('@') || p.startsWith(':root'))) continue;
+      out.push(parts.map((p) => ({ tag: /^[a-z][a-z0-9]*/.exec(p)?.[0] ?? null, classes: [...p.matchAll(/\.([\w-]+)/g)].map((x) => x[1]) })));
+    }
+  }
+  return out;
+}
+
+/** JSX 的開始標籤（屬性裡可以有 {…}、"…"、'…'） */
+const OPEN_TAG = /<([a-zA-Z][\w.]*)((?:\{(?:[^{}]|\{[^{}]*\})*\}|"[^"]*"|'[^']*'|[^>"'{}])*)>/g;
+
+/** src 的 [from, to) 範圍裡，符合 match 的元素：回傳每個元素內容的範圍（開始標籤之後到對應的結束標籤） */
+function elementRanges(src, from, to, match) {
+  const out = [];
+  const open = new RegExp(OPEN_TAG.source, 'g');
+  open.lastIndex = from;
+  for (let m = open.exec(src); m && m.index < to; m = open.exec(src)) {
+    const [whole, tag, attrs] = m;
+    if (attrs.trimEnd().endsWith('/') || !match(tag, attrs)) continue;
+    const start = m.index + whole.length;
+    const same = new RegExp(`<(/?)${tag.replace(/\./g, '\\.')}(?=[\\s>/])`, 'g');
+    same.lastIndex = start;
+    let depth = 1;
+    let end = to;
+    for (let t = same.exec(src); t && t.index < to; t = same.exec(src)) {
+      depth += t[1] ? -1 : 1;
+      if (!depth) {
+        end = t.index;
+        break;
+      }
+    }
+    out.push([start, end]);
+  }
+  return out;
+}
+
+const classNameOf = (attrs) => /className=(?:"([^"]*)"|\{([^}]*)\})/.exec(attrs)?.slice(1).find((x) => x !== undefined) ?? '';
+const hasClass = (attrs, cls) => new RegExp(`(^|[\\s'"\`{])${cls}($|[\\s'"\`}])`).test(classNameOf(attrs));
+
+/** 一個 .tsx 檔裡，被用標題字型的元素包住的文字（不分是文字還是程式，之後只取字型有收的字） */
+export function hotText(src, selectors) {
+  let text = '';
+  for (const path of selectors) {
+    let ranges = [[0, src.length]];
+    for (const part of path) {
+      ranges = ranges.flatMap(([a, b]) =>
+        elementRanges(src, a, b, (tag, attrs) => (!part.tag || part.tag === tag) && part.classes.every((c) => hasClass(attrs, c))),
+      );
+      if (!ranges.length) break;
+    }
+    for (const [a, b] of ranges) text += src.slice(a, b) + '\n';
+  }
+  return text;
+}
+
+/** 標題字型：這個檔裡真的會用標題字型顯示的字（.tsx 的標題元素＋資料的標題欄位） */
+export function displayHotChars({ file, text }, selectors) {
+  let hot = file.endsWith('.tsx') ? hotText(text, selectors) : '';
+  for (const m of text.matchAll(DISPLAY_FIELDS)) hot += m[1];
+  return new Set(hot);
+}
+
+/* ---------------- 分組 ---------------- */
+
+/**
+ * 英數、假名這些「基本字」的分組（每頁幾乎都會用到，又小，不跟著檔案分）。
+ * - split（標題字型、單字解釋）：英數分兩組（空白、標點、數字／英文字母），平假名、片假名各分三段
+ *   （あ～さ行、た～は行、ま～わ行），只用到幾個數字或假名的頁面不必下載全部。霞鶩文楷沒有字距微調，分開不影響排版。
+ * - whole（假名字型）：Klee One 有假名之間、假名和標點之間的字距微調（kern），只有同一個字型檔裡的字才調得到，
+ *   所以假名、全形標點放同一組，英數也是一組，排出來和完整字型一樣。
+ */
+export const BASE_GROUPS = {
+  split: [
+    ['digits', [[0x20, 0x40]]],
+    ['latin', [[0x41, 0x7e]]],
+    ['hira-1', [[0x3040, 0x305e]]],
+    ['hira-2', [[0x305f, 0x307d]]],
+    ['hira-3', [[0x307e, 0x309f]]],
+    ['kata-1', [[0x30a0, 0x30be]]],
+    ['kata-2', [[0x30bf, 0x30dd]]],
+    ['kata-3', [[0x30de, 0x30ff]]],
+  ],
+  whole: [
+    ['ascii', [[0x20, 0x7e]]],
+    ['kana', [[0x3000, 0x30ff], [0xff01, 0xff0f], [0xff1a, 0xff20], [0xff3b, 0xff40], [0xff5b, 0xff5e]]],
+  ],
+};
+
+/**
+ * 把一套字型要收的字分組，每組之後裁成一個 woff2。
+ * chars：要收的字；files：[{ file, text, chars（這個檔收到的字）, hot（這個檔裡用這套字型顯示的字） }]
+ * 一個字有好幾個檔用到時，放在字最少的那個檔的組：小頁面（一課）只要下載自己的小檔，
+ * 大頁面（整副單字牌組）本來就要下載很多組，多幾個小組影響不大。
+ * 同樣的輸入一定得到同樣的分組（檔名跟著順序編號，內容沒變，瀏覽器和離線快取就沿用舊檔）。
+ */
+export function groupChars(chars, files, { core = 3, chunk = 24, coreChunk = 120, restChunk = 80, base = 'split', everywhere = EVERYWHERE } = {}) {
+  const baseGroups = BASE_GROUPS[base];
+  // 每個檔裡每個字第一次出現的位置
+  const firstAt = new Map(
+    files.map((f) => {
+      const m = new Map();
+      let i = 0;
+      for (const ch of f.text) if (!m.has(ch)) m.set(ch, i++);
+      return [f.file, m];
+    }),
+  );
+  const first = (file, ch) => firstAt.get(file)?.get(ch) ?? Infinity;
+  // 字最少的那個檔（標題字看標題字的數量；一樣多就照檔名）
+  const pick = (list, size) => list.slice().sort((a, b) => size(a) - size(b) || (a.file < b.file ? -1 : a.file > b.file ? 1 : 0))[0].file;
+
+  const groups = new Map();
+  const add = (key, ch) => {
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(ch);
+  };
+  const hotCount = new Map();
+  for (const ch of chars) {
+    const cp = ch.codePointAt(0);
+    const inBase = baseGroups.find(([, ranges]) => ranges.some(([from, to]) => cp >= from && cp <= to));
+    if (inBase) {
+      add(inBase[0], ch);
+      continue;
+    }
+    const hot = files.filter((f) => f.hot.has(ch));
+    hotCount.set(ch, hot.length);
+    if (hot.length >= core || hot.some((f) => everywhere.includes(f.file))) add('core', ch);
+    else if (hot.length) add(`hot:${pick(hot, (f) => f.hot.size)}`, ch);
+    else {
+      const own = files.filter((f) => f.chars.has(ch));
+      add(`rest:${own.length ? pick(own, (f) => f.chars.size) : '~'}`, ch);
+    }
+  }
+
+  const rank = (key) => baseGroups.findIndex(([k]) => k === key) + 1 || (key === 'core' ? 10 : key.startsWith('hot:') ? 20 : 30);
+  const keys = [...groups.keys()].sort((a, b) => rank(a) - rank(b) || (a < b ? -1 : a > b ? 1 : 0));
+  const out = [];
+  for (const key of keys) {
+    const list = groups.get(key);
+    const cpOf = (ch) => ch.codePointAt(0);
+    let size = Infinity;
+    if (key === 'core') {
+      // 越多檔用到的字越前面
+      list.sort((a, b) => hotCount.get(b) - hotCount.get(a) || cpOf(a) - cpOf(b));
+      size = coreChunk;
+    } else if (key.includes(':')) {
+      const file = key.slice(key.indexOf(':') + 1);
+      list.sort((a, b) => first(file, a) - first(file, b) || cpOf(a) - cpOf(b));
+      size = key.startsWith('hot:') ? chunk : restChunk;
+    } else list.sort((a, b) => cpOf(a) - cpOf(b));
+    for (let i = 0; i < list.length; i += size) out.push({ key, chars: list.slice(i, i + size) });
+  }
+  return out;
 }
 
 /** 碼位清單 → 精簡的 unicode-range（連續的合成一段） */
@@ -127,11 +294,15 @@ export function toUnicodeRange(codePoints) {
   return parts.join(',');
 }
 
-async function subsetCached(subsetFont, source, text) {
-  const key = createHash('sha256').update(CACHE_VERSION).update(source).update(text).digest('hex').slice(0, 32);
+/* ---------------- 產生字型檔 ---------------- */
+
+const fontPath = (fam) => join(ROOT, 'node_modules', fam.pkg, fam.file);
+
+async function subsetCached(subsetFont, font, fontHash, text) {
+  const key = createHash('sha256').update(CACHE_VERSION).update(fontHash).update(KEEP_FEATURES.join()).update(text).digest('hex').slice(0, 32);
   const cached = join(CACHE_DIR, `${key}.woff2`);
   if (existsSync(cached)) return readFileSync(cached);
-  const out = await subsetFont(source, text, { targetFormat: 'woff2' });
+  const out = await subsetFont(font, text, { targetFormat: 'woff2', keepFeatures: KEEP_FEATURES });
   mkdirSync(CACHE_DIR, { recursive: true });
   writeFileSync(cached, out);
   return out;
@@ -140,31 +311,43 @@ async function subsetCached(subsetFont, source, text) {
 /** 產生裁過的字型和 CSS；回傳統計（給建置訊息用） */
 export async function generateFonts() {
   const { default: subsetFont } = await import('subset-font');
-  const sources = walk(join(ROOT, 'src')).map((file) => ({ file, text: readFileSync(file, 'utf8') }));
+  const srcDir = join(ROOT, 'src');
+  const sources = walk(srcDir).map((p) => ({ file: relative(srcDir, p).split(sep).join('/'), text: readFileSync(p, 'utf8') }));
   const sets = collectChars(sources);
+  const perFile = sources.map((s) => ({ ...s, sets: collectChars([s]) }));
+  const selectors = fontSelectors(readFileSync(join(srcDir, 'styles/app.css'), 'utf8'), (body) => /var\(--font-display\)|'NK Display'/.test(body));
+  const fonts = new Map();
   const files = new Map();
   const rules = ['/* 由 scripts/nk-fonts.mjs 在建置時產生，不要手動修改 */'];
   const stats = [];
   for (const fam of FAMILIES) {
-    const dir = join(ROOT, 'node_modules/@fontsource', fam.pkg);
-    const chars = [...sets[fam.chars]];
+    if (!fonts.has(fam.pkg + fam.file)) {
+      const buf = readFileSync(fontPath(fam));
+      fonts.set(fam.pkg + fam.file, { buf, hash: createHash('sha256').update(buf).digest('hex') });
+    }
+    const font = fonts.get(fam.pkg + fam.file);
+    const famFiles = perFile.map((f) => {
+      // 收字時每個檔都加上整段的英數、標點、假名；分組只看檔案裡真的有的字
+      const inText = new Set(f.text);
+      const chars = new Set([...f.sets[fam.chars]].filter((ch) => inText.has(ch)));
+      const hot = fam.chars === 'display' ? new Set([...displayHotChars(f, selectors)].filter((ch) => chars.has(ch))) : chars;
+      return { file: f.file, text: f.text, chars, hot };
+    });
+    const groups = groupChars(sets[fam.chars], famFiles, fam);
     let bytes = 0;
-    let n = 0;
-    const faces = parseFontsourceCss(readFileSync(join(dir, fam.css), 'utf8'));
-    for (const face of faces) {
-      if (!face.file) continue;
-      const cps = chars.map((c) => c.codePointAt(0)).filter((cp) => face.ranges.some(([a, b]) => cp >= a && cp <= b));
-      if (!cps.length) continue;
-      const out = await subsetCached(subsetFont, readFileSync(join(dir, 'files', face.file)), String.fromCodePoint(...cps));
-      const name = `${fam.prefix}-${n++}.woff2`;
+    for (const [n, g] of groups.entries()) {
+      const cps = g.chars.map((ch) => ch.codePointAt(0));
+      const out = await subsetCached(subsetFont, font.buf, font.hash, String.fromCodePoint(...cps));
+      const name = `${fam.prefix}-${n}.woff2`;
       files.set(name, out);
       bytes += out.length;
       rules.push(
-        `@font-face{font-family:'${fam.family}';font-style:normal;font-display:swap;font-weight:${fam.weight};` +
+        `/* ${g.key}（${g.chars.length} 字） */\n` +
+          `@font-face{font-family:'${fam.family}';font-style:normal;font-display:swap;font-weight:${fam.weight};` +
           `src:url(./${name}) format('woff2');unicode-range:${toUnicodeRange(cps)}}`,
       );
     }
-    stats.push(`${fam.family} ${n} 個檔、${Math.round(bytes / 1024)} kB`);
+    stats.push(`${fam.family} ${groups.length} 個檔、${Math.round(bytes / 1024)} kB`);
   }
   const css = rules.join('\n') + '\n';
   // 內容沒變就不重寫，開發伺服器才不會無故重新整理
@@ -184,10 +367,14 @@ export async function generateFonts() {
 
 /** 字型授權（SIL OFL 1.1）跟著字型檔一起發布 */
 function fontLicenses() {
-  return FAMILIES.map((f) => {
-    const license = readFileSync(join(ROOT, 'node_modules/@fontsource', f.pkg, 'LICENSE'), 'utf8');
-    return `${f.family}：由 @fontsource/${f.pkg} 的字型依網站用到的字裁切而成，沿用原授權。\n\n${license}`;
-  }).join('\n\n----------------------------------------\n\n');
+  const byPkg = new Map();
+  for (const f of FAMILIES) byPkg.set(f.pkg, [...(byPkg.get(f.pkg) ?? []), f.family]);
+  return [...byPkg]
+    .map(([pkg, families]) => {
+      const license = readFileSync(join(ROOT, 'node_modules', pkg, 'LICENSE_FONT'), 'utf8');
+      return `${families.join('、')}：由 ${pkg} 的字型檔依網站用到的字裁切而成，沿用原授權。\n\n${license}`;
+    })
+    .join('\n\n----------------------------------------\n\n');
 }
 
 export function nkFonts() {
@@ -198,6 +385,7 @@ export function nkFonts() {
       const stats = await generateFonts();
       this.info?.(`字型：${stats.join('；')}`);
     },
+    // AI 家教頁的完整 Klee One（Fontsource）：拿掉 .woff 備援，現在的瀏覽器都支援 woff2，那些檔案只會占空間
     transform(code, id) {
       if (!/[\\/]@fontsource[\\/][^\\/]+[\\/][^\\/]+\.css(\?|$)/.test(id)) return null;
       return { code: code.replace(/,\s*url\([^)]+\.woff\)\s*format\(['"]woff['"]\)/g, ''), map: null };
