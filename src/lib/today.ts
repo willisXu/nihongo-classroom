@@ -2,7 +2,7 @@
  * 首頁「今天的任務」：依進度算出今天該做的幾件事和完成了沒有。
  * 對應學習地圖「每天 45 分鐘」的複習和手寫；新進度（下一課）在首頁另外列。
  */
-import { DECK_META, metaItemIds } from '../data/vocab/meta';
+import { DECK_META, metaItemIds, unseenWords } from '../data/vocab/meta';
 import type { Activity, KanaStats, LessonProgress, SrsData } from '../state';
 import { countMastered, HIRA_KEYS, KATA_KEYS, lessonsDone, nextLesson } from './progress';
 import { deckStats } from './srs';
@@ -49,13 +49,13 @@ export function todayTasks({ activity, kana, lessons, srs, newPerDay, now }: Tod
   // 單字卡：學完平假名、或已經開始背單字之後才列入
   let due = 0;
   let seen = 0;
-  let unseen = 0;
   for (const d of DECK_META) {
     const s = deckStats(srs.cards, metaItemIds(d), now);
     due += s.due;
     seen += s.seen;
-    unseen += s.unseen;
   }
+  // 同一個字在好幾個牌組只算一次（「全部牌組」也只會出一張）
+  const unseen = unseenWords(srs.cards);
   if (seen > 0 || lessonsDone(lessons) >= VOCAB_AFTER_LESSONS) {
     const day = srs.days[key] ?? { reviews: 0, fresh: 0, rev: 0, forgot: 0 };
     const newLeft = Math.min(unseen, Math.max(0, newPerDay - day.fresh));

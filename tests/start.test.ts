@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { createServer as createHttpServer } from 'node:http';
 import { createServer as createTcpServer, type AddressInfo, type Server } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -8,8 +9,11 @@ import { join } from 'node:path';
 import viteConfig from '../vite.config';
 import {
   APP_NAME,
+  LOCK_NAME,
+  LOCK_STALE_MS,
   PORT,
   STAMP_NAME,
+  acquireLock,
   browserCommand,
   checkPort,
   depsInstalled,
@@ -17,6 +21,8 @@ import {
   isSupportedNode,
   looksLikeThisApp,
   parseNodeVersion,
+  processAlive,
+  releaseLock,
   removeStamp,
   writeStamp,
 } from '../scripts/start-lib.mjs';
@@ -124,6 +130,50 @@ describe('install stamp', () => {
     writeFileSync(join(dir, 'node_modules', STAMP_NAME), `${expectedStamp(dir, otherPlatform, process.arch)}\n`);
     expect(depsInstalled(dir)).toBe(false);
     expect(expectedStamp(dir, 'darwin', 'arm64')).not.toBe(expectedStamp(dir, 'darwin', 'x64'));
+  });
+});
+
+describe('start lock (double-clicking the launcher twice)', () => {
+  let dir: string;
+  const lockFile = () => join(dir, LOCK_NAME);
+  // 一定還在的程式（跑測試的這個程式的上層）和一定已經結束的程式
+  const other = process.ppid;
+  const ended = spawnSync(process.execPath, ['-e', '']).pid!;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'nk-lock-'));
+  });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  it('lets only the first window prepare the site', () => {
+    expect(processAlive(other)).toBe(true);
+    expect(processAlive(ended)).toBe(false);
+    expect(acquireLock(dir, other)).toBe(true);
+    expect(readFileSync(lockFile(), 'utf8').trim()).toBe(String(other));
+    expect(acquireLock(dir, process.pid)).toBe(false); // 另一個視窗還在忙
+    expect(acquireLock(dir, other)).toBe(true); // 自己已經拿著
+  });
+
+  it('takes over a lock whose window has closed', () => {
+    writeFileSync(lockFile(), `${ended}\n`);
+    expect(acquireLock(dir, process.pid)).toBe(true);
+    expect(readFileSync(lockFile(), 'utf8').trim()).toBe(String(process.pid));
+  });
+
+  it('takes over a lock that has not been refreshed for a while (the number may belong to another program now)', () => {
+    writeFileSync(lockFile(), `${other}\n`);
+    const old = new Date(Date.now() - LOCK_STALE_MS - 5000);
+    utimesSync(lockFile(), old, old);
+    expect(acquireLock(dir, process.pid)).toBe(true);
+  });
+
+  it('only removes its own lock', () => {
+    expect(acquireLock(dir, other)).toBe(true);
+    releaseLock(dir, process.pid);
+    expect(existsSync(lockFile())).toBe(true);
+    releaseLock(dir, other);
+    expect(existsSync(lockFile())).toBe(false);
+    expect(() => releaseLock(dir, other)).not.toThrow();
   });
 });
 

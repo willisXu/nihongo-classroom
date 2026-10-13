@@ -12,6 +12,8 @@ export function ApiKeySetup({ compact = false }: { compact?: boolean }) {
   const [status, setStatus] = useState<{ tone: 'ok' | 'mark' | 'busy'; text: string } | null>(null);
   const [editing, setEditing] = useState(!saved);
   const [confirmRemove, setConfirmRemove] = useState(false);
+  // 貼上時預設遮起來（螢幕分享、錄影時不會露出整串金鑰）；用遮罩而不用密碼欄，瀏覽器才不會跳出「儲存密碼」
+  const [reveal, setReveal] = useState(false);
 
   const save = async () => {
     // 去掉貼上時夾帶的換行、空白和看不見的字元，再檢查格式
@@ -23,7 +25,7 @@ export function ApiKeySetup({ compact = false }: { compact?: boolean }) {
     setStatus({ tone: 'busy', text: '正在測試連線…' });
     try {
       const res = await testConnection(key, settings.model);
-      addUsage(settings.model, res.input, res.output);
+      addUsage(settings.model, res.input, res.output, false);
       apiKeyStore.set(key);
       setDraft('');
       setEditing(false);
@@ -96,7 +98,7 @@ export function ApiKeySetup({ compact = false }: { compact?: boolean }) {
           <input
             id="api-key"
             type="text"
-            className="key-input"
+            className={`key-input ${reveal ? '' : 'masked'}`}
             autoComplete="off"
             autoCapitalize="off"
             autoCorrect="off"
@@ -107,6 +109,10 @@ export function ApiKeySetup({ compact = false }: { compact?: boolean }) {
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
           />
+          {/* 按鈕的字就是動作（顯示／隱藏），所以不另外標「按下」狀態 */}
+          <button type="button" className="linkbtn" aria-controls="api-key" aria-label={reveal ? '隱藏金鑰' : '顯示金鑰'} onClick={() => setReveal((v) => !v)}>
+            {reveal ? '隱藏' : '顯示'}
+          </button>
           <button type="submit" className="btn btn-primary" disabled={status?.tone === 'busy'}>
             測試並儲存
           </button>

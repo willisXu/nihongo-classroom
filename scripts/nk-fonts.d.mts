@@ -35,6 +35,7 @@ export interface GroupFile {
 
 export declare const FAMILIES: FontFamilyConfig[];
 export declare const BASE_GROUPS: Record<'split' | 'whole', [string, [number, number][]][]>;
+export declare function objectTops(text: string): string[];
 export declare function collectChars(sources: { file: string; text: string }[]): { display: Set<string>; ja: Set<string>; meaning: Set<string> };
 export declare function fontSelectors(css: string, test: (declarations: string) => boolean): SelectorPart[][];
 export declare function hotText(src: string, selectors: SelectorPart[][]): string;

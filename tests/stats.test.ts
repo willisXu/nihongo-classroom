@@ -1,11 +1,12 @@
 // 學習紀錄頁的統計
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  calendar, cardStates, heatLevel, kanaMasterySeries, kanaStates, keyStart, niceMax, retention, studySummary, vocabLearnedSeries, weeklyTotals,
+  calendar, cardCounts, cardStates, heatLevel, kanaMasterySeries, kanaStates, keyStart, niceMax, retention, studySummary, vocabLearnedSeries, weeklyTotals,
 } from '../src/lib/stats';
 import { studyDayKey, DAY_MS } from '../src/lib/date';
+import { activityLines, monthLabels } from '../src/components/Charts';
 import type { CardState } from '../src/lib/srs';
-import { activityStore, kanaDaysStore, kanaStore, missStore, recordKana, snapshotKana, type SrsData } from '../src/state';
+import { activityStore, kanaDaysStore, kanaStore, missStore, recordKana, resetKanaProgress, snapshotKana, type SrsData } from '../src/state';
 
 const NOW = new Date(2026, 9, 13, 12, 0).getTime(); // 2026-10-13（週二）中午
 const key = (daysAgo: number) => studyDayKey(NOW - daysAgo * DAY_MS);
@@ -23,6 +24,23 @@ describe('學習紀錄', () => {
     expect(today.level).toBe(2);
     expect(cal[3][3].future).toBe(true);
     expect(cal[3][0].level).toBe(1); // 10/11 手寫 3 字
+  });
+
+  it('日曆的月份：第一欄只露出上個月的尾巴時讓給下個月；提示一種練習一行', () => {
+    // 2026-10-13 往前 16 週：第一欄是 6/28–7/4（只露出 6 月的尾巴），7 月從下一欄開始 → 第一個標籤讓給 7 月
+    const labels = monthLabels(calendar({}, NOW, 16));
+    expect(labels[0]).toEqual({ col: 1, text: '7月' });
+    expect(labels.map((l) => l.text)).toEqual(['7月', '8月', '9月', '10月']);
+    // 2026-07-21 往前 16 週：第一欄是 4/5–4/11，照常標 4 月
+    const t = new Date(2026, 6, 21, 12).getTime();
+    expect(monthLabels(calendar({}, t, 16))).toEqual([
+      { col: 0, text: '4月' },
+      { col: 4, text: '5月' },
+      { col: 9, text: '6月' },
+      { col: 13, text: '7月' },
+    ]);
+    const lines = activityLines(calendar({ [key(0)]: { kana: 23, review: 15, writing: 7, lesson: 1, tutor: 4 } }, NOW, 1)[0][2]);
+    expect(lines.map((l) => l.text)).toEqual(['練習 50 次', '10/13（二）', '假名 23 題', '單字 15 次', '手寫 7 字', '完成 1 課', 'AI 家教 4 次']);
   });
 
   it('深淺分級：沒學、1–9、10–29、30–59、60 以上', () => {
@@ -55,6 +73,20 @@ describe('學習紀錄', () => {
     expect(s.h[0].key).toBe(key(2));
   });
 
+  it('曲線一定畫到今天：很早以前的日期（手機時間錯了）不會讓曲線停在那之後十年', () => {
+    const v = vocabLearnedSeries({ cards: {}, days: { '2000-01-01': day(4), [key(1)]: day(5) } }, NOW);
+    expect(v[v.length - 1]).toMatchObject({ key: key(0), value: 9 }); // 很早的 4 張也算進累計
+    expect(v.length).toBeLessThanOrEqual(3660);
+    const s = kanaMasterySeries({ '2000-01-01': { h: 7, k: 1 }, [key(0)]: { h: 9, k: 2 } }, NOW);
+    expect(s.h[0].value).toBe(7); // 從更早那一筆接著畫
+    expect(s.h[s.h.length - 1]).toMatchObject({ key: key(0), value: 9 });
+  });
+
+  it('紀錄全都在今天以後（手機時間調快過、跨時區）：曲線是空的，不會出錯', () => {
+    expect(vocabLearnedSeries({ cards: {}, days: { [key(-1)]: day(5) } }, NOW)).toEqual([]);
+    expect(kanaMasterySeries({ [key(-1)]: { h: 3, k: 1 } }, NOW)).toEqual({ h: [], k: [] });
+  });
+
   it('記得的比例：只算最近 30 天的到期複習', () => {
     const srs: SrsData = { cards: {}, days: { [key(0)]: day(0, 10, 1), [key(10)]: day(0, 10, 3), [key(40)]: day(0, 100, 100) } };
     expect(retention(srs, NOW, 30)).toEqual({ rev: 20, forgot: 4, rate: 0.8 });
@@ -67,7 +99,14 @@ describe('學習紀錄', () => {
     expect(s.mature).toBe(1);
     expect(s.young).toBe(1);
     expect(s.learning).toBe(1);
-    expect(s.mature + s.young + s.learning + s.unseen).toBe(776 + 226 + 127 + 128);
+    // 還沒學的照「字」算：1,257 張卡片裡有 103 張是別的牌組重複的字
+    expect(s.unseen).toBe(1154 - 3);
+    expect(s.mature + s.young + s.learning + s.unseen).toBe(1154);
+    // 同一個字在兩個牌組各學一次：只算一個字，看學得比較熟的那一張；總數還是 1,154
+    const both = { 'n5-0370': c({ ivl: 3 }), 'travel-0002': c({ ivl: 30 }) };
+    expect(cardStates(both)).toEqual({ mature: 1, young: 0, learning: 0, unseen: 1153 });
+    // 上面的「學過的單字」照卡片算，和每天新學幾張的曲線一致
+    expect(cardCounts(both)).toEqual({ learned: 2, mature: 1 });
     expect(kanaStates({ 'h:あ': { c: 3, w: 0, s: 3, t: 1 }, 'h:い': { c: 1, w: 1, s: 0, t: 1 }, 'k:ア': { c: 3, w: 0, s: 3, t: 1 } }, 'h')).toEqual({
       mastered: 1,
       practicing: 1,
@@ -97,6 +136,16 @@ describe('每天的假名熟悉度紀錄', () => {
     vi.setSystemTime(new Date(2026, 9, 13, 9, 0));
     recordKana('h:あ', false); // 答錯，連對中斷：不算熟悉了
     expect(kanaDaysStore.get()).toEqual({ '2026-10-12': { h: 1, k: 0 }, '2026-10-13': { h: 0, k: 0 } });
+  });
+
+  it('清除假名測驗紀錄時，曲線也一起清掉', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 9, 13, 9, 0));
+    for (let i = 0; i < 3; i++) recordKana('h:あ', true);
+    expect(kanaDaysStore.get()).toEqual({ '2026-10-13': { h: 1, k: 0 } });
+    resetKanaProgress();
+    expect(kanaStore.get()).toEqual({});
+    expect(kanaDaysStore.get()).toEqual({});
   });
 
   it('打開學習紀錄頁時補記今天；還沒練過假名就不記', () => {

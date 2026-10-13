@@ -127,6 +127,12 @@ export function snapshotKana() {
   kanaDaysStore.set((d) => ({ ...d, [day]: { h, k } }));
 }
 
+/** 清除假名測驗紀錄：連同學習紀錄頁的假名曲線一起清掉，曲線才不會停在舊的數字 */
+export function resetKanaProgress() {
+  kanaStore.reset();
+  kanaDaysStore.reset();
+}
+
 /** 0 = 還沒練，1 = 練習中，2 = 熟悉（連對 3 次） */
 export function kanaLevel(stats: KanaStats, key: string): 0 | 1 | 2 {
   const e = stats[key];
@@ -230,21 +236,24 @@ export const srsStore = createStore<SrsData>('nk.srs', () => ({ cards: {}, days:
   if (!isObj(raw)) return out;
   if (isObj(raw.cards)) {
     for (const [id, v] of Object.entries(raw.cards)) {
-      if (!isObj(v)) continue;
+      // 沒有到期時間的卡片不收：補成 0 的話，下次按「記得」會被排到十年後
+      if (!isObj(v) || typeof v.due !== 'number' || !Number.isFinite(v.due)) continue;
+      const reps = num(v.reps);
       out.cards[id] = {
-        due: num(v.due),
+        due: v.due,
         ivl: num(v.ivl),
         ease: num(v.ease, 2.5),
-        reps: num(v.reps),
+        reps,
         lapses: num(v.lapses),
-        step: num(v.step),
+        // 沒有記到學習階段：複習過的卡片當成已經畢業的複習卡
+        step: num(v.step, reps > 0 ? -1 : 0),
         last: num(v.last),
       };
     }
   }
   if (isObj(raw.days)) {
     for (const [k, v] of Object.entries(raw.days)) {
-      if (isObj(v)) out.days[k] = { reviews: num(v.reviews), fresh: num(v.fresh), rev: num(v.rev), forgot: num(v.forgot) };
+      if (/^\d{4}-\d{2}-\d{2}$/.test(k) && isObj(v)) out.days[k] = { reviews: num(v.reviews), fresh: num(v.fresh), rev: num(v.rev), forgot: num(v.forgot) };
     }
   }
   return out;
@@ -349,7 +358,8 @@ export const usageStore = createStore<TutorUsage>('nk.usage', () => ({ calls: 0,
   return d;
 });
 
-export function addUsage(model: string, input: number, output: number) {
+/** 記下 AI 家教的用量。study：算不算一次學習（測試金鑰不算，不然連續學習天數會多一天） */
+export function addUsage(model: string, input: number, output: number, study = true) {
   usageStore.set((u) => {
     const m = u.byModel[model] ?? { input: 0, output: 0 };
     return {
@@ -359,7 +369,7 @@ export function addUsage(model: string, input: number, output: number) {
       byModel: { ...u.byModel, [model]: { input: m.input + input, output: m.output + output } },
     };
   });
-  logActivity('tutor');
+  if (study) logActivity('tutor');
 }
 
 /* ---------------- 上次匯出備份的時間（提醒用，不放進備份檔） ---------------- */
@@ -372,13 +382,20 @@ export function markExported() {
 /* ---------------- 備份：匯出／匯入（不含 API 金鑰） ---------------- */
 const BACKUP_STORES = [settingsStore, kanaStore, kanaDaysStore, lessonStore, writingStore, srsStore, missStore, activityStore, usageStore];
 
+/** 這個版本的網站寫出的備份格式 */
+const BACKUP_VERSION = 1;
+
 export function exportBackup(): string {
   const data: Record<string, unknown> = {};
   for (const s of BACKUP_STORES) data[s.key] = s.get();
-  return JSON.stringify({ app: 'nihongo-classroom', version: 1, exportedAt: new Date().toISOString(), data }, null, 2);
+  return JSON.stringify({ app: 'nihongo-classroom', version: BACKUP_VERSION, exportedAt: new Date().toISOString(), data }, null, 2);
 }
 
-/** 匯入備份；回傳匯入了幾個項目，格式不對時丟出錯誤訊息 */
+/**
+ * 匯入備份（覆蓋這個瀏覽器的學習紀錄）；回傳匯入了幾類，格式不對時丟出錯誤訊息。
+ * 先檢查整個檔案，有問題就什麼都不改，不會只還原一半；
+ * 備份裡沒有的項目（比較舊的備份還沒有錯題本、假名曲線）清空，不和原本的紀錄混在一起。
+ */
 export function importBackup(text: string): number {
   let parsed: unknown;
   try {
@@ -389,11 +406,20 @@ export function importBackup(text: string): number {
   if (!isObj(parsed) || parsed.app !== 'nihongo-classroom' || !isObj(parsed.data)) {
     throw new Error('這個檔案不是日文自學教室的備份。');
   }
+  if (num(parsed.version, 1) > BACKUP_VERSION) {
+    throw new Error('這個備份是比較新版的網站匯出的。請先重新整理，讓網站更新到最新版，再匯入一次。');
+  }
+  const data = parsed.data;
+  if (BACKUP_STORES.some((s) => s.key in data && !isObj(data[s.key]))) {
+    throw new Error('備份檔的內容有問題（有些資料格式不對），這次沒有匯入任何東西。請用「匯出備份」產生的原始檔案。');
+  }
   let n = 0;
   for (const s of BACKUP_STORES) {
-    if (s.key in parsed.data) {
-      s.load(parsed.data[s.key]);
+    if (s.key in data) {
+      s.load(data[s.key]);
       n++;
+    } else {
+      s.reset();
     }
   }
   return n;

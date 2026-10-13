@@ -3,6 +3,8 @@ dist/
 *.log
 .DS_Store
 Thumbs.db
+# 啟動檔準備網站時的鎖檔（scripts/start-lib.mjs）
+.nk-start.lock
 .vite/
 coverage/
 # 建置時產生的裁切字型（scripts/nk-fonts.mjs）

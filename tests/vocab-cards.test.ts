@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { DECKS } from '../src/data/vocab';
+import { DUPLICATE_OF, unseenWords } from '../src/data/vocab/meta';
 import { deckItemIds, speechText } from '../src/lib/vocab';
 import { voiceRank } from '../src/lib/speech';
 
@@ -62,6 +63,23 @@ describe('全部牌組', () => {
     const withProgress = deckItemIds('all', { [dup.id]: { reps: 2 } });
     expect(withProgress).toContain(dup.id);
     expect(withProgress, '已經學過的字不再當新卡').not.toContain(twin.id);
+  });
+
+  it('重複字清單（首頁、學習紀錄不載入單字資料也能合併計算）和單字資料一致', () => {
+    const first = new Map<string, string>();
+    const expected: Record<string, string> = {};
+    for (const it of ALL) {
+      const key = `${it.kana}|${it.kanji ?? ''}`;
+      const head = first.get(key);
+      if (head) expected[it.id] = head;
+      else first.set(key, it.id);
+    }
+    expect(DUPLICATE_OF).toEqual(expected);
+    // 「全部牌組」能學的新字數，和合併後還沒學的字數一樣
+    expect(unseenWords({})).toBe(deckItemIds('all').length);
+    const dup = Object.keys(DUPLICATE_OF)[0];
+    const progress = { [dup]: { reps: 1 } };
+    expect(unseenWords(progress)).toBe(deckItemIds('all', progress).filter((id) => id !== dup).length);
   });
 
   it('同一個字在不同牌組的寫法一致（假名和中文都相同時，漢字欄位也要相同）', () => {

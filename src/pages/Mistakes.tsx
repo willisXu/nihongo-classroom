@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { vocabById } from '../data/vocab';
 import { clearVocabMiss, kanaStore, logActivity, missStore, settingsStore, srsStore, writingStore } from '../state';
-import { useStore } from '../state/store';
+import { readJSON, useStore } from '../state/store';
 import { vocabMistakes, weakKanaKeys, writingMistakes } from '../lib/mistakes';
 import { romaji } from '../lib/romaji';
 import { speak } from '../lib/speech';
 import { POS_LABEL, VERB_GROUP_LABEL, speechText } from '../lib/vocab';
 import { usePageTitle } from '../lib/title';
+import { focusLost, revealAnswer } from '../lib/flashcard';
 import { PracticeTabs } from '../components/PracticeTabs';
 import { SpeakIcon } from '../components/Speak';
 import { Icon } from '../components/Icon';
@@ -23,6 +24,15 @@ export default function Mistakes() {
   const writing = useStore(writingStore);
   const [drill, setDrill] = useState<string[] | null>(null);
   const [allWords, setAllWords] = useState(false);
+  const drillBtn = useRef<HTMLButtonElement>(null);
+  const vocabHeading = useRef<HTMLHeadingElement>(null);
+
+  // 結束加強練習回到清單時，焦點放回「加強練習」（都練完了就放到單字的標題）
+  const wasDrilling = useRef(false);
+  useEffect(() => {
+    if (wasDrilling.current && !drill && focusLost()) (drillBtn.current ?? vocabHeading.current)?.focus({ preventScroll: true });
+    wasDrilling.current = !!drill;
+  }, [drill]);
 
   const weak = weakKanaKeys(kana);
   const words = vocabMistakes(misses, srs.cards).filter((m) => vocabById(m.id));
@@ -75,11 +85,11 @@ export default function Mistakes() {
 
           <section className="block" aria-labelledby="h-mk-vocab">
             <div className="h2row">
-              <h2 id="h-mk-vocab">
+              <h2 id="h-mk-vocab" ref={vocabHeading} tabIndex={-1}>
                 單字 <span className="pill">{words.length}</span>
               </h2>
               {words.length ? (
-                <button type="button" className="btn btn-primary" onClick={() => setDrill(words.map((w) => w.id))}>
+                <button type="button" className="btn btn-primary" ref={drillBtn} onClick={() => setDrill(words.map((w) => w.id))}>
                   加強練習 <Icon name="arrow-right" size={17} />
                 </button>
               ) : null}
@@ -159,13 +169,32 @@ function VocabDrill({ ids, onClose }: { ids: string[]; onClose: () => void }) {
   const [tally, setTally] = useState({ known: 0, again: 0 });
   const id = queue[0];
   const item = id ? vocabById(id) : undefined;
+  const actionsRef = useRef<HTMLDivElement>(null);
+  const backRef = useRef<HTMLDivElement>(null);
+  const meaningRef = useRef<HTMLParagraphElement>(null);
+  const showRef = useRef<HTMLButtonElement>(null);
+  const doneRef = useRef<HTMLButtonElement>(null);
 
-  // 換卡（或同一張卡再出現）時翻回正面並念一次
+  // 換卡（或同一張卡再出現）時翻回正面並念一次（和單字複習一樣看「自動發音」的設定）
   useEffect(() => {
     setFlipped(false);
     const it = id ? vocabById(id) : undefined;
-    if (it) speak(speechText(it));
+    if (it && readJSON('nk.autoplay') !== false) speak(speechText(it));
   }, [id, turn]);
+
+  // 開始練習時焦點放到「顯示答案」；翻面後把答案捲進畫面、焦點放到答案；練完放到「回錯題本」
+  const shown = useRef<{ flipped: boolean; turn: number } | null>(null);
+  useEffect(() => {
+    const first = shown.current === null;
+    if (!first && shown.current!.flipped === flipped && shown.current!.turn === turn) return;
+    shown.current = { flipped, turn };
+    if (flipped) {
+      revealAnswer(meaningRef.current, actionsRef.current);
+      if (focusLost()) backRef.current?.focus({ preventScroll: true });
+    } else if (focusLost()) {
+      (showRef.current ?? doneRef.current)?.focus({ preventScroll: true });
+    }
+  }, [flipped, turn]);
 
   const answer = useCallback(
     (ok: boolean) => {
@@ -174,6 +203,8 @@ function VocabDrill({ ids, onClose }: { ids: string[]; onClose: () => void }) {
       if (ok) clearVocabMiss(id);
       setQueue((q) => (ok ? q.slice(1) : [...q.slice(1), id]));
       setTally((t) => (ok ? { ...t, known: t.known + 1 } : { ...t, again: t.again + 1 }));
+      // 和換卡一起翻回正面，下一張的答案才不會先閃一下
+      setFlipped(false);
       setTurn((n) => n + 1);
     },
     [id, flipped],
@@ -206,7 +237,7 @@ function VocabDrill({ ids, onClose }: { ids: string[]; onClose: () => void }) {
           練了 {ids.length} 個單字{tally.again ? `（中間有 ${tally.again} 次還是忘了，又多看了幾遍）` : ''}，都按了「記住了」，已經從錯題本拿掉。之後複習時又忘記，會再收進來。
         </p>
         <div className="btn-row">
-          <button type="button" className="btn btn-primary" onClick={onClose}>
+          <button type="button" className="btn btn-primary" ref={doneRef} onClick={onClose}>
             回錯題本
           </button>
           <Link className="btn" to="/review/all">
@@ -236,8 +267,10 @@ function VocabDrill({ ids, onClose }: { ids: string[]; onClose: () => void }) {
         <SpeakIcon text={speechText(item)} label="再聽一次" />
       </div>
       {flipped ? (
-        <div className="flash-back">
-          <p className="f-zh">{item.zh}</p>
+        <div className="flash-back" ref={backRef} tabIndex={-1}>
+          <p className="f-zh" ref={meaningRef}>
+            {item.zh}
+          </p>
           <p className="f-pos">
             {POS_LABEL[item.pos]}
             {item.verbGroup ? ` · ${VERB_GROUP_LABEL[item.verbGroup]}` : ''}
@@ -259,9 +292,9 @@ function VocabDrill({ ids, onClose }: { ids: string[]; onClose: () => void }) {
           {item.note ? <p className="v-note">{item.note}</p> : null}
         </div>
       ) : null}
-      <div className="flash-actions">
+      <div className="flash-actions" ref={actionsRef}>
         {!flipped ? (
-          <button type="button" className="btn btn-primary btn-wide" onClick={() => setFlipped(true)}>
+          <button type="button" className="btn btn-primary btn-wide" ref={showRef} onClick={() => setFlipped(true)}>
             顯示答案 <span className="kbd">空白鍵</span>
           </button>
         ) : (

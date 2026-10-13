@@ -166,6 +166,7 @@ export default function Settings() {
             下載行事曆檔（iPhone、Outlook）
           </button>
         </div>
+        <p className="small">要改時間的話，先到行事曆刪掉原本的行程，再用新的時間加一次。</p>
       </section>
 
       <section className="block" aria-labelledby="h-ai">

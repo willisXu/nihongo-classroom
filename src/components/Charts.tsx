@@ -3,7 +3,7 @@
  * 顏色都用 CSS 變數（tokens.css 的 --heat-*、--series-*），深色模式有自己的一組；
  * 細線條、單一基線、滑過（或點一下）有提示；每張圖下面都有「看數字」的表格，提示不是唯一的讀法。
  */
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import type { CalendarDay, Point } from '../lib/stats';
 
 /* ---------------- 提示框 ---------------- */
@@ -47,11 +47,17 @@ function useTip() {
 }
 
 function TipBox({ tip }: { tip: Tip | null }) {
+  const ref = useRef<HTMLDivElement>(null);
+  // 提示框的中心對著手指／滑鼠，靠邊時往內收：量實際的寬度，不超出圖表（手機上也不會把頁面撐寬）
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!tip || !el) return;
+    const half = el.offsetWidth / 2;
+    el.style.left = `${Math.min(Math.max(tip.x, half), Math.max(half, tip.w - half))}px`;
+  }, [tip]);
   if (!tip) return null;
-  // 提示框寬約 160px：靠邊時往內收，不超出圖表
-  const left = Math.min(Math.max(tip.x, 84), Math.max(84, tip.w - 84));
   return (
-    <div className="viz-tip" style={{ left, top: tip.y }} role="presentation">
+    <div className="viz-tip" ref={ref} style={{ left: tip.x, top: tip.y }} role="presentation">
       {tip.lines.map((l, i) => (
         <p key={i} className={l.strong ? 'strong' : undefined}>
           {l.color ? <span className="viz-key" style={{ background: l.color }} /> : null}
@@ -66,7 +72,9 @@ function TipBox({ tip }: { tip: Tip | null }) {
 export function DataTable({ caption, head, rows }: { caption: string; head: string[]; rows: (string | number)[][] }) {
   return (
     <details className="viz-table">
-      <summary>看數字</summary>
+      <summary>
+        看數字<span className="sr-only">：{caption}</span>
+      </summary>
       {/* 手機上表格比畫面寬時可以左右捲動：捲動的框要能用鍵盤選到 */}
       <div className="viz-table-scroll" tabIndex={0} role="region" aria-label={`${caption}（表格）`}>
         <table>
@@ -109,6 +117,7 @@ const TOP = 16;
 
 export function activityLines(day: CalendarDay): TipLine[] {
   const a = day.act;
+  // 一種練習一行：手機上提示框才不會太寬
   const parts = [
     a.kana ? `假名 ${a.kana} 題` : '',
     a.review ? `單字 ${a.review} 次` : '',
@@ -116,11 +125,25 @@ export function activityLines(day: CalendarDay): TipLine[] {
     a.lesson ? `完成 ${a.lesson} 課` : '',
     a.tutor ? `AI 家教 ${a.tutor} 次` : '',
   ].filter(Boolean);
-  return [
-    { text: a.total ? `練習 ${a.total} 次` : '沒有學習', strong: true },
-    { text: mdw(day.date) },
-    ...(parts.length ? [{ text: parts.join('、') }] : []),
-  ];
+  return [{ text: a.total ? `練習 ${a.total} 次` : '沒有學習', strong: true }, { text: mdw(day.date) }, ...parts.map((text) => ({ text }))];
+}
+
+/**
+ * 日曆上方的月份：標在那個月第一次出現的那一週（週日在那個月）。
+ * 兩個月份靠太近（不到 3 欄）時：第一欄只露出上個月的尾巴，就讓給下個月；其他情況跳過新的月份。
+ */
+export function monthLabels(weeks: CalendarDay[][]): { col: number; text: string }[] {
+  const out: { col: number; text: string }[] = [];
+  weeks.forEach((col, w) => {
+    const m = new Date(col[0].date).getMonth();
+    const prev = w ? new Date(weeks[w - 1][0].date).getMonth() : -1;
+    if (m === prev) return;
+    const label = { col: w, text: `${m + 1}月` };
+    const last = out[out.length - 1];
+    if (!last || w - last.col >= 3) out.push(label);
+    else if (out.length === 1 && last.col === 0) out[0] = label;
+  });
+  return out;
 }
 
 export function Heatmap({ weeks, todayKey, label }: { weeks: CalendarDay[][]; todayKey: string; label: string }) {
@@ -128,14 +151,7 @@ export function Heatmap({ weeks, todayKey, label }: { weeks: CalendarDay[][]; to
   const width = LEFT + weeks.length * STEP;
   const height = TOP + 7 * STEP;
   const byKey = new Map(weeks.flat().map((d) => [d.key, d]));
-  // 月份標在那個月第一次出現的那一週上方（太擠就跳過）
-  const months: { x: number; text: string }[] = [];
-  weeks.forEach((col, w) => {
-    const m = new Date(col[0].date).getMonth();
-    const prev = w ? new Date(weeks[w - 1][0].date).getMonth() : -1;
-    const x = LEFT + w * STEP;
-    if (m !== prev && (!months.length || x - months[months.length - 1].x >= 3 * STEP)) months.push({ x, text: `${m + 1}月` });
-  });
+  const months = monthLabels(weeks).map((m) => ({ x: LEFT + m.col * STEP, text: m.text }));
   const onMove = (e: ReactPointerEvent<SVGSVGElement>) => {
     const key = (e.target as Element).getAttribute?.('data-k');
     const day = key ? byKey.get(key) : undefined;
@@ -282,7 +298,8 @@ export function LineChart({ series, max, unit, label, legend = true }: { series:
   const n = series[0]?.points.length ?? 0;
   const x = (i: number) => (n <= 1 ? (L + W - R) / 2 : L + (i / (n - 1)) * (W - L - R));
   const y = (v: number) => B - (v / max) * (B - T);
-  const ticks = [0, max / 2, max];
+  // 中間那條格線只在剛好是整數時畫（上限 5 的一半是 2.5，標成「3」會對不上）
+  const ticks = Number.isInteger(max / 2) ? [0, max / 2, max] : [0, max];
   const onMove = (e: ReactPointerEvent<SVGRectElement>) => {
     const svg = e.currentTarget.ownerSVGElement;
     if (!svg || !n) return;

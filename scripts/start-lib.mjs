@@ -6,7 +6,7 @@
  */
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { request } from 'node:http';
 import { connect } from 'node:net';
 import { join } from 'node:path';
@@ -152,6 +152,91 @@ export function removeStamp(root) {
     rmSync(join(root, 'node_modules', STAMP_NAME), { force: true });
   } catch {
     // 刪不掉也沒關係，只是下次不會自動重裝
+  }
+}
+
+/** 啟動鎖檔：放在專案資料夾裡，啟動檔安裝套件、建置網站的期間才有 */
+export const LOCK_NAME = '.nk-start.lock';
+/** 拿著鎖的程式每隔這麼久更新一次鎖檔的時間；超過 LOCK_STALE_MS 沒更新，就當作那個程式已經不在了 */
+export const LOCK_HEARTBEAT_MS = 15000;
+export const LOCK_STALE_MS = 60000;
+
+/** 這個程式還在不在（訊號 0 只檢查，不會真的送出） */
+export function processAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return Boolean(err) && err.code === 'EPERM'; // 程式在，只是沒有權限
+  }
+}
+
+/** 鎖檔裡記的程式和鎖檔最後更新的時間；沒有鎖檔回傳 null */
+function lockHolder(file) {
+  try {
+    return { pid: Number.parseInt(readFileSync(file, 'utf8'), 10), at: statSync(file).mtimeMs };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 拿啟動鎖，拿到回傳 true。同時雙擊兩次啟動檔時，只讓第一個安裝套件和建置網站
+ * （兩個一起做會把 node_modules 或 dist 弄壞），另一個等網站開好。
+ * 拿鎖的程式已經結束（當掉、視窗被關掉），或太久沒有更新鎖檔（例如重新開機後程式代號被別的程式用了），就當作沒有人拿。
+ * 寫不了鎖檔（例如資料夾是唯讀的）就不鎖，照舊執行。
+ */
+export function acquireLock(root, pid = process.pid, now = Date.now()) {
+  const file = join(root, LOCK_NAME);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      writeFileSync(file, `${pid}\n`, { flag: 'wx' });
+      return true;
+    } catch (err) {
+      if (!err || err.code !== 'EEXIST') return true;
+    }
+    const holder = lockHolder(file);
+    if (!holder) continue; // 鎖檔剛好被拿掉了：再試一次
+    if (holder.pid === pid) return true;
+    if (processAlive(holder.pid) && now - holder.at < LOCK_STALE_MS) return false;
+    // 舊的鎖：刪掉前再確認一次還是同一個（不要刪到別的視窗剛拿到的鎖）
+    const again = lockHolder(file);
+    if (again && again.pid === holder.pid && again.at === holder.at) {
+      try {
+        rmSync(file, { force: true });
+      } catch {
+        return false;
+      }
+    }
+  }
+  return false;
+}
+
+/** 拿著鎖的期間，定期更新鎖檔的時間，讓其他視窗知道這邊還在忙。回傳停止更新的函式 */
+export function keepLock(root) {
+  const file = join(root, LOCK_NAME);
+  const timer = setInterval(() => {
+    try {
+      const t = new Date();
+      utimesSync(file, t, t);
+    } catch {
+      // 鎖檔不見了也沒關係
+    }
+  }, LOCK_HEARTBEAT_MS);
+  timer.unref();
+  return () => clearInterval(timer);
+}
+
+/** 放開啟動鎖（只刪自己的鎖） */
+export function releaseLock(root, pid = process.pid) {
+  const file = join(root, LOCK_NAME);
+  const holder = lockHolder(file);
+  if (!holder || holder.pid !== pid) return;
+  try {
+    rmSync(file, { force: true });
+  } catch {
+    // 刪不掉的話，別的視窗看到鎖檔太久沒更新，也會當作沒有人拿
   }
 }
 

@@ -30,6 +30,8 @@ async function download(url) {
   // 沒有雜湊的檔（index.html、圖示、manifest）一律向伺服器確認是最新版
   const res = await fetch(url, { cache: isHashed(url) ? 'default' : 'no-cache' });
   if (!res.ok) throw new Error(`下載失敗（${res.status}）：${url}`);
+  // 經過轉址的回應不能拿來回應開網站（瀏覽器會擋下，變成打不開），重新包成一般的回應再存
+  if (res.redirected) return new Response(await res.blob(), { status: res.status, statusText: res.statusText, headers: res.headers });
   return res;
 }
 
@@ -38,7 +40,8 @@ async function precache() {
   const queue = [...URLS];
   const worker = async () => {
     for (let url = queue.shift(); url; url = queue.shift()) {
-      if (await cache.match(url)) continue; // 上次安裝到一半時已經下載好的
+      // 上次安裝到一半時已經下載好的：只沿用檔名含雜湊的檔，index.html 這些重新向伺服器確認
+      if (isHashed(url) && (await cache.match(url))) continue;
       const prev = isHashed(url) ? await caches.match(url) : undefined; // 上一版就有的同一個檔
       if (prev) {
         await cache.put(url, prev);

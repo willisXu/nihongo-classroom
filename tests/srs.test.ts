@@ -46,6 +46,26 @@ describe('srs', () => {
     expect(back.ivl).toBe(5);
   });
 
+  it('always gives hard < good < easy for review cards, even with a very low ease', () => {
+    for (const ease of [MIN_EASE, 1.5, 2.5, 3.2]) {
+      for (const ivl of [1, 2, 3, 5, 8, 13, 40, 200]) {
+        for (const late of [0, 1, 5]) {
+          const due = addDays(studyDayStart(NOW), -late);
+          const c = { due, ivl, ease, reps: 5, lapses: 0, step: -1, last: due - ivl * 86_400_000 };
+          const [h, g, e] = (['hard', 'good', 'easy'] as const).map((grade) => review(c, grade, NOW).ivl);
+          expect(h).toBeGreaterThan(ivl);
+          expect(g).toBeGreaterThan(h);
+          expect(e).toBeGreaterThan(g);
+        }
+      }
+    }
+    // 熟悉係數最低、間隔 2 天：以前「困難」和「普通」都是 3 天
+    const low = { due: studyDayStart(NOW), ivl: 2, ease: MIN_EASE, reps: 5, lapses: 2, step: -1, last: 0 };
+    expect(previewLabel(low, 'hard', NOW)).toBe('3 天');
+    expect(previewLabel(low, 'good', NOW)).toBe('4 天');
+    expect(previewLabel(low, 'easy', NOW)).toBe('5 天');
+  });
+
   it('never lets ease drop below the minimum', () => {
     let c = review(newCard(NOW), 'easy', NOW);
     let t = c.due;

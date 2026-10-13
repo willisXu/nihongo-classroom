@@ -4,7 +4,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { TIMEOUT_MESSAGE, TutorError, callJSON, normalizeApiKey, testConnection, toTutorError as toTutorErrorLazy } from '../src/lib/claude';
 // 錯誤對照表在真正呼叫 API 的模組裡（含 SDK）；claude.ts 的 toTutorError 在 SDK 載入後會交給它
-import { toTutorError } from '../src/lib/claude-api';
+import { STREAM_LIMITS, toTutorError } from '../src/lib/claude-api';
 
 const KEY = 'sk-ant-api03-Ab_cd-EF12';
 
@@ -283,9 +283,37 @@ describe('callJSON (streaming)', () => {
     ctrl.abort();
     const err = await failure(pending);
     expect(err.kind).toBe('aborted');
-    expect(usage).toEqual([]);
+    expect(usage, '已經送出的輸入照樣計費，要記進用量').toEqual([[5, 1]]);
     await new Promise((r) => setTimeout(r, 50));
     expect(closed).toHaveLength(1); // 連線真的關掉了
+  });
+
+  it('stops a stream that stalls after it started, and still reports the billed usage', async () => {
+    handler = (_req, res) => {
+      sseHead(res);
+      sseEvent(res, 'message_start', {
+        type: 'message_start',
+        message: { id: 'm', type: 'message', role: 'assistant', model: 'claude-sonnet-5-5', content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 7, output_tokens: 1 } },
+      });
+      // 之後就沒有任何資料（連線也沒斷）
+    };
+    const saved = STREAM_LIMITS.stallMs;
+    STREAM_LIMITS.stallMs = 200;
+    try {
+      const usage: number[][] = [];
+      const err = await failure(callJSON({ ...base, onUsage: (i, o) => usage.push([i, o]) }));
+      expect(err.kind).toBe('timeout');
+      expect(err.message).toMatch(/太久沒有動靜/);
+      expect(usage).toEqual([[7, 1]]);
+    } finally {
+      STREAM_LIMITS.stallMs = saved;
+    }
+  });
+
+  it('says the chat is too long when the model runs out of context', async () => {
+    handler = (_req, res) => streamReply(res, { text: '{"reply":"', stop: 'model_context_window_exceeded', input: 10, output: 2 });
+    const err = await failure(callJSON(base));
+    expect(err.kind).toBe('too-long');
   });
 
   it('rejects at once when the signal is already aborted', async () => {

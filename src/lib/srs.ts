@@ -86,17 +86,13 @@ export function review(c: CardState, grade: Grade, now: number): CardState {
     n.due = now + RELEARN_STEPS[0];
     return n;
   }
-  let ivl: number;
-  if (grade === 'hard') {
-    n.ease = Math.max(MIN_EASE, c.ease - 0.15);
-    ivl = Math.max(c.ivl + 1, Math.round(c.ivl * 1.2));
-  } else if (grade === 'good') {
-    ivl = Math.max(c.ivl + 1, Math.round((c.ivl + lateDays / 2) * c.ease));
-  } else {
-    n.ease = c.ease + 0.15;
-    ivl = Math.max(c.ivl + 2, Math.round((c.ivl + lateDays) * c.ease * 1.3));
-  }
-  n.ivl = Math.min(MAX_IVL, ivl);
+  // 「普通」至少比「困難」多 1 天、「簡單」至少比「普通」多 1 天（熟悉係數很低時，算出來的間隔可能一樣）
+  const hard = Math.max(c.ivl + 1, Math.round(c.ivl * 1.2));
+  const good = Math.max(hard + 1, Math.round((c.ivl + lateDays / 2) * c.ease));
+  const easy = Math.max(good + 1, Math.round((c.ivl + lateDays) * c.ease * 1.3));
+  if (grade === 'hard') n.ease = Math.max(MIN_EASE, c.ease - 0.15);
+  if (grade === 'easy') n.ease = c.ease + 0.15;
+  n.ivl = Math.min(MAX_IVL, grade === 'hard' ? hard : grade === 'good' ? good : easy);
   n.due = addDays(today, n.ivl);
   return n;
 }

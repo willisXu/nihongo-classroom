@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { DECK_META, metaItemIds } from '../data/vocab/meta';
+import { DECK_META, metaItemIds, unseenWords } from '../data/vocab/meta';
 import { NEW_PER_DAY_OPTIONS, lessonStore, settingsStore, srsStore, updateSettings } from '../state';
 import { useStore } from '../state/store';
 import { deckStats } from '../lib/srs';
@@ -23,7 +23,7 @@ export default function Vocab() {
   const settings = useStore(settingsStore);
   const lessons = useStore(lessonStore);
   const freshToday = srs.days[studyDayKey(now)]?.fresh ?? 0;
-  const newLeft = Math.max(0, settings.newPerDay - freshToday);
+  const newLeft = Math.min(unseenWords(srs.cards), Math.max(0, settings.newPerDay - freshToday));
   const all = deckStats(srs.cards, DECK_META.flatMap(metaItemIds), now);
 
   return (

@@ -3,8 +3,9 @@
  *
  *   1. 檢查 Node.js 版本（22.12 以上）
  *   2. 檢查連接埠 5288：日文自學教室已經在執行 → 直接打開瀏覽器；被別的程式占用 → 說明後結束
- *   3. 套件沒裝好（第一次執行、上次裝到一半、套件有更新、換了電腦）→ 執行 npm ci
- *   4. 建置網站，在 http://localhost:5288 開啟（設定沿用 vite.config.ts）
+ *   3. 拿啟動鎖：另一個視窗正在安裝或建置（雙擊了兩次）→ 等它把網站開好
+ *   4. 套件沒裝好（第一次執行、上次裝到一半、套件有更新、換了電腦）→ 執行 npm ci
+ *   5. 建置網站，在 http://localhost:5288 開啟（設定沿用 vite.config.ts）
  *
  * 這支檔案只用 Node.js 內建模組，套件還沒裝好也能執行；Vite 等套件裝好之後才載入。
  */
@@ -14,10 +15,13 @@ import { fileURLToPath } from 'node:url';
 import {
   MIN_NODE,
   PORT,
+  acquireLock,
   checkPort,
   depsInstalled,
   isSupportedNode,
+  keepLock,
   openBrowser,
+  releaseLock,
   removeStamp,
   runNpmCi,
   writeStamp,
@@ -48,6 +52,38 @@ async function openRunningApp() {
   return 0;
 }
 
+/** 另一個視窗等太久的上限（第一次安裝套件加上建置，網路慢時也夠用） */
+const WAIT_OTHER_MS = 15 * 60 * 1000;
+
+/** 另一個視窗把網站開好了（瀏覽器由那個視窗打開） */
+async function otherWindowDone() {
+  say(
+    '',
+    `日文自學教室已經在另一個視窗開好了：${APP_URL}`,
+    '瀏覽器沒有自動打開的話，請自己在瀏覽器輸入上面的網址。這個視窗可以關掉了。',
+  );
+  await wait(2500);
+  return 0;
+}
+
+/**
+ * 另一個視窗正在安裝套件或建置網站：等它把網站開好（開好時那個視窗會打開瀏覽器）。
+ * 那個視窗沒有開成（出錯、被關掉）的話，拿到鎖、回傳 undefined，由這個視窗接手。
+ */
+async function waitForOtherWindow() {
+  say('另一個日文自學教室的視窗正在準備網站（安裝套件或建置），好了就能用，請稍等…');
+  const deadline = Date.now() + WAIT_OTHER_MS;
+  while (Date.now() < deadline) {
+    await wait(2000);
+    const state = await checkPort(PORT);
+    if (state === 'app') return otherWindowDone();
+    if (state === 'other') return portTaken();
+    if (acquireLock(root)) return undefined;
+  }
+  complain('等了很久，另一個視窗還是沒有把網站開好。請關掉所有日文自學教室的視窗，再雙擊一次啟動檔。');
+  return 1;
+}
+
 function portTaken() {
   complain(
     `連接埠 ${PORT} 已經被別的程式占用，日文自學教室沒辦法啟動。`,
@@ -74,6 +110,24 @@ async function main() {
   const portState = await checkPort(PORT);
   if (portState === 'app') return openRunningApp();
   if (portState === 'other') return portTaken();
+
+  // 同時雙擊了兩次啟動檔：只讓一個視窗安裝和建置，另一個等網站開好
+  step = '等待另一個視窗';
+  const waited = !acquireLock(root);
+  if (waited) {
+    const code = await waitForOtherWindow();
+    if (code !== undefined) return code;
+  }
+  // 另一個視窗是網站開好之後才放開鎖：拿到鎖的前一刻它可能剛好開好了，再確認一次，不要在它底下重新建置
+  const again = await checkPort(PORT);
+  if (again !== 'free') {
+    releaseLock(root);
+    if (again === 'other') return portTaken();
+    return waited ? otherWindowDone() : openRunningApp();
+  }
+  if (waited) say('另一個視窗沒有把網站開起來，改由這個視窗繼續。');
+  const stopKeeping = keepLock(root);
+  process.on('exit', () => releaseLock(root));
 
   step = '安裝套件';
   if (!existsSync(join(root, 'package-lock.json'))) {
@@ -124,6 +178,9 @@ async function main() {
     }
     throw err;
   }
+  // 網站開好了，之後再雙擊啟動檔會看到網站在執行，不需要鎖了
+  stopKeeping();
+  releaseLock(root);
   say(
     '',
     `日文自學教室已經開好了：${APP_URL}`,

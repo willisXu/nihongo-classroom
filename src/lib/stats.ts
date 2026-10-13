@@ -3,7 +3,7 @@
  * 全部從瀏覽器裡的學習紀錄算出來；學習日從凌晨 4 點開始（見 date.ts）。
  */
 import { SEION_CELLS } from '../data/kana';
-import { DECK_META, metaItemIds } from '../data/vocab/meta';
+import { DECK_META, metaItemIds, wordGroups } from '../data/vocab/meta';
 import { kanaLevel, type Activity, type KanaDays, type KanaStats, type SrsData } from '../state';
 import { addDays, studyDayKey, studyDayStart } from './date';
 import type { CardState } from './srs';
@@ -110,11 +110,14 @@ export interface Point {
   value: number;
 }
 
-/** 從 firstKey 到今天的每一天 */
+/** 曲線最多畫幾天（手機時間錯成很早的日期時，曲線還是畫到今天） */
+const MAX_DAYS = 3660;
+
+/** 從 firstKey 到今天的每一天（最多最近 MAX_DAYS 天） */
 function eachDay(firstKey: string, now: number): { key: string; date: number }[] {
   const out: { key: string; date: number }[] = [];
   const today = studyDayStart(now);
-  for (let date = keyStart(firstKey); date <= today && out.length < 3660; date = addDays(date, 1)) {
+  for (let date = Math.max(keyStart(firstKey), addDays(today, -(MAX_DAYS - 1))); date <= today; date = addDays(date, 1)) {
     out.push({ key: studyDayKey(date), date });
   }
   return out;
@@ -126,8 +129,14 @@ export function vocabLearnedSeries(srs: SrsData, now: number): Point[] {
     .filter((k) => srs.days[k].fresh > 0)
     .sort()[0];
   if (!first) return [];
-  let total = 0;
-  return eachDay(first, now).map(({ key, date }) => {
+  const days = eachDay(first, now);
+  // 紀錄全都在今天以後（手機時間曾經調快、往西跨時區）：沒有可以畫的日子
+  if (!days.length) return [];
+  // 畫不到的更早日子（超過 MAX_DAYS 天）也要算進累計
+  let total = Object.keys(srs.days)
+    .filter((k) => k < days[0].key)
+    .reduce((sum, k) => sum + srs.days[k].fresh, 0);
+  return days.map(({ key, date }) => {
     total += srs.days[key]?.fresh ?? 0;
     return { key, date, value: total };
   });
@@ -137,10 +146,17 @@ export function vocabLearnedSeries(srs: SrsData, now: number): Point[] {
 export function kanaMasterySeries(kanaDays: KanaDays, now: number): { h: Point[]; k: Point[] } {
   const first = Object.keys(kanaDays).sort()[0];
   if (!first) return { h: [], k: [] };
-  let last = { h: 0, k: 0 };
+  const days = eachDay(first, now);
+  if (!days.length) return { h: [], k: [] };
+  // 畫不到的更早日子（超過 MAX_DAYS 天）：從那之前最後一筆接著畫
+  const before = Object.keys(kanaDays)
+    .filter((key) => key < days[0].key)
+    .sort()
+    .pop();
+  let last = before ? kanaDays[before] : { h: 0, k: 0 };
   const h: Point[] = [];
   const k: Point[] = [];
-  for (const { key, date } of eachDay(first, now)) {
+  for (const { key, date } of days) {
     last = kanaDays[key] ?? last;
     h.push({ key, date, value: last.h });
     k.push({ key, date, value: last.k });
@@ -161,19 +177,44 @@ export function retention(srs: SrsData, now: number, days: number): { rev: numbe
   return { rev, forgot, rate: rev ? (rev - forgot) / rev : null };
 }
 
-/** 單字卡目前的狀態：熟卡（間隔 21 天以上）、複習中、學習中、還沒學 */
+/**
+ * 單字目前的狀態：熟卡（間隔 21 天以上）、複習中、學習中、還沒學。
+ * 全部照「字」算：同一個字在好幾個牌組只算一次，看學得最熟的那一張
+ * （「全部牌組」裡同一個字也只出一次；加起來就是全部的字數，不會因為在兩個牌組各學一次就變多）。
+ */
 export function cardStates(cards: Record<string, CardState | undefined>) {
   const out = { mature: 0, young: 0, learning: 0, unseen: 0 };
+  for (const group of wordGroups()) {
+    let best = 0; // 0 還沒學、1 學習中、2 複習中、3 熟卡
+    for (const id of group) {
+      const c = cards[id];
+      if (!c || c.reps === 0) continue;
+      best = Math.max(best, c.step >= 0 ? 1 : c.ivl >= 21 ? 3 : 2);
+    }
+    if (best === 3) out.mature++;
+    else if (best === 2) out.young++;
+    else if (best === 1) out.learning++;
+    else out.unseen++;
+  }
+  return out;
+}
+
+/**
+ * 學過幾張單字卡、其中幾張是熟卡。照卡片算，和「學過的單字」曲線（每天新學幾張）一致：
+ * 同一個字在兩個牌組各學一次算兩張。
+ */
+export function cardCounts(cards: Record<string, CardState | undefined>): { learned: number; mature: number } {
+  let learned = 0;
+  let mature = 0;
   for (const d of DECK_META) {
     for (const id of metaItemIds(d)) {
       const c = cards[id];
-      if (!c || c.reps === 0) out.unseen++;
-      else if (c.step >= 0) out.learning++;
-      else if (c.ivl >= 21) out.mature++;
-      else out.young++;
+      if (!c || c.reps === 0) continue;
+      learned++;
+      if (c.step < 0 && c.ivl >= 21) mature++;
     }
   }
-  return out;
+  return { learned, mature };
 }
 
 /** 平假名或片假名（清音 46 個）：熟悉、練習中、還沒練 */

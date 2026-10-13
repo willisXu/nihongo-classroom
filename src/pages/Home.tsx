@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useMemo } from 'react';
 import { LESSON_META as LESSONS } from '../data/lessons/meta';
-import { DECK_META, metaItemIds } from '../data/vocab/meta';
+import { DECK_META, metaItemIds, unseenWords } from '../data/vocab/meta';
 import {
   activityStore, apiKeyStore, kanaLevel, kanaStore, lastExportStore, lessonStore, missStore, settingsStore, srsStore, writingStore,
 } from '../state';
@@ -17,6 +17,7 @@ import { Hanamaru } from '../components/Hanamaru';
 import { SCENARIOS, PURPOSE_LABEL } from '../data/scenarios';
 import { buildPool } from '../lib/kanaQuiz';
 import { usePageTitle } from '../lib/title';
+import { useNow } from '../lib/useNow';
 
 /** 某月第一個週日 13:00（JLPT 在台灣通常是 7 月、12 月的第一個週日） */
 function firstSunday(year: number, monthIndex: number): number {
@@ -40,7 +41,8 @@ const BACKUP_EVERY_DAYS = 14;
 
 export default function Home() {
   usePageTitle(null);
-  const now = Date.now();
+  // 開著過夜、回到分頁時重新取時間：「今天的任務」才會換日
+  const now = useNow();
   const lastExport = useStore(lastExportStore);
   const lessons = useStore(lessonStore);
   const kana = useStore(kanaStore);
@@ -71,7 +73,7 @@ export default function Home() {
       return { deck: d, ...s };
     });
     const freshToday = srs.days[studyDayKey(now)]?.fresh ?? 0;
-    const newLeft = Math.max(0, settings.newPerDay - freshToday);
+    const newLeft = Math.min(unseenWords(srs.cards), Math.max(0, settings.newPerDay - freshToday));
     return { due, seen, perDeck, newLeft };
   }, [srs, settings.newPerDay, now]);
 

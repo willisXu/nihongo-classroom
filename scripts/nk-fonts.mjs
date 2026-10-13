@@ -17,11 +17,12 @@
  * 標題文字如果來自 .tsx 裡的陣列，請用 title: '…' 欄位（DISPLAY_FIELDS），字才會分到那一頁的組。
  * 分錯組不會缺字，只是那一頁要多下載一個檔。
  * AI 家教回覆裡出現的其他漢字，會往下用完整的 Klee One（tokens.css 的字型順序，Tutor 頁才載入）。
- * 同樣的字和字型，裁過的結果沿用快取（node_modules/.cache/nk-fonts）。
+ * 同樣的字、字型和裁字工具版本，裁過的結果沿用快取（node_modules/.cache/nk-fonts）。
  */
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { join, relative, sep } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -46,7 +47,7 @@ export const FAMILIES = [
  */
 const KEEP_FEATURES = ['ccmp', 'locl', 'liga', 'calt', 'kern'];
 
-/** 資料檔裡會用標題字型顯示的欄位（h1–h3 標題、牌組主題、五十音表的字源） */
+/** 資料檔裡會用標題字型顯示的欄位（h1–h3 標題、牌組主題、五十音表的字源）；課文提醒框的印章另外找（lessonBlocks） */
 const DISPLAY_FIELDS = /\b(?:title|headline|topic|ho|ko): '([^']*)'/g;
 /** 每一頁都會顯示的元件：它的標題字一律放進常用組 */
 const EVERYWHERE = ['components/Layout.tsx'];
@@ -64,11 +65,55 @@ function walk(dir) {
 }
 
 /**
+ * 每個物件常值（{…}）第一層的文字：裡面的 {…}、[…] 拿掉，字串整段保留（字串裡的括號不算）。
+ * 給課文資料用，例如 { type: 'callout', label: '注意', items: [...] } → " type: 'callout', label: '注意', items: , "
+ */
+export function objectTops(text) {
+  const out = [];
+  const stack = [];
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    const frame = stack[stack.length - 1];
+    if (c === "'" || c === '"' || c === '`') {
+      let j = i + 1;
+      while (j < text.length && text[j] !== c) j += text[j] === '\\' ? 2 : 1;
+      if (frame) frame.top += text.slice(i, j + 1);
+      i = j;
+    } else if (c === '/' && text[i + 1] === '/') {
+      const nl = text.indexOf('\n', i);
+      if (nl < 0) break;
+      i = nl - 1; // 換行照常算進文字
+    } else if (c === '/' && text[i + 1] === '*') {
+      i = text.indexOf('*/', i + 2) + 1;
+      if (i <= 0) break;
+    } else if (c === '{' || c === '[') stack.push({ open: c, top: '' });
+    else if (c === '}' || c === ']') {
+      const done = stack.pop();
+      if (done?.open === '{') out.push(done.top);
+    } else if (frame) frame.top += c;
+  }
+  return out;
+}
+
+/** 課文資料（data/lessons）裡每個區塊第一層的文字；其他檔沒有 */
+const lessonBlocks = (file, text) => (/(^|[\\/])data[\\/]lessons[\\/]/.test(file) ? objectTops(text) : []);
+const fieldOf = (top, name) => new RegExp(`\\b${name}: '([^']*)'`).exec(top)?.[1] ?? '';
+
+/** 資料檔裡用標題字型顯示的文字：標題欄位，加上課文提醒框的印章文字（callout 的 label，例如「注意」「技巧」） */
+function displayFieldText(file, text) {
+  let out = '';
+  for (const m of text.matchAll(DISPLAY_FIELDS)) out += m[1];
+  for (const top of lessonBlocks(file, text)) if (/\btype: 'callout'/.test(top)) out += fieldOf(top, 'label');
+  return out;
+}
+
+/**
  * 從原始碼找出會顯示的字。sources：[{ file, text }]
  * - display（標題字型）：畫面程式（.tsx）裡的字，加上資料裡當標題顯示的欄位；
  *   課文內文、單字解釋、家教提示詞用的是內文字型，不收。
- * - ja（假名字型）：含假名的一串日文（「は」念「わ」這種中文說明裡夾的「念」不算），加上 kanji 欄位。
- * 兩套都另外收英數字、全形標點和全部假名。
+ * - ja（假名字型）：含假名的一串日文（「は」念「わ」這種中文說明裡夾的「念」不算），加上 kanji 欄位，
+ *   和課文裡單字、對照區塊的小標題（.rowtitle 用假名字型，標題是中文也一樣）。
+ * 兩套都另外收英數字、全形標點和全部假名；假名字型再加上刪節號（課程列表的假名太多時用「…」）。
  */
 export function collectChars(sources) {
   const display = new Set();
@@ -82,11 +127,15 @@ export function collectChars(sources) {
     addRange(set, 0x3000, 0x30ff); // 全形標點、平假名、片假名
     addRange(set, 0xff01, 0xff5e); // 全形英數與標點
   }
+  ja.add('…');
   for (const { file, text } of sources) {
     if (file.endsWith('.tsx')) {
       for (const ch of text) if (ch.codePointAt(0) >= 0x20) display.add(ch);
     }
-    for (const m of text.matchAll(DISPLAY_FIELDS)) for (const ch of m[1]) display.add(ch);
+    for (const ch of displayFieldText(file, text)) display.add(ch);
+    for (const top of lessonBlocks(file, text)) {
+      if (/\btype: '(?:words|pairs)'/.test(top)) for (const ch of fieldOf(top, 'title')) ja.add(ch);
+    }
     if (/(^|[\\/])data[\\/]vocab[\\/]/.test(file)) for (const m of text.matchAll(/\bzh: '([^']+)'/g)) for (const ch of m[1]) meaning.add(ch);
     // 明確是日文的地方：kanji／ja／say 欄位、[[漢字|かな]] 和 {{かな}} 標記、標了讀音的課文片段
     const jaFields = [/\b(?:kanji|ja|say): '([^']+)'/g, /\[\[([^\]]+)\]\]/g, /\{\{([^}]+)\}\}/g, /text: '([^']+)', ruby: /g];
@@ -182,8 +231,7 @@ export function hotText(src, selectors) {
 
 /** 標題字型：這個檔裡真的會用標題字型顯示的字（.tsx 的標題元素＋資料的標題欄位） */
 export function displayHotChars({ file, text }, selectors) {
-  let hot = file.endsWith('.tsx') ? hotText(text, selectors) : '';
-  for (const m of text.matchAll(DISPLAY_FIELDS)) hot += m[1];
+  const hot = (file.endsWith('.tsx') ? hotText(text, selectors) : '') + displayFieldText(file, text);
   return new Set(hot);
 }
 
@@ -194,7 +242,7 @@ export function displayHotChars({ file, text }, selectors) {
  * - split（標題字型、單字解釋）：英數分兩組（空白、標點、數字／英文字母），平假名、片假名各分三段
  *   （あ～さ行、た～は行、ま～わ行），只用到幾個數字或假名的頁面不必下載全部。霞鶩文楷沒有字距微調，分開不影響排版。
  * - whole（假名字型）：Klee One 有假名之間、假名和標點之間的字距微調（kern），只有同一個字型檔裡的字才調得到，
- *   所以假名、全形標點放同一組，英數也是一組，排出來和完整字型一樣。
+ *   所以假名、全形標點（和刪節號）放同一組，英數也是一組，排出來和完整字型一樣。
  */
 export const BASE_GROUPS = {
   split: [
@@ -209,7 +257,7 @@ export const BASE_GROUPS = {
   ],
   whole: [
     ['ascii', [[0x20, 0x7e]]],
-    ['kana', [[0x3000, 0x30ff], [0xff01, 0xff0f], [0xff1a, 0xff20], [0xff3b, 0xff40], [0xff5b, 0xff5e]]],
+    ['kana', [[0x2026, 0x2026], [0x3000, 0x30ff], [0xff01, 0xff0f], [0xff1a, 0xff20], [0xff3b, 0xff40], [0xff5b, 0xff5e]]],
   ],
 };
 
@@ -298,19 +346,51 @@ export function toUnicodeRange(codePoints) {
 
 const fontPath = (fam) => join(ROOT, 'node_modules', fam.pkg, fam.file);
 
-async function subsetCached(subsetFont, font, fontHash, text) {
-  const key = createHash('sha256').update(CACHE_VERSION).update(fontHash).update(KEEP_FEATURES.join()).update(text).digest('hex').slice(0, 32);
+/** 套件的 package.json（有些套件不能直接 require 它的 package.json，所以從進入點往上找） */
+function packageOf(req, name) {
+  for (let dir = dirname(req.resolve(name)); ; dir = dirname(dir)) {
+    const file = join(dir, 'package.json');
+    if (existsSync(file)) {
+      const pkg = JSON.parse(readFileSync(file, 'utf8'));
+      if (pkg.name === name) return { file, version: pkg.version };
+    }
+    if (dirname(dir) === dir) throw new Error(`找不到 ${name} 的 package.json`);
+  }
+}
+
+/** 裁字工具（subset-font 和它用的 HarfBuzz）的版本：工具更新後，快取裡的舊結果就不再沿用 */
+function toolVersions() {
+  const subset = packageOf(createRequire(import.meta.url), 'subset-font');
+  const harfbuzz = packageOf(createRequire(subset.file), 'harfbuzzjs');
+  return `subset-font@${subset.version} harfbuzzjs@${harfbuzz.version}`;
+}
+
+async function subsetCached(subsetFont, tools, font, fontHash, text) {
+  const key = createHash('sha256').update(CACHE_VERSION).update(tools).update(fontHash).update(KEEP_FEATURES.join()).update(text).digest('hex').slice(0, 32);
   const cached = join(CACHE_DIR, `${key}.woff2`);
   if (existsSync(cached)) return readFileSync(cached);
   const out = await subsetFont(font, text, { targetFormat: 'woff2', keepFeatures: KEEP_FEATURES });
-  mkdirSync(CACHE_DIR, { recursive: true });
-  writeFileSync(cached, out);
+  // 先寫到暫存檔再改名：同時有兩個建置、或寫到一半被中斷，都不會留下不完整的快取。
+  // 快取只是加速，寫不進去（例如 Windows 的防毒軟體剛好鎖住檔案）就算了，不要讓建置失敗
+  const tmp = `${cached}.${process.pid}.tmp`;
+  try {
+    mkdirSync(CACHE_DIR, { recursive: true });
+    writeFileSync(tmp, out);
+    renameSync(tmp, cached);
+  } catch {
+    try {
+      rmSync(tmp, { force: true });
+    } catch {
+      // 暫存檔刪不掉也沒關係
+    }
+  }
   return out;
 }
 
 /** 產生裁過的字型和 CSS；回傳統計（給建置訊息用） */
 export async function generateFonts() {
   const { default: subsetFont } = await import('subset-font');
+  const tools = toolVersions();
   const srcDir = join(ROOT, 'src');
   const sources = walk(srcDir).map((p) => ({ file: relative(srcDir, p).split(sep).join('/'), text: readFileSync(p, 'utf8') }));
   const sets = collectChars(sources);
@@ -337,7 +417,7 @@ export async function generateFonts() {
     let bytes = 0;
     for (const [n, g] of groups.entries()) {
       const cps = g.chars.map((ch) => ch.codePointAt(0));
-      const out = await subsetCached(subsetFont, font.buf, font.hash, String.fromCodePoint(...cps));
+      const out = await subsetCached(subsetFont, tools, font.buf, font.hash, String.fromCodePoint(...cps));
       const name = `${fam.prefix}-${n}.woff2`;
       files.set(name, out);
       bytes += out.length;

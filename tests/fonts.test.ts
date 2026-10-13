@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { collectChars, displayHotChars, fontSelectors, groupChars, hotText, toUnicodeRange, type GroupFile } from '../scripts/nk-fonts.mjs';
+import { collectChars, displayHotChars, fontSelectors, groupChars, hotText, objectTops, toUnicodeRange, type GroupFile } from '../scripts/nk-fonts.mjs';
 
 describe('字型瘦身', () => {
   it('標題字型收畫面程式和標題欄位的字，假名字型只收日文片段', () => {
@@ -24,6 +24,30 @@ describe('字型瘦身', () => {
     expect([...meaning]).toEqual(['站']); // 單字解釋的字，標題字型已經有的不重複
     // 建置時傳進來的是相對於 src 的路徑
     expect([...collectChars([{ file: 'data/vocab/travel.ts', text: "{ zh: '機場' }" }]).meaning]).toEqual(['機', '場']);
+  });
+
+  it('課文：單字、對照區塊的小標題收進假名字型，提醒框的印章收進標題字型', () => {
+    const text = `export const lesson = {
+      title: '單字練習',
+      blocks: [
+        { type: 'callout', label: '技巧', items: ['先數拍 [[切手|きって]]'] },
+        { type: 'pairs', title: '有沒有拉長', items: [{ a: { ja: 'おばさん', zh: '阿姨' }, b: { ja: 'おばあさん', zh: '奶奶' } }] },
+        // 標題寫在 items 後面也算；字串裡的括號不影響
+        { type: 'words', items: [{ ja: 'きって', kanji: '切手', zh: '郵票 [1]' }], title: '看清楚、聽清楚' },
+        { type: 'p', text: '說明裡的「讀」不算' },
+      ],
+    };`;
+    const { display, ja } = collectChars([{ file: 'data/lessons/lesson9.ts', text }]);
+    for (const ch of '有沒拉長看清楚聽') expect(ja.has(ch)).toBe(true); // .rowtitle 用假名字型
+    for (const ch of '練讀數') expect(ja.has(ch)).toBe(false); // 段落標題、內文
+    expect(ja.has('…')).toBe(true); // 課程列表的「…」
+    expect(display.has('技')).toBe(true); // 印章
+    const hot = displayHotChars({ file: 'data/lessons/lesson9.ts', text }, []);
+    for (const ch of '技巧單字練習') expect(hot.has(ch)).toBe(true);
+    expect(hot.has('讀')).toBe(false);
+    // 其他資料檔的 label（例如五十音的行名）不是印章
+    expect(collectChars([{ file: 'data/kana.ts', text: "{ type: 'callout', label: '假的' }" }]).display.has('假')).toBe(false);
+    expect(objectTops("{ a: '{x}', b: [1, { c: 2 }], d: 'e' }")).toEqual([' c: 2 ', " a: '{x}', b: , d: 'e' "]);
   });
 
   it('從 CSS 找出用標題字型的元素', () => {
@@ -91,10 +115,10 @@ describe('字型瘦身', () => {
     // 組的順序：英數、平假名、片假名、常用、各檔標題、其餘
     expect([...new Set(groups.map((g) => g.key))]).toEqual(['digits', 'latin', 'hira-1', 'hira-2', 'kata-1', 'kata-3', 'core', 'hot:data/x.ts', 'hot:pages/A.tsx', 'hot:pages/C.tsx', 'rest:pages/A.tsx']);
     // 假名字型：假名和全形標點同一組（字距微調才不會斷掉），英數一組
-    const whole = groupChars(new Set([...'ab1 あぞたアンー、。！Ａ']), [], { base: 'whole' });
+    const whole = groupChars(new Set([...'ab1 あぞたアンー、。！…Ａ']), [], { base: 'whole' });
     expect(whole.map((g) => [g.key, g.chars.join('')])).toEqual([
       ['ascii', ' 1ab'],
-      ['kana', '、。あぞたアンー！'],
+      ['kana', '…、。あぞたアンー！'],
       ['rest:~', 'Ａ'], // 全形英文字母不在任何檔裡：放在其餘組
     ]);
     expect(groups.flatMap((g) => g.chars).sort()).toEqual([...chars].sort()); // 每個字剛好一組

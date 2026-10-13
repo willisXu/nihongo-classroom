@@ -93,7 +93,7 @@ describe('離線快取：要預先下載哪些檔', () => {
 /* ---------------- service worker 的行為（用假的瀏覽器環境執行 sw.js） ---------------- */
 
 type Listener = (event: unknown) => void;
-type Route = { status?: number; body?: string; delay?: number } | 'offline';
+type Route = { status?: number; body?: string; delay?: number; redirected?: boolean } | 'offline';
 
 const LIVE = 'https://example.github.io/nihongo-classroom/';
 const LOCAL = 'http://localhost:5288/';
@@ -108,13 +108,13 @@ const SITE = [
 ];
 
 class FakeCache {
-  entries = new Map<string, { body: string; status: number }>();
+  entries = new Map<string, { body: string; status: number; redirected?: boolean }>();
   async match(url: string) {
     const e = this.entries.get(url);
     return e ? new Response(e.body, { status: e.status }) : undefined;
   }
   async put(url: string, res: Response) {
-    this.entries.set(url, { body: await res.text(), status: res.status });
+    this.entries.set(url, { body: await res.text(), status: res.status, redirected: res.redirected });
   }
 }
 
@@ -153,7 +153,12 @@ function setup(scope: string, routes: Record<string, Route>, site = SITE) {
     cacheModes.set(url, init?.cache);
     const r = routes[url] ?? { status: 404, body: 'not found' };
     if (r === 'offline') return Promise.reject(new TypeError('Failed to fetch'));
-    const res = () => new Response(r.body ?? '', { status: r.status ?? 200 });
+    const res = () => {
+      const out = new Response(r.body ?? '', { status: r.status ?? 200 });
+      // 經過轉址的回應（Response 建構子做不出來，直接改掉）
+      if (r.redirected) Object.defineProperty(out, 'redirected', { value: true });
+      return out;
+    };
     return r.delay ? new Promise<Response>((resolve) => setTimeout(() => resolve(res()), r.delay)) : Promise.resolve(res());
   };
 
@@ -214,6 +219,24 @@ describe('service worker', () => {
     await sw.lifecycle('install');
     expect(sw.fetched).not.toContain(`${LIVE}assets/kana-0-D4.woff2`);
     expect(sw.fetched).toContain(`${LIVE}index.html`); // 沒有雜湊的檔一定重新確認
+  });
+
+  it('上次安裝到一半：已經下載的含雜湊檔沿用，index.html 重新下載', async () => {
+    const sw = setup(LIVE, online(LIVE));
+    const half = new FakeCache();
+    half.entries.set(`${LIVE}index.html`, { body: 'half-installed', status: 200 });
+    half.entries.set(`${LIVE}assets/index-A1.js`, { body: 'main', status: 200 });
+    sw.stores.set(`nk-precache-${buildServiceWorker(SITE).version}`, half);
+    await sw.lifecycle('install');
+    expect(sw.fetched).not.toContain(`${LIVE}assets/index-A1.js`);
+    expect(half.entries.get(`${LIVE}index.html`)?.body).toBe(INDEX_HTML);
+  });
+
+  it('經過轉址的回應重新包過再存（不然開網站時瀏覽器會擋下來）', async () => {
+    const sw = setup(LIVE, { ...online(LIVE), [`${LIVE}index.html`]: { body: INDEX_HTML, redirected: true } });
+    await sw.lifecycle('install');
+    const cache = [...sw.stores.values()][0];
+    expect(cache.entries.get(`${LIVE}index.html`)).toEqual({ body: INDEX_HTML, status: 200, redirected: false });
   });
 
   it('下載失敗會重試一次；兩次都失敗就整個安裝失敗', async () => {

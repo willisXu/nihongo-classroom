@@ -68,6 +68,12 @@ export function foldLine(line: string): string {
   return parts.join('\r\n ');
 }
 
+/**
+ * 行程的代號固定：改了時間再下載一次，匯入行事曆時是更新原本的行程，不會多出一個。
+ * SEQUENCE 是版本號（越新越大），行事曆靠它判斷哪一份比較新。
+ */
+export const REMINDER_UID = 'nihongo-daily-reminder@nihongo-classroom';
+
 /** .ics 檔內容：每天重複的行程，開始時跳提醒 */
 export function reminderIcs({ time, url, now }: ReminderInput): string {
   const { start } = firstSlot(time, now);
@@ -79,7 +85,8 @@ export function reminderIcs({ time, url, now }: ReminderInput): string {
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     'BEGIN:VEVENT',
-    `UID:nihongo-daily-${now}@nihongo-classroom`,
+    `UID:${REMINDER_UID}`,
+    `SEQUENCE:${Math.floor(now / 60_000)}`,
     `DTSTAMP:${stamp}`,
     `DTSTART:${start}`,
     `DURATION:PT${MINUTES}M`,

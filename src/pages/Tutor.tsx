@@ -17,6 +17,7 @@ import { TutorError, callJSON, estimateCost, preloadClaudeApi, toTutorError } fr
 import { learnedKana, suggestedLevel } from '../lib/progress';
 import { speak } from '../lib/speech';
 import { usePageTitle } from '../lib/title';
+import { focusLost } from '../lib/flashcard';
 import { useOnline } from '../lib/pwa';
 import { ApiKeySetup } from '../components/ApiKeySetup';
 import { Segmented, Switch } from '../components/Controls';
@@ -36,6 +37,22 @@ function useLevel(): [TutorLevel, TutorLevel | 'auto'] {
   const lessons = useStore(lessonStore);
   const level = settings.tutorLevel === 'auto' ? suggestedLevel(lessons) : settings.tutorLevel;
   return [level, settings.tutorLevel];
+}
+
+/** 有假名才標成日文（中文或羅馬拼音標成日文，會用日文字型和念法） */
+const hasKana = (text: string) => /[぀-ヿ]/.test(text);
+
+/** 選項標日文的條件：模型說選項是日文（只有漢字的單字也算），或選項裡有假名 */
+const choiceLang = (q: QuizQuestion, c: string) => (q.choiceLang === 'ja' || hasKana(c) ? 'ja' : undefined);
+
+/**
+ * 剛按的按鈕消失（送出換成停止、作答後選項停用…），焦點掉回 body 時，放到下一個該用的地方。
+ * 只在有滑鼠或鍵盤的裝置上把焦點放回輸入框：手機上會把鍵盤叫出來，蓋住剛收到的回覆。
+ */
+function refocus(el: HTMLElement | null | undefined, opts: { textEntry?: boolean } = {}) {
+  if (!el || !focusLost()) return;
+  if (opts.textEntry && !matchMedia('(pointer: fine)').matches) return;
+  el.focus({ preventScroll: true });
 }
 
 /** 呼叫一次 Claude，並把用量記下來（收到回應就計費，之後格式不對或被拒絕也一樣） */
@@ -318,7 +335,19 @@ function Conversation({
   const conversation = useRef(0);
   const stopGuard = useStopGuard();
   const composerRef = useRef<HTMLFormElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const chatHeading = useRef<HTMLHeadingElement>(null);
+  const pickHeading = useRef<HTMLHeadingElement>(null);
   const composing = useRef(false);
+
+  // 選了情境、換情境時，按的按鈕不見了：焦點放到新畫面的標題
+  const shownScenario = useRef(scenario?.id ?? null);
+  useEffect(() => {
+    const id = scenario?.id ?? null;
+    if (shownScenario.current === id) return;
+    shownScenario.current = id;
+    refocus(scenario ? chatHeading.current : pickHeading.current);
+  }, [scenario]);
 
   useEffect(() => {
     writeSession('chat', scenario ? { scenario: scenario.id, entries, history, cost, error, input } : null);
@@ -429,11 +458,15 @@ function Conversation({
     // 上一句沒有得到回覆（出錯、被拒絕或中斷）：新的這句取代它，不要兩句一起送，被拒絕的那句也不會每次都再送一遍
     const last = history[history.length - 1];
     const replace = last?.role === 'user' && last.content !== OPENING_MESSAGE;
+    // AI 還沒開口（開場出錯或按了停止）學生就先說：不送開場的指示，不然這句會被當成「學生還沒說話」，一律回「說得很好」
+    const noOpening = history.length === 1 && last?.content === OPENING_MESSAGE;
     setInput('');
     setEntries((list) => [...(replace && list.length && list[list.length - 1].role === 'me' ? list.slice(0, -1) : list), { role: 'me', text }]);
-    const msgs: Msg[] = [...(replace ? history.slice(0, -1) : history), { role: 'user', content: text }];
+    const msgs: Msg[] = [...(noOpening ? [] : replace ? history.slice(0, -1) : history), { role: 'user', content: text }];
     setHistory(msgs);
     void send(msgs, scenario);
+    // 按「送出」時按鈕會換成「停止」：焦點放回輸入框，接著打下一句
+    requestAnimationFrame(() => refocus(inputRef.current, { textEntry: true }));
   };
 
   const retry = () => {
@@ -455,8 +488,10 @@ function Conversation({
     if (last && last.role === 'user' && last.content !== OPENING_MESSAGE) {
       setHistory(history.slice(0, -1));
       setEntries((list) => (list.length && list[list.length - 1].role === 'me' ? list.slice(0, -1) : list));
-      setInput(last.content);
+      // 等待時已經打了下一句就保留，不要蓋掉
+      setInput((cur) => (cur.trim() ? cur : last.content));
     }
+    requestAnimationFrame(() => refocus(inputRef.current, { textEntry: true }));
   };
 
   if (!scenario) {
@@ -464,7 +499,7 @@ function Conversation({
     return (
       <section aria-labelledby="h-pick">
         <div className="h2row">
-          <h2 id="h-pick" className="h-sub">
+          <h2 id="h-pick" className="h-sub" ref={pickHeading} tabIndex={-1}>
             選一個情境
           </h2>
           <Segmented
@@ -502,7 +537,9 @@ function Conversation({
           <p className="eyebrow">
             {PURPOSE_LABEL[scenario.purpose]} · {LEVEL_LABEL[level]}
           </p>
-          <h2>{scenario.title}</h2>
+          <h2 ref={chatHeading} tabIndex={-1}>
+            {scenario.title}
+          </h2>
           <p className="muted">
             <b>目標</b>　{scenario.goal}
           </p>
@@ -547,7 +584,7 @@ function Conversation({
           ) : (
             <div key={i} className="bubble-row me">
               <div className="bubble me-bubble">
-                <p lang="ja">{e.text}</p>
+                <p lang={hasKana(e.text ?? '') ? 'ja' : undefined}>{e.text}</p>
               </div>
               {e.feedback ? (
                 e.feedback.ok ? (
@@ -563,6 +600,11 @@ function Conversation({
                       </p>
                       {e.feedback.corrected ? <SpeakIcon text={e.feedback.corrected} label="播放更正後的句子" /> : null}
                     </div>
+                    {settings.showReading && e.feedback.reading && e.feedback.reading.replace(/\s/g, '') !== e.feedback.corrected.replace(/\s/g, '') ? (
+                      <p className="b-reading" lang="ja">
+                        {e.feedback.reading}
+                      </p>
+                    ) : null}
                     {e.feedback.explanation ? <p className="fb-why">{e.feedback.explanation}</p> : null}
                   </div>
                 )
@@ -647,6 +689,7 @@ function Conversation({
         </label>
         <textarea
           id="chat-input"
+          ref={inputRef}
           rows={2}
           value={input}
           placeholder="用日文回答；不會說可以先打中文或羅馬拼音"
@@ -733,6 +776,9 @@ function Corrector({ level, isShown }: { level: TutorLevel; isShown: () => boole
   const [results, setResults] = useState<CorrectionItem[]>(saved.results);
   const abort = useAbortOnUnmount();
   const stopGuard = useStopGuard();
+  /** 給螢幕閱讀器念的批改結果（畫面上的結果卡片不會自動念出來） */
+  const [announce, setAnnounce] = useState('');
+  const jaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     writeSession('correct', { ja, meaning, results });
@@ -757,6 +803,7 @@ function Corrector({ level, isShown }: { level: TutorLevel; isShown: () => boole
       });
       if (ctrl.signal.aborted) return;
       setResults((r) => [{ id: Date.now(), input: text, result: res.data }, ...r].slice(0, 10));
+      setAnnounce(`批改完成：${(VERDICT[res.data.verdict] ?? VERDICT.minor).label}。${res.data.corrected}`);
       // 切到別的模式時不出聲
       if (res.data.corrected && isShown()) speak(res.data.corrected);
     } catch (e) {
@@ -766,6 +813,8 @@ function Corrector({ level, isShown }: { level: TutorLevel; isShown: () => boole
         abort.current = null;
         setBusy(false);
       }
+      // 「批改」在等待時停用，焦點會掉：放回句子的輸入框，接著寫下一句
+      requestAnimationFrame(() => refocus(jaRef.current, { textEntry: true }));
     }
   };
 
@@ -789,7 +838,7 @@ function Corrector({ level, isShown }: { level: TutorLevel; isShown: () => boole
         }}
       >
         <label htmlFor="cj">日文句子</label>
-        <textarea id="cj" rows={2} lang="ja" value={ja} onChange={(e) => setJa(e.target.value)} placeholder="例：わたしは たいわんじんです。" />
+        <textarea id="cj" ref={jaRef} rows={2} lang="ja" value={ja} onChange={(e) => setJa(e.target.value)} placeholder="例：わたしは たいわんじんです。" />
         <label htmlFor="cm">想表達的意思（選填）</label>
         <input id="cm" type="text" value={meaning} onChange={(e) => setMeaning(e.target.value)} placeholder="例：我是台灣人。" />
         <div className="btn-row">
@@ -808,6 +857,9 @@ function Corrector({ level, isShown }: { level: TutorLevel; isShown: () => boole
           </p>
         ) : null}
       </form>
+      <p className="sr-only" aria-live="polite">
+        {announce}
+      </p>
 
       {results.map((r) => {
         const v = VERDICT[r.result.verdict] ?? VERDICT.minor;
@@ -852,6 +904,11 @@ function Corrector({ level, isShown }: { level: TutorLevel; isShown: () => boole
                       <button type="button" className="say-inline" lang="ja" onClick={() => speak(a.ja)}>
                         {a.ja}
                       </button>
+                      {settings.showReading && a.reading && a.reading.replace(/\s/g, '') !== a.ja.replace(/\s/g, '') ? (
+                        <span className="small" lang="ja">
+                          {a.reading}
+                        </span>
+                      ) : null}
                       <span className="small">{a.zh}</span>
                     </li>
                   ))}
@@ -980,6 +1037,18 @@ function AiQuiz({ level }: { level: TutorLevel }) {
   const q = questions[idx];
   const finished = questions.length > 0 && idx >= questions.length;
 
+  // 作答後選項停用、按了「下一題」按鈕就不見：焦點分別放到「下一題」、新題目、成績
+  const nextBtn = useRef<HTMLButtonElement>(null);
+  const promptRef = useRef<HTMLParagraphElement>(null);
+  const resultRef = useRef<HTMLParagraphElement>(null);
+  const quizStep = useRef(`${questions.length}:${idx}:${picked}`);
+  useEffect(() => {
+    const step = `${questions.length}:${idx}:${picked}`;
+    if (quizStep.current === step) return;
+    quizStep.current = step;
+    refocus(picked !== null ? nextBtn.current : finished ? resultRef.current : promptRef.current);
+  }, [questions.length, idx, picked, finished]);
+
   return (
     <section className="aiquiz" aria-labelledby="h-aiquiz">
       <div className="h2row">
@@ -1005,7 +1074,7 @@ function AiQuiz({ level }: { level: TutorLevel }) {
       {!questions.length || finished ? (
         <div className="card quiz-start">
           {finished ? (
-            <p className="q-result">
+            <p className="q-result" ref={resultRef} tabIndex={-1}>
               答對 <b>{score}</b>／{questions.length} 題
             </p>
           ) : null}
@@ -1035,7 +1104,9 @@ function AiQuiz({ level }: { level: TutorLevel }) {
               答對 <b>{score}</b>
             </span>
           </div>
-          <p className="aq-prompt">{q.prompt}</p>
+          <p className="aq-prompt" ref={promptRef} tabIndex={-1}>
+            {q.prompt}
+          </p>
           {q.ja ? (
             <div className="aq-ja">
               <span lang="ja">{q.ja}</span>
@@ -1059,19 +1130,25 @@ function AiQuiz({ level }: { level: TutorLevel }) {
                   <span className="n" aria-hidden="true">
                     {i + 1}
                   </span>
-                  <span lang={/[぀-ヿ一-鿿]/.test(c) ? 'ja' : undefined}>{c}</span>
+                  <span lang={choiceLang(q, c)}>{c}</span>
                 </button>
               );
             })}
           </div>
+          {/* 一直留著的播報區：作答後才放進文字，螢幕閱讀器才會念出來 */}
+          <div aria-live="polite">
+            {picked !== null ? (
+              <p className="q-fb">
+                {picked === q.answer ? <span className="ok">正解！</span> : <span className="ng">正確答案是 <span lang={choiceLang(q, q.choices[q.answer])}>{q.choices[q.answer]}</span>。</span>} {q.explanation}
+              </p>
+            ) : null}
+          </div>
           {picked !== null ? (
             <>
-              <p className="q-fb" aria-live="polite">
-                {picked === q.answer ? <span className="ok">正解！</span> : <span className="ng">正確答案是 {q.choices[q.answer]}。</span>} {q.explanation}
-              </p>
               <button
                 type="button"
                 className="btn btn-primary"
+                ref={nextBtn}
                 onClick={() => {
                   setIdx((n) => n + 1);
                   setPicked(null);

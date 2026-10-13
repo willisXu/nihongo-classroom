@@ -25,5 +25,13 @@ export declare function writeStamp(root: string): void;
 export declare function removeStamp(root: string): void;
 export declare function runNpmCi(root: string): Promise<boolean>;
 
+export declare const LOCK_NAME: string;
+export declare const LOCK_HEARTBEAT_MS: number;
+export declare const LOCK_STALE_MS: number;
+export declare function processAlive(pid: number): boolean;
+export declare function acquireLock(root: string, pid?: number, now?: number): boolean;
+export declare function keepLock(root: string): () => void;
+export declare function releaseLock(root: string, pid?: number): void;
+
 export declare function browserCommand(url: string, platform?: string): { command: string; args: string[] };
 export declare function openBrowser(url: string): boolean;

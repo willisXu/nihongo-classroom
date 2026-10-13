@@ -11,10 +11,23 @@ export function isChunkLoadError(err: unknown): boolean {
   return /dynamically imported module|Importing a module script failed|Unable to preload CSS|ChunkLoadError/i.test(msg);
 }
 
+/**
+ * 網站已經存進這台裝置（有 service worker 接手這個分頁）：沒有網路也能重新整理，會開啟存好的最新版。
+ * 離線時舊分頁載不到檔案，多半就是因為新版裝好後把舊版的檔案清掉了。
+ */
+function savedOnDevice(): boolean {
+  return typeof navigator !== 'undefined' && !!navigator.serviceWorker?.controller;
+}
+
+/** 沒有網路，網站也沒有存在這台裝置：重新整理只會看到瀏覽器的離線畫面 */
+function offlineOnly(): boolean {
+  return typeof navigator !== 'undefined' && navigator.onLine === false && !savedOnDevice();
+}
+
 /** 重新整理一次拿新版；30 秒內不重複，避免真的載不到時一直重整。回傳是否已經重新整理 */
 export function reloadOnce(): boolean {
-  // 沒有網路時重新整理只會看到瀏覽器的離線畫面，交給錯誤畫面說明就好
-  if (typeof navigator !== 'undefined' && navigator.onLine === false) return false;
+  // 重新整理也打不開時，交給錯誤畫面說明就好
+  if (offlineOnly()) return false;
   try {
     const last = Number(sessionStorage.getItem(RELOAD_KEY) || 0);
     if (Date.now() - last < 30_000) return false;
@@ -47,7 +60,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
     const { error } = this.state;
     if (!error) return this.props.children;
     const chunk = isChunkLoadError(error);
-    const offline = chunk && navigator.onLine === false;
+    const offline = chunk && offlineOnly();
     const updated = chunk && !offline;
     return (
       <div className="wrap">

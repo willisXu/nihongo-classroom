@@ -38,9 +38,15 @@ export default function Lessons() {
                     {isDone ? <span className="sr-only">（已完成）</span> : null}
                   </span>
                   <span className="lesson-head">{l.headline}</span>
-                  <span className="lesson-kana" lang="ja" aria-label={`新學的字：${l.newKana.join('')}`}>
-                    {l.newKana.slice(0, 26).join(' ')}
-                    {l.newKana.length > 26 ? ' …' : ''}
+                  {/* 外層標日文：寬度不夠時瀏覽器補上的「…」也用假名字型 */}
+                  <span className="lesson-kana" lang="ja">
+                    <span aria-hidden="true">
+                      {l.newKana.slice(0, 26).join(' ')}
+                      {l.newKana.length > 26 ? ' …' : ''}
+                    </span>
+                    <span className="sr-only" lang="zh-Hant-TW">
+                      新學的字：<span lang="ja">{l.newKana.join('')}</span>
+                    </span>
                   </span>
                 </span>
                 <span className="lesson-min">{l.minutes} 分鐘</span>

@@ -15,13 +15,25 @@ export const LEVEL_LABEL: Record<TutorLevel, string> = {
   n4: '初級後半（N4）',
 };
 
-const LEVEL_RULES: Record<TutorLevel, string> = {
-  kana:
-    'The learner has just finished learning hiragana and katakana and knows almost no grammar. Use very short sentences (about 5–12 kana), the most common words for this situation, and です／ます. Write `reply` entirely in hiragana and katakana — no kanji at all.',
-  n5:
-    'The learner is around JLPT N5. Use N5 grammar (です／ます, 〜てください, 〜たいです, 〜ませんか, basic particles) and common vocabulary. You may use common kanji in `reply`; `reading` gives the full kana.',
-  n4:
-    'The learner is around JLPT N4. Use N4 grammar (plain form, 〜たら, 〜と思います, potential form, basic honorific set phrases) and natural vocabulary. Use kanji normally in `reply`; `reading` gives the full kana.',
+/** 學習者的程度（會話、批改共用） */
+const LEVEL_DESC: Record<TutorLevel, string> = {
+  kana: 'The learner has just finished learning hiragana and katakana and knows almost no grammar.',
+  n5: 'The learner is around JLPT N5 (です／ます, 〜てください, 〜たいです, 〜ませんか, basic particles, common vocabulary).',
+  n4: 'The learner is around JLPT N4 (plain form, 〜たら, 〜と思います, potential form, basic honorific set phrases, natural vocabulary).',
+};
+
+/** 寫日文的規則：只會假名的人看不懂漢字，每一個日文欄位（不只是回覆）都只用假名 */
+const SCRIPT_RULE: Record<TutorLevel, string> = {
+  kana: 'Write ALL Japanese you produce — every Japanese field in the JSON, including corrections, suggestions and alternatives — entirely in hiragana and katakana, with no kanji at all.',
+  n5: 'You may use common kanji; every Japanese sentence comes with its full kana reading in the matching reading field.',
+  n4: 'Use kanji normally; every Japanese sentence comes with its full kana reading in the matching reading field.',
+};
+
+/** 會話裡 AI 自己說的話要多長、多難 */
+const SPEECH_RULE: Record<TutorLevel, string> = {
+  kana: 'Use very short sentences (about 5–12 kana), the most common words for this situation, and です／ます.',
+  n5: 'Use N5 grammar and common vocabulary.',
+  n4: 'Use N4 grammar and natural vocabulary.',
 };
 
 /* ---------------- 情境會話 ---------------- */
@@ -29,7 +41,7 @@ export interface ConversationTurn {
   reply: string;
   reading: string;
   translation: string;
-  feedback: { ok: boolean; corrected: string; explanation: string };
+  feedback: { ok: boolean; corrected: string; reading: string; explanation: string };
   suggestions: { ja: string; reading: string; zh: string }[];
   done: boolean;
 }
@@ -38,7 +50,7 @@ export const CONVERSATION_SCHEMA = obj({
   reply: S,
   reading: S,
   translation: S,
-  feedback: obj({ ok: B, corrected: S, explanation: S }),
+  feedback: obj({ ok: B, corrected: S, reading: S, explanation: S }),
   suggestions: arr(obj({ ja: S, reading: S, zh: S })),
   done: B,
 });
@@ -51,7 +63,7 @@ export function conversationSystem(s: Scenario, level: TutorLevel): string {
     `You play: ${s.aiRole}. The learner plays: ${s.learnerRole}.`,
     `The learner's goal: ${s.goal}`,
     '',
-    `Learner level: ${LEVEL_RULES[level]}`,
+    `Learner level: ${LEVEL_DESC[level]} ${SPEECH_RULE[level]} ${SCRIPT_RULE[level]}`,
     '',
     'Rules:',
     '- Stay in character. Keep each reply to one or two short sentences so the learner can follow.',
@@ -59,7 +71,7 @@ export function conversationSystem(s: Scenario, level: TutorLevel): string {
       ? '- You are close friends, so use natural casual speech (plain form), but keep it simple. Never treat the learner\'s です／ます as a mistake. If the learner level says they have only just finished kana, stay with です／ます yourself too, because they have not learned plain forms yet.'
       : '- Use polite です／ます speech appropriate to the situation.',
     '- The learner may answer in Japanese, romaji, or Chinese when stuck. Understand what they mean and continue the scene.',
-    '- `feedback` is only about the learner\'s most recent message. ok=true when it was natural and correct for the situation. When ok=false, `corrected` is the natural Japanese for what they meant (also when they wrote Chinese or romaji), and `explanation` is one or two short, kind sentences in Traditional Chinese (Taiwan) about the key fix. When ok=true, leave corrected and explanation empty.',
+    '- `feedback` is only about the learner\'s most recent message. ok=true when it was natural and correct for the situation. When ok=false, `corrected` is the natural Japanese for what they meant (also when they wrote Chinese or romaji), `reading` is `corrected` written entirely in kana, and `explanation` is one or two short, kind sentences in Traditional Chinese (Taiwan) about the key fix. When ok=true, leave corrected, reading and explanation empty.',
     '- `reading` is `reply` written entirely in hiragana/katakana (no kanji), with a space between phrases (文節) to help a beginner.',
     '- `translation` is a natural Traditional Chinese (Taiwan) translation of `reply`.',
     '- `suggestions`: exactly two short things the learner could say next, at their level, each with Japanese (`ja`), its full kana reading (`reading`) and Chinese (`zh`).',
@@ -69,7 +81,7 @@ export function conversationSystem(s: Scenario, level: TutorLevel): string {
 }
 
 export const OPENING_MESSAGE =
-  '（情境開始。請你先開口說第一句，帶出這個情境。學生還沒說話，所以 feedback.ok 設為 true，corrected 和 explanation 留空。）';
+  '（情境開始。請你先開口說第一句，帶出這個情境。學生還沒說話，所以 feedback.ok 設為 true，corrected、reading 和 explanation 留空。）';
 
 /* ---------------- 句子批改 ---------------- */
 export interface Correction {
@@ -78,7 +90,7 @@ export interface Correction {
   reading: string;
   translation: string;
   issues: { part: string; fix: string; why: string }[];
-  alternatives: { style: string; ja: string; zh: string }[];
+  alternatives: { style: string; ja: string; reading: string; zh: string }[];
   tip: string;
 }
 
@@ -88,37 +100,44 @@ export const CORRECTION_SCHEMA = obj({
   reading: S,
   translation: S,
   issues: arr(obj({ part: S, fix: S, why: S })),
-  alternatives: arr(obj({ style: S, ja: S, zh: S })),
+  alternatives: arr(obj({ style: S, ja: S, reading: S, zh: S })),
   tip: S,
 });
 
 export function correctionSystem(level: TutorLevel): string {
   return [
     'You are a careful, encouraging Japanese teacher for a Taiwanese adult learner (native Traditional Chinese, Taiwan).',
-    `Learner level: ${LEVEL_RULES[level]}`,
+    `Learner level: ${LEVEL_DESC[level]} ${SCRIPT_RULE[level]} Keep the learner\'s meaning and roughly their sentence length; prefer words at their level.`,
     'The learner sends a Japanese sentence they wrote, sometimes followed by the meaning they intended in Chinese. Check it and answer in the JSON format:',
     '- verdict: "correct" (natural and correct), "minor" (understandable but with small mistakes or unnatural wording), or "wrong" (grammar or meaning problems).',
     '- corrected: the most natural correct version that keeps the intended meaning and politeness level. If already correct, repeat it.',
     '- reading: `corrected` written entirely in kana (no kanji), with spaces between phrases.',
     '- translation: a Traditional Chinese (Taiwan) translation of `corrected`.',
     '- issues: one entry per mistake — part (the wrong fragment exactly as written), fix (its replacement), why (one short explanation in Traditional Chinese; name grammar points in Chinese with the Japanese term, e.g. 助詞「を」). Empty when correct.',
-    '- alternatives: one or two other natural ways to say it, each with a Chinese style label such as「較口語」「更禮貌」, the Japanese, and Chinese.',
+    '- alternatives: one or two other natural ways to say it, each with a Chinese style label such as「較口語」「更禮貌」, the Japanese (`ja`), its full kana reading (`reading`), and Chinese (`zh`).',
     '- tip: one short, encouraging learning tip in Traditional Chinese related to this sentence (may be empty).',
     'If the input is not Japanese, set verdict to "wrong", put the Japanese for what they seem to mean in `corrected`, and explain briefly in `issues`.',
   ].join('\n');
 }
 
 /* ---------------- AI 出題 ---------------- */
+/** 選項是哪一種文字：日文（假名或漢字）、中文、羅馬拼音 */
+export type ChoiceLang = 'ja' | 'zh' | 'romaji';
+
 export interface QuizQuestion {
   prompt: string;
   ja: string;
   choices: string[];
+  /** 決定選項用日文還是中文的字型和念法（只有漢字的日文單字，光看字分不出來） */
+  choiceLang: ChoiceLang;
   answer: number;
   explanation: string;
 }
 
 export const QUIZ_SCHEMA = obj({
-  questions: arr(obj({ prompt: S, ja: S, choices: arr(S), answer: I, explanation: S })),
+  questions: arr(
+    obj({ prompt: S, ja: S, choices: arr(S), choiceLang: { type: 'string', enum: ['ja', 'zh', 'romaji'] }, answer: I, explanation: S }),
+  ),
 });
 
 export interface QuizContext {
@@ -134,7 +153,7 @@ export function quizSystem(): string {
     'You write short multiple-choice quizzes for a Taiwanese adult learning Japanese (native Traditional Chinese, Taiwan).',
     'Write exactly 5 questions. Use ONLY the kana and words listed in the learner context; do not introduce new vocabulary.',
     'Question types to mix (follow the requested focus): reading (Japanese → Chinese meaning), meaning (Chinese → choose the Japanese), kana recognition (which kana is pronounced X / which romaji), and — only when the level is n5 or n4 — choosing the right particle in a short sentence built from the listed words.',
-    'Each question: prompt (the question in Traditional Chinese), ja (the Japanese shown with the question, or empty), choices (exactly 4 short options), answer (0-based index of the correct choice), explanation (one short sentence in Traditional Chinese, mention a memory tip when useful).',
+    'Each question: prompt (the question in Traditional Chinese), ja (the Japanese shown with the question, or empty), choices (exactly 4 short options), choiceLang (what the choices are written in: "ja" for Japanese kana or kanji, "zh" for Traditional Chinese, "romaji" for romaji), answer (0-based index of the correct choice), explanation (one short sentence in Traditional Chinese, mention a memory tip when useful).',
     'Distractors must be plausible but clearly wrong; prefer look-alike kana and related words. Vary the position of the correct answer.',
     'Never use kanji when the level is "kana". Prioritise the weak kana and the listed words.',
   ].join('\n');
@@ -158,7 +177,7 @@ const items = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 /** 檢查並清理對「我」那句話的回饋；格式不對就回傳 null */
 export function sanitizeFeedback(raw: unknown): ConversationTurn['feedback'] | null {
   if (!isRec(raw) || typeof raw.ok !== 'boolean') return null;
-  return { ok: raw.ok, corrected: text(raw.corrected), explanation: text(raw.explanation) };
+  return { ok: raw.ok, corrected: text(raw.corrected), reading: text(raw.reading), explanation: text(raw.explanation) };
 }
 
 /** 檢查並清理一則會話回覆；連回覆的句子都沒有就回傳 null */
@@ -168,7 +187,7 @@ export function sanitizeTurn(raw: unknown): ConversationTurn | null {
     reply: raw.reply,
     reading: text(raw.reading),
     translation: text(raw.translation),
-    feedback: sanitizeFeedback(raw.feedback) ?? { ok: true, corrected: '', explanation: '' },
+    feedback: sanitizeFeedback(raw.feedback) ?? { ok: true, corrected: '', reading: '', explanation: '' },
     suggestions: items(raw.suggestions).flatMap((s) =>
       isRec(s) && typeof s.ja === 'string' && s.ja.trim() ? [{ ja: s.ja, reading: text(s.reading), zh: text(s.zh) }] : [],
     ),
@@ -187,10 +206,18 @@ export function sanitizeCorrection(raw: unknown): Correction | null {
     translation: text(raw.translation),
     issues: items(raw.issues).flatMap((i) => (isRec(i) ? [{ part: text(i.part), fix: text(i.fix), why: text(i.why) }] : [])),
     alternatives: items(raw.alternatives).flatMap((a) =>
-      isRec(a) && typeof a.ja === 'string' && a.ja.trim() ? [{ style: text(a.style), ja: a.ja, zh: text(a.zh) }] : [],
+      isRec(a) && typeof a.ja === 'string' && a.ja.trim() ? [{ style: text(a.style), ja: a.ja, reading: text(a.reading), zh: text(a.zh) }] : [],
     ),
     tip: text(raw.tip),
   };
+}
+
+/** 選項的文字：照模型說的；以前存下來的題目沒有這一欄，就從選項猜（有假名是日文、全是英數是拼音，其他當中文） */
+function choiceLangOf(raw: unknown, choices: string[]): ChoiceLang {
+  if (raw === 'ja' || raw === 'zh' || raw === 'romaji') return raw;
+  if (choices.some((c) => /[\u3040-\u30ff]/.test(c))) return 'ja';
+  if (choices.every((c) => /^[\x20-\x7e]+$/.test(c))) return 'romaji';
+  return 'zh';
 }
 
 /** 檢查並清理模型給的題目 */
@@ -212,6 +239,7 @@ export function sanitizeQuiz(raw: unknown): QuizQuestion[] {
       prompt: r.prompt,
       ja: typeof r.ja === 'string' ? r.ja : '',
       choices,
+      choiceLang: choiceLangOf(r.choiceLang, choices),
       answer,
       explanation: typeof r.explanation === 'string' ? r.explanation : '',
     });

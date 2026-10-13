@@ -137,6 +137,16 @@ describe('每天提醒', () => {
     expect(unfolded).toContain(`DESCRIPTION:打開日文自學教室，做完今天的任務：${url}`);
   });
 
+  it('.ics：再下載一次（例如改了時間）是同一個行程的新版，不會多出一個', () => {
+    const first = reminderIcs({ time: '07:05', url, now: morning });
+    const later = reminderIcs({ time: '21:00', url, now: morning + 3 * 86_400_000 });
+    const field = (ics: string, name: string) => new RegExp(`^${name}:(.*)$`, 'm').exec(ics)?.[1].trim();
+    expect(field(first, 'UID')).toBe('nihongo-daily-reminder@nihongo-classroom');
+    expect(field(later, 'UID')).toBe(field(first, 'UID'));
+    expect(Number(field(later, 'SEQUENCE'))).toBeGreaterThan(Number(field(first, 'SEQUENCE')));
+    expect(Number(field(later, 'SEQUENCE'))).toBeLessThan(2 ** 31); // 行事曆程式多半用 32 位元整數存
+  });
+
   it('折行不會把中文字切開，拼回去和原本一樣', () => {
     const line = `DESCRIPTION:${'日文自學教室，'.repeat(12)}`;
     const folded = foldLine(line);

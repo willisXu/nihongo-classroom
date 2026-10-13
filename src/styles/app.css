@@ -177,10 +177,17 @@ main { outline: none; padding-bottom: 32px; }
 .segc button[aria-pressed='true'] { background: var(--accent); color: var(--on-accent); }
 
 .switch { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--ink-2); cursor: pointer; user-select: none; }
-.switch input { appearance: none; -webkit-appearance: none; width: 34px; height: 20px; border-radius: 999px; background: var(--line); position: relative; cursor: pointer; margin: 0; transition: background 0.2s; flex: none; }
-.switch input::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--knob); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25); transition: transform 0.2s; }
-.switch input:checked { background: var(--accent); }
-.switch input:checked::after { transform: translateX(14px); }
+/* 關閉時是外框加小圓點（和背景至少 3:1，看得出是開關、也看得出是關的），打開時整個填滿主色 */
+.switch input {
+  appearance: none; -webkit-appearance: none; width: 34px; height: 20px; border-radius: 999px; background: var(--sheet); box-shadow: inset 0 0 0 1.5px var(--ink-3);
+  position: relative; cursor: pointer; margin: 0; transition: background 0.2s, box-shadow 0.2s; flex: none;
+}
+.switch input::after {
+  content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--ink-3);
+  transform: scale(0.625); transition: transform 0.2s, background 0.2s;
+}
+.switch input:checked { background: var(--accent); box-shadow: none; }
+.switch input:checked::after { transform: translateX(14px); background: var(--knob); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25); }
 
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
 select, input[type='text'], input[type='search'], input[type='password'], input[type='time'], textarea {
@@ -259,7 +266,8 @@ select:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 .lesson-body { display: grid; gap: 2px; min-width: 0; }
 .lesson-title { font-family: var(--font-display); font-weight: 700; font-size: 18px; }
 .lesson-head { font-size: 14.5px; color: var(--ink-2); }
-.lesson-kana { font-size: 15px; color: var(--ink-3); letter-spacing: 0.02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* position: relative：裡面給讀螢幕軟體的隱藏文字（.sr-only）才會被裁在框內，不會撐出橫向捲軸 */
+.lesson-kana { position: relative; font-size: 15px; color: var(--ink-3); letter-spacing: 0.02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lesson-min { font-size: 13px; color: var(--ink-3); white-space: nowrap; }
 
 /* ============ 課程內容 ============ */
@@ -572,7 +580,8 @@ table.jlpt { min-width: 560px; }
 .steps { margin: 0; padding-left: 1.3em; display: grid; gap: 4px; font-size: 15px; }
 .key-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .key-form input { flex: 1 1 260px; font-family: ui-monospace, Consolas, monospace; }
-.key-input { -webkit-text-security: disc; }
+/* 金鑰預設遮起來，按「顯示」才看得到 */
+.key-input.masked { -webkit-text-security: disc; }
 .file-input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: 2px; }
 .confirm-row { background: var(--mark-soft); border-radius: 8px; padding: 8px 12px; }
 .key-row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; font-size: 14px; }
@@ -719,8 +728,10 @@ table.jlpt { min-width: 560px; }
   .chart-layout, .practice-layout, .write-layout, .home-grid { grid-template-columns: minmax(0, 1fr); }
   .detail {
     position: fixed; left: 0; right: 0; bottom: 0; top: auto; z-index: 40; border-radius: 16px 16px 0 0; border-top: 1.5px solid var(--grid);
-    padding: 14px 16px calc(80px + env(safe-area-inset-bottom, 0px)); max-height: 62vh; overflow: auto; box-shadow: 0 -10px 30px -12px var(--scrim);
+    padding: 14px 16px calc(16px + env(safe-area-inset-bottom, 0px)); max-height: 62vh; overflow: auto; box-shadow: 0 -10px 30px -12px var(--scrim);
   }
+  .detail:focus { outline: none; }
+  .detail:focus-visible { outline: 2px solid var(--accent); outline-offset: -4px; }
   .detail:not(.open) { display: none; }
   .d-close { display: inline-grid; }
 }
@@ -733,6 +744,8 @@ table.jlpt { min-width: 560px; }
   .bb-item { display: grid; justify-items: center; gap: 0; padding: 5px 2px; font-size: 11.5px; color: var(--ink-3); text-decoration: none; border-radius: 8px; }
   .bb-item.active { color: var(--accent); background: var(--accent-soft); }
   main { padding-bottom: 88px; }
+  /* 五十音表的說明面板放在底部選單上面，不蓋住選單（下緣稍微塞進選單底下，選單高一點矮一點都不會露縫） */
+  .detail { bottom: calc(56px + env(safe-area-inset-bottom, 0px)); z-index: 29; padding-bottom: 18px; max-height: calc(62vh - 56px); }
   .vnote-toast { bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
   .site-foot { padding-bottom: calc(90px + env(safe-area-inset-bottom, 0px)); }
   .meter-label, .subnav-label { display: none; }

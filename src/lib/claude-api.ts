@@ -3,6 +3,7 @@
  * 所以只由 claude.ts 在第一次呼叫時動態載入，平常不拖慢網站。
  */
 import Anthropic from '@anthropic-ai/sdk';
+import type { MessageStream } from '@anthropic-ai/sdk/lib/MessageStream';
 import { INVISIBLE, TIMEOUT_MESSAGE, TutorError, type JsonCall, type JsonResult } from './claude';
 
 /* ---------------- 呼叫 API ---------------- */
@@ -14,13 +15,54 @@ import { INVISIBLE, TIMEOUT_MESSAGE, TutorError, type JsonCall, type JsonResult 
  */
 const CONNECT_TIMEOUT_MS = 30_000;
 
-function client(apiKey: string) {
+/**
+ * stallMs：開始回應之後，超過這麼久沒有收到任何資料就當成卡住並停止
+ * （例如手機休眠後連線默默斷掉，不會出錯，畫面卻一直顯示「正在回覆」）。
+ * testMs：測試金鑰最多等多久（「測試並儲存」沒有取消鍵）。測試時會調短。
+ */
+export const STREAM_LIMITS = { stallMs: 60_000, testMs: 45_000 };
+
+const STALL_MESSAGE = '回覆太久沒有動靜，已經停止。請確認網路連線後再試一次。';
+
+function client(apiKey: string, maxRetries = 2) {
   return new Anthropic({
     apiKey: apiKey.replace(INVISIBLE, ''),
     dangerouslyAllowBrowser: true,
-    maxRetries: 2,
+    maxRetries,
     timeout: CONNECT_TIMEOUT_MS,
   });
+}
+
+/**
+ * 等串流結束，拿到完整回覆。另外處理兩件事：
+ * - 開始回應後太久沒有資料（或超過 limitMs）就停止，回報逾時
+ * - 中途取消或出錯時，已經送出的輸入（和產生到一半的輸出）照樣計費：把用量回報出去
+ */
+async function finish(stream: MessageStream, onUsage?: (input: number, output: number) => void, limitMs?: number): Promise<Anthropic.Message> {
+  let stalled = false;
+  let idle: ReturnType<typeof setTimeout> | undefined;
+  const stop = () => {
+    stalled = true;
+    stream.abort();
+  };
+  const kick = () => {
+    clearTimeout(idle);
+    idle = setTimeout(stop, STREAM_LIMITS.stallMs);
+  };
+  stream.on('connect', kick);
+  stream.on('streamEvent', kick);
+  const limit = limitMs ? setTimeout(stop, limitMs) : undefined;
+  try {
+    return await stream.finalMessage();
+  } catch (e) {
+    const usage = stream.currentMessage?.usage;
+    if (usage) onUsage?.(usage.input_tokens, usage.output_tokens);
+    if (stalled) throw new TutorError(STALL_MESSAGE, 'timeout');
+    throw toTutorError(e);
+  } finally {
+    clearTimeout(idle);
+    clearTimeout(limit);
+  }
 }
 
 function joinText(message: Anthropic.Message): string {
@@ -32,30 +74,27 @@ function joinText(message: Anthropic.Message): string {
 
 /** 呼叫 Claude 並要求回傳符合 schema 的 JSON */
 export async function callJSON<T>(req: JsonCall): Promise<JsonResult<T>> {
-  let res: Anthropic.Message;
-  try {
-    res = await client(req.apiKey)
-      .messages.stream(
-        {
-          model: req.model,
-          // 這是上限不是用量；模型思考的 token 也算在內，所以給寬一點
-          max_tokens: req.maxTokens ?? 4000,
-          system: req.system,
-          messages: req.messages,
-          output_config: {
-            effort: req.effort ?? 'low',
-            format: { type: 'json_schema', schema: req.schema },
-          },
-        },
-        { signal: req.signal },
-      )
-      .finalMessage();
-  } catch (e) {
-    throw toTutorError(e);
-  }
+  const stream = client(req.apiKey).messages.stream(
+    {
+      model: req.model,
+      // 這是上限不是用量；模型思考的 token 也算在內，所以給寬一點
+      max_tokens: req.maxTokens ?? 4000,
+      system: req.system,
+      messages: req.messages,
+      output_config: {
+        effort: req.effort ?? 'low',
+        format: { type: 'json_schema', schema: req.schema },
+      },
+    },
+    { signal: req.signal },
+  );
+  const res = await finish(stream, req.onUsage);
   req.onUsage?.(res.usage.input_tokens, res.usage.output_tokens);
   if (res.stop_reason === 'refusal') throw new TutorError('這個請求被模型拒絕了，換個說法再試一次。', 'refusal');
   if (res.stop_reason === 'max_tokens') throw new TutorError('回覆太長被截斷了，請再試一次。', 'invalid');
+  if (res.stop_reason === 'model_context_window_exceeded') {
+    throw new TutorError('對話太長了，超過模型能讀的長度。請按「重新開始」重新開始這個情境。', 'too-long');
+  }
   let data: T;
   try {
     data = JSON.parse(joinText(res)) as T;
@@ -67,20 +106,15 @@ export async function callJSON<T>(req: JsonCall): Promise<JsonResult<T>> {
 
 /** 用一個很小的請求確認金鑰可用：只要 API 回應成功就算通過 */
 export async function testConnection(apiKey: string, model: string): Promise<{ greeting: string; input: number; output: number }> {
-  try {
-    const res = await client(apiKey)
-      .messages.stream({
-        model,
-        max_tokens: 1024,
-        system: 'Reply with one short Japanese greeting only.',
-        messages: [{ role: 'user', content: '請用一句日文跟我打招呼。' }],
-      })
-      .finalMessage();
-    const text = joinText(res).trim();
-    return { greeting: text.slice(0, 60) || 'こんにちは', input: res.usage.input_tokens, output: res.usage.output_tokens };
-  } catch (e) {
-    throw toTutorError(e);
-  }
+  const stream = client(apiKey, 1).messages.stream({
+    model,
+    max_tokens: 1024,
+    system: 'Reply with one short Japanese greeting only.',
+    messages: [{ role: 'user', content: '請用一句日文跟我打招呼。' }],
+  });
+  const res = await finish(stream, undefined, STREAM_LIMITS.testMs);
+  const text = joinText(res).trim();
+  return { greeting: text.slice(0, 60) || 'こんにちは', input: res.usage.input_tokens, output: res.usage.output_tokens };
 }
 
 /* ---------------- 錯誤訊息 ---------------- */

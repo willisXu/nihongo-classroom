@@ -14,6 +14,7 @@ import { SpeakIcon } from '../components/Speak';
 import { Switch } from '../components/Controls';
 import { Icon } from '../components/Icon';
 import { usePageTitle } from '../lib/title';
+import { focusLost, revealAnswer } from '../lib/flashcard';
 
 const GRADE_LABEL: Record<Grade, string> = { again: '忘記了', hard: '有點難', good: '記得', easy: '很簡單' };
 
@@ -58,6 +59,10 @@ function Review({ deck, onRestart }: { deck: string; onRestart: () => void }) {
   const [now, setNow] = useState(Date.now());
   const [turn, setTurn] = useState(0);
   const actionsRef = useRef<HTMLDivElement>(null);
+  const backRef = useRef<HTMLDivElement>(null);
+  const meaningRef = useRef<HTMLParagraphElement>(null);
+  const showRef = useRef<HTMLButtonElement>(null);
+  const doneRef = useRef<HTMLHeadingElement>(null);
 
   const item = currentId ? vocabById(currentId) : undefined;
   const card: CardState | undefined = currentId ? srsStore.get().cards[currentId] : undefined;
@@ -74,10 +79,20 @@ function Review({ deck, onRestart }: { deck: string; onRestart: () => void }) {
     if (it && autoplayRef.current) speak(speechText(it));
   }, [currentId, turn]);
 
-  // 手機上翻面後，把評分按鈕捲進畫面
+  // 翻面後把答案捲進畫面（手機上不能被固定在下方的評分按鈕蓋住）。
+  // 剛按的按鈕消失時，焦點放到答案（螢幕閱讀器會念出來）；評分後放回下一張的「顯示答案」，結束時放到結束畫面的標題
+  const shown = useRef({ flipped, currentId });
   useEffect(() => {
-    if (flipped) actionsRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  }, [flipped]);
+    // 第一次顯示（剛進頁面）不動焦點
+    if (shown.current.flipped === flipped && shown.current.currentId === currentId) return;
+    shown.current = { flipped, currentId };
+    if (flipped) {
+      revealAnswer(meaningRef.current, actionsRef.current);
+      if (focusLost()) backRef.current?.focus({ preventScroll: true });
+    } else if (focusLost()) {
+      (showRef.current ?? doneRef.current)?.focus({ preventScroll: true });
+    }
+  }, [flipped, currentId]);
 
   const grade = useCallback(
     (g: Grade) => {
@@ -94,6 +109,8 @@ function Review({ deck, onRestart }: { deck: string; onRestart: () => void }) {
       if (after.step >= 0 && after.due <= t + LEARN_AHEAD_MS) l = [...l, { id: currentId, due: after.due }];
       setMain(m);
       setLearning(l);
+      // 和換卡一起翻回正面，下一張的答案才不會先閃一下
+      setFlipped(false);
       setDone((d) => ({ cards: new Set(d.cards).add(currentId), total: d.total + 1, again: d.again + (g === 'again' ? 1 : 0) }));
       setCurrentId(pickNext(m, l, t));
       setTurn((n) => n + 1);
@@ -198,7 +215,9 @@ function Review({ deck, onRestart }: { deck: string; onRestart: () => void }) {
         <div className="card review-done">
           {done.total ? (
             <>
-              <h2>這一輪完成了</h2>
+              <h2 ref={doneRef} tabIndex={-1}>
+                這一輪完成了
+              </h2>
               <p>
                 複習了 {done.cards.size} 張卡片、作答 {done.total} 次，其中 {done.total - done.again} 次記得（
                 {Math.round(((done.total - done.again) / done.total) * 100)}%）。
@@ -256,8 +275,10 @@ function Review({ deck, onRestart }: { deck: string; onRestart: () => void }) {
             <SpeakIcon text={speechText(item)} label="再聽一次" />
           </div>
           {flipped ? (
-            <div className="flash-back">
-              <p className="f-zh">{item.zh}</p>
+            <div className="flash-back" ref={backRef} tabIndex={-1}>
+              <p className="f-zh" ref={meaningRef}>
+                {item.zh}
+              </p>
               <p className="f-pos">
                 {POS_LABEL[item.pos]}
                 {item.verbGroup ? ` · ${VERB_GROUP_LABEL[item.verbGroup]}` : ''}
@@ -281,7 +302,7 @@ function Review({ deck, onRestart }: { deck: string; onRestart: () => void }) {
           ) : null}
           <div className="flash-actions" ref={actionsRef}>
             {!flipped ? (
-              <button type="button" className="btn btn-primary btn-wide" onClick={() => setFlipped(true)}>
+              <button type="button" className="btn btn-primary btn-wide" ref={showRef} onClick={() => setFlipped(true)}>
                 顯示答案 <span className="kbd">空白鍵</span>
               </button>
             ) : (

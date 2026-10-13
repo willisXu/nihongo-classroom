@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { DAKUON_ROWS, SEION_ROWS, VOWELS, YOON, kanaInfo, originText } from '../data/kana';
 import type { KanaCell, Script } from '../data/types';
@@ -13,6 +13,10 @@ import { Icon } from '../components/Icon';
 import { PracticeTabs } from '../components/PracticeTabs';
 import { readJSON, writeJSON } from '../state/store';
 import { usePageTitle } from '../lib/title';
+import { useMediaQuery } from '../lib/useMediaQuery';
+
+/** 窄螢幕（和 app.css 的 900px 一致）：說明是從畫面下方升起的面板，不是旁邊的欄位 */
+const SHEET_QUERY = '(max-width: 900px)';
 
 interface ChartPrefs {
   script: Script;
@@ -37,6 +41,65 @@ export default function Chart() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const writing = useStore(writingStore);
   const s = prefs.script;
+  const sheetMode = useMediaQuery(SHEET_QUERY);
+  const sheetRef = useRef<HTMLElement>(null);
+  const mainRef = useRef<HTMLDivElement>(null);
+  /** 打開說明的那一格（關掉說明時焦點回到這裡） */
+  const opener = useRef<HTMLButtonElement | null>(null);
+  /** 每點一格加一：只有點格子時才捲動、移動焦點（切換平假名、片假名時不要） */
+  const [picks, setPicks] = useState(0);
+  const sheetShown = sheetOpen && sheetMode;
+
+  // 面板打開時，表格下方留出面板的高度，最下面幾行才捲得到面板上面
+  useLayoutEffect(() => {
+    const sheet = sheetRef.current;
+    const main = mainRef.current;
+    if (!sheet || !main || !sheetShown) return;
+    const fit = () => {
+      main.style.paddingBottom = `${sheet.offsetHeight}px`;
+    };
+    fit();
+    const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(fit) : null;
+    ro?.observe(sheet);
+    return () => {
+      ro?.disconnect();
+      main.style.paddingBottom = '';
+    };
+  }, [sheetShown]);
+
+  // 點了一格：那一格被面板蓋住就往上捲，焦點移到面板（讀螢幕軟體會念出說明）
+  useLayoutEffect(() => {
+    const sheet = sheetRef.current;
+    const cell = opener.current;
+    if (!picks || !sheetShown || !sheet) return;
+    if (cell?.isConnected) {
+      const over = cell.getBoundingClientRect().bottom - (sheet.getBoundingClientRect().top - 12);
+      const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (over > 0) window.scrollBy({ top: over, behavior: reduce ? 'auto' : 'smooth' });
+    }
+    sheet.focus({ preventScroll: true });
+  }, [picks, sheetShown]);
+
+  const closeSheet = () => {
+    setSheetOpen(false);
+    // 焦點在面板裡（或已經掉了）才把它送回剛才那一格
+    const active = document.activeElement;
+    if (opener.current?.isConnected && (!active || active === document.body || sheetRef.current?.contains(active))) {
+      opener.current.focus({ preventScroll: true });
+    }
+  };
+
+  // Esc 關掉面板
+  useEffect(() => {
+    if (!sheetShown) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      e.preventDefault();
+      closeSheet();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
 
   const update = (p: Partial<ChartPrefs>) => {
     const next = { ...prefs, ...p };
@@ -48,10 +111,12 @@ export default function Chart() {
     }
   };
 
-  const pick = (ch: string) => {
+  const pick = (ch: string, btn: HTMLButtonElement) => {
     setSel(ch);
     speak(ch);
+    opener.current = btn;
     setSheetOpen(true);
+    setPicks((n) => n + 1);
   };
 
   const cellBtn = (c: KanaCell, opts: { ghost?: boolean; yoon?: boolean } = {}) => {
@@ -63,7 +128,7 @@ export default function Chart() {
         type="button"
         className={`gj-cell ${opts.yoon ? 'is-yoon' : ''} ${writing[ch] ? 'is-written' : ''}`}
         aria-pressed={sel === ch}
-        onClick={() => pick(ch)}
+        onClick={(e) => pick(ch, e.currentTarget)}
       >
         {g && prefs.ghost ? (
           <span className="gj-ghost" aria-hidden="true">
@@ -105,7 +170,7 @@ export default function Chart() {
       </div>
 
       <div className="chart-layout">
-        <div className={`chart-main ${prefs.romaji ? '' : 'no-romaji'}`}>
+        <div ref={mainRef} className={`chart-main ${prefs.romaji ? '' : 'no-romaji'}`}>
           <h2 className="h-sub">清音</h2>
           <div className="gojuon">
             <div aria-hidden="true" />
@@ -160,8 +225,15 @@ export default function Chart() {
           </div>
         </div>
 
-        <aside className={`detail card ${sheetOpen ? 'open' : ''}`} aria-live="polite">
-          <Detail ch={sel} onClose={() => setSheetOpen(false)} written={writing[sel]?.n ?? 0} />
+        {/* 寬螢幕：旁邊的欄位，換字時讀螢幕軟體念出來；窄螢幕：面板打開時焦點移進來，不必另外念 */}
+        <aside
+          ref={sheetRef}
+          className={`detail card ${sheetOpen ? 'open' : ''}`}
+          aria-label="這個字的說明"
+          aria-live={sheetMode ? undefined : 'polite'}
+          tabIndex={sheetMode ? -1 : undefined}
+        >
+          <Detail ch={sel} onClose={closeSheet} written={writing[sel]?.n ?? 0} />
         </aside>
       </div>
     </div>

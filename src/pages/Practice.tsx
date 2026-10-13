@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { LESSON_META as LESSONS, lessonMetaById as lessonById } from '../data/lessons/meta';
 import { SEION_ROWS } from '../data/kana';
-import { kanaLevel, kanaStore, lessonStore, recordKana, type KanaStats } from '../state';
+import { kanaLevel, kanaStore, lessonStore, recordKana, resetKanaProgress, type KanaStats } from '../state';
 import { readJSON, useStore, writeJSON } from '../state/store';
 import {
   ALL_ROW_IDS, ROW_CHOICES, SEI_ROW_IDS, buildPool, hintFor, makeOptions, normalizeRows, pickItem,
@@ -58,6 +58,12 @@ export default function Practice() {
     [focus, fullPool, prefs],
   );
   const focusLeft = focus ? pool.filter((it) => (stats[it.key]?.s ?? 0) < 3).length : 0;
+  // 聽音題不出 を、ヲ（和 お、オ 同音）：錯題裡還有的話，要說清楚，不能說「都練熟了」
+  const listenSkipped =
+    focus && prefs.mode === 'listen'
+      ? focus.filter((k) => (stats[k]?.s ?? 0) < 3 && !fullPool.some((it) => it.key === k)).map((k) => k.slice(k.indexOf(':') + 1))
+      : [];
+  const sameSound = listenSkipped.map((ch) => (ch === 'ヲ' ? 'オ' : 'お'));
   const [q, setQ] = useState<Q>({ item: null, options: [], picked: null, hint: false });
   const [round, setRound] = useState({ n: 0, right: 0, streak: 0 });
   const lastKey = useRef<string | null>(null);
@@ -179,6 +185,13 @@ export default function Practice() {
               <p>
                 <b>錯題練習</b>：只出答錯過、還沒連對 3 次的字
                 {focus.length ? `（還有 ${focusLeft} 個）` : ''}。連對 3 次就會從<Link to="/mistakes">錯題本</Link>拿掉。
+                {listenSkipped.length ? (
+                  <>
+                    {' '}
+                    <span lang="ja">{listenSkipped.join('、')}</span> 和 <span lang="ja">{sameSound.join('、')}</span>{' '}
+                    同音，聽音題不出，要用「看字選拼音」練。
+                  </>
+                ) : null}
               </p>
               <button type="button" className="linkbtn" onClick={() => setFocus(null)}>
                 回到一般測驗
@@ -259,12 +272,24 @@ export default function Practice() {
             </div>
             {!item ? (
               focus ? (
-                <div className="q-fb">
-                  <p>{focus.length ? '錯題都練熟了！每個字都連對 3 次了。' : '目前沒有答錯的字。'}</p>
-                  <button type="button" className="btn btn-primary" onClick={() => setFocus(null)}>
-                    回到一般測驗
-                  </button>
-                </div>
+                listenSkipped.length ? (
+                  <div className="q-fb">
+                    <p>
+                      聽音題能出的錯題都練熟了。剩下的 <span lang="ja">{listenSkipped.join('、')}</span> 和{' '}
+                      <span lang="ja">{sameSound.join('、')}</span> 同音，換成「看字選拼音」來練。
+                    </p>
+                    <button type="button" className="btn btn-primary" onClick={() => setPrefs((p) => ({ ...p, mode: 'see' }))}>
+                      換成看字選拼音
+                    </button>
+                  </div>
+                ) : (
+                  <div className="q-fb">
+                    <p>{focus.length ? '錯題都練熟了！每個字都連對 3 次了。' : '目前沒有答錯的字。'}</p>
+                    <button type="button" className="btn btn-primary" onClick={() => setFocus(null)}>
+                      回到一般測驗
+                    </button>
+                  </div>
+                )
               ) : (
                 <p className="q-fb">範圍太小了，請在上面多選幾行。</p>
               )
@@ -385,7 +410,7 @@ export default function Practice() {
                   type="button"
                   className="btn-danger"
                   onClick={() => {
-                    kanaStore.reset();
+                    resetKanaProgress();
                     setConfirmReset(false);
                   }}
                 >
@@ -410,12 +435,19 @@ export default function Practice() {
 function MasteryGrid({ stats, script }: { stats: KanaStats; script: 'h' | 'k' }) {
   const keys = script === 'h' ? HIRA_KEYS : KATA_KEYS;
   const n = countMastered(stats, keys);
+  // 顏色深淺看不到的人：用一句話說哪些字熟悉、哪些在練習中
+  const byLevel: string[][] = [[], [], []];
+  for (const row of SEION_ROWS) for (const c of row.cells) if (c) byLevel[kanaLevel(stats, `${script}:${c[script]}`)].push(c[script]);
   return (
     <div>
       <p className="mg-title">
         {script === 'h' ? '平假名' : '片假名'} <b>{n}/46</b>
       </p>
-      <div className="mgrid" aria-label={`${script === 'h' ? '平假名' : '片假名'}熟悉度`}>
+      <p className="sr-only">
+        熟悉：{byLevel[2].length ? <span lang="ja">{byLevel[2].join('、')}</span> : '還沒有'}。練習中：
+        {byLevel[1].length ? <span lang="ja">{byLevel[1].join('、')}</span> : '沒有'}。還沒練：{byLevel[0].length} 個字。
+      </p>
+      <div className="mgrid" aria-hidden="true">
         {SEION_ROWS.flatMap((row) => {
           const cells = row.id === 'nn' ? [row.cells[0], null, null, null, null] : row.cells;
           return cells.map((c, i) => {

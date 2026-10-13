@@ -1,5 +1,5 @@
-import { Suspense, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { Suspense, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Icon, type IconName } from './Icon';
 import { Meter } from './Controls';
 import { ErrorBoundary } from './ErrorBoundary';
@@ -26,6 +26,26 @@ const SECONDARY: { to: string; label: string; icon: IconName }[] = [
 /** 練習底下的頁面（假名測驗、手寫描字、五十音表、錯題本）都算「練習」 */
 function isPracticePath(path: string) {
   return path.startsWith('/practice') || path.startsWith('/writing') || path.startsWith('/chart') || path.startsWith('/mistakes');
+}
+
+/**
+ * 主要功能的連結（上方分頁和手機的底部選單）。目前所在的那一個標成 active 和 aria-current，
+ * 練習底下的頁面也算在「練習」（NavLink 只認得自己的網址，所以另外處理）。
+ */
+function MainLink({ item, base, children }: { item: (typeof PRIMARY)[number]; base: string; children: ReactNode }) {
+  const { pathname } = useLocation();
+  if (item.to === '/practice' && isPracticePath(pathname)) {
+    return (
+      <Link to={item.to} className={`${base} active`} aria-current="page">
+        {children}
+      </Link>
+    );
+  }
+  return (
+    <NavLink to={item.to} end={item.end} className={({ isActive }) => `${base} ${isActive ? 'active' : ''}`}>
+      {children}
+    </NavLink>
+  );
 }
 
 function Loading() {
@@ -164,14 +184,9 @@ export function Layout() {
         <div className="wrap">
           <nav className="tabs" aria-label="主要功能">
             {PRIMARY.map((p) => (
-              <NavLink
-                key={p.to}
-                to={p.to}
-                end={p.end}
-                className={({ isActive }) => `tab ${isActive || (p.to === '/practice' && isPracticePath(loc.pathname)) ? 'active' : ''}`}
-              >
+              <MainLink key={p.to} item={p} base="tab">
                 {p.label}
-              </NavLink>
+              </MainLink>
             ))}
           </nav>
         </div>
@@ -212,15 +227,10 @@ export function Layout() {
 
       <nav className="bottombar" aria-label="主要功能">
         {PRIMARY.map((p) => (
-          <NavLink
-            key={p.to}
-            to={p.to}
-            end={p.end}
-            className={({ isActive }) => `bb-item ${isActive || (p.to === '/practice' && isPracticePath(loc.pathname)) ? 'active' : ''}`}
-          >
+          <MainLink key={p.to} item={p} base="bb-item">
             <Icon name={p.icon} size={21} />
             <span>{p.label}</span>
-          </NavLink>
+          </MainLink>
         ))}
       </nav>
     </div>

@@ -6,9 +6,10 @@ import { useStore } from '../state/store';
 import { studyDayKey } from '../lib/date';
 import { nextLesson, streak } from '../lib/progress';
 import {
-  calendar, cardStates, kanaMasterySeries, kanaStates, keyStart, niceMax, retention, studySummary, vocabLearnedSeries, weeklyTotals,
+  calendar, cardCounts, cardStates, kanaMasterySeries, kanaStates, keyStart, niceMax, retention, studySummary, vocabLearnedSeries, weeklyTotals,
 } from '../lib/stats';
 import { usePageTitle } from '../lib/title';
+import { useNow } from '../lib/useNow';
 import { Columns, DataTable, Heatmap, Legend, LineChart, StackBar, md, mdw } from '../components/Charts';
 
 const CAL_WEEKS = 16;
@@ -31,15 +32,18 @@ export default function Stats() {
   const kanaDays = useStore(kanaDaysStore);
   const srs = useStore(srsStore);
   const lessons = useStore(lessonStore);
-  const now = Date.now();
+  const now = useNow();
   const todayKey = studyDayKey(now);
 
   const summary = studySummary(activity);
   const current = streak(activity, now);
   const hira = kanaStates(kana, 'h');
   const kata = kanaStates(kana, 'k');
+  // 上面的數字和曲線照卡片算（張）；下面的比例條照字算（同一個字在兩個牌組只算一個）
+  const counts = cardCounts(srs.cards);
+  const learned = counts.learned;
   const cards = cardStates(srs.cards);
-  const learned = cards.mature + cards.young + cards.learning;
+  const learnedWords = cards.mature + cards.young + cards.learning;
   const freshToday = srs.days[todayKey]?.fresh ?? 0;
   const ret = retention(srs, now, 30);
 
@@ -100,7 +104,7 @@ export default function Stats() {
             {learned.toLocaleString('zh-TW')}
             <small>張</small>
           </p>
-          <p className="kpi-sub">{freshToday ? `今天新學 ${freshToday} 張` : `熟卡 ${cards.mature} 張`}</p>
+          <p className="kpi-sub">{freshToday ? `今天新學 ${freshToday} 張` : `熟卡 ${counts.mature} 張`}</p>
         </div>
         <div className="card kpi">
           <p className="kpi-label">複習時記得</p>
@@ -244,7 +248,7 @@ export default function Stats() {
         <div className="stack-group">
           <StackBar
             title="單字卡"
-            note={`${learned.toLocaleString('zh-TW')}／${(learned + cards.unseen).toLocaleString('zh-TW')} 學過`}
+            note={`${learnedWords.toLocaleString('zh-TW')}／${(learnedWords + cards.unseen).toLocaleString('zh-TW')} 個字學過`}
             segments={[
               { label: '熟卡', value: cards.mature, color: C.h4 },
               { label: '複習中', value: cards.young, color: C.h3 },
