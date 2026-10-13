@@ -57,7 +57,7 @@ export function todayTasks({ activity, kana, lessons, srs, newPerDay, now }: Tod
     unseen += s.unseen;
   }
   if (seen > 0 || lessonsDone(lessons) >= VOCAB_AFTER_LESSONS) {
-    const day = srs.days[key] ?? { reviews: 0, fresh: 0 };
+    const day = srs.days[key] ?? { reviews: 0, fresh: 0, rev: 0, forgot: 0 };
     const newLeft = Math.min(unseen, Math.max(0, newPerDay - day.fresh));
     const done = due === 0 && newLeft === 0;
     const parts = [due ? `${due} 張到期` : '', newLeft ? `${newLeft} 張新卡` : ''].filter(Boolean);

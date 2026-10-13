@@ -1,4 +1,5 @@
 import { createStore, isObj, num, bool, str, oneOf } from './store';
+import { SEION_CELLS } from '../data/kana';
 import type { CardState } from '../lib/srs';
 import { studyDayKey } from '../lib/date';
 
@@ -95,7 +96,35 @@ export function recordKana(key: string, ok: boolean) {
     const next: KanaStat = ok ? { c: e.c + 1, w: e.w, s: e.s + 1, t: Date.now() } : { c: e.c, w: e.w + 1, s: 0, t: Date.now() };
     return { ...all, [key]: next };
   });
+  snapshotKana();
   logActivity('kana');
+}
+
+/* ---------------- 每天的假名熟悉度（學習紀錄頁的進步曲線用） ---------------- */
+/** 學習日 → 那天結束時熟悉的平假名、片假名（清音 46 個）數量 */
+export type KanaDays = Record<string, { h: number; k: number }>;
+
+export const kanaDaysStore = createStore<KanaDays>('nk.kanaDays', () => ({}), (raw) => {
+  const out: KanaDays = {};
+  if (!isObj(raw)) return out;
+  for (const [k, v] of Object.entries(raw)) if (/^\d{4}-\d{2}-\d{2}$/.test(k) && isObj(v)) out[k] = { h: num(v.h), k: num(v.k) };
+  return out;
+});
+
+/**
+ * 記下今天目前的熟悉數量（每次作答後更新，留下當天最後的數字）。
+ * 學習紀錄頁打開時也會記一次：更新前就練過的人，曲線從今天的數字開始。
+ */
+export function snapshotKana() {
+  const stats = kanaStore.get();
+  if (!Object.keys(stats).length) return;
+  const count = (script: 'h' | 'k') => SEION_CELLS.filter((c) => kanaLevel(stats, `${script}:${c[script]}`) === 2).length;
+  const day = studyDayKey(Date.now());
+  const h = count('h');
+  const k = count('k');
+  const prev = kanaDaysStore.get()[day];
+  if (prev && prev.h === h && prev.k === k) return;
+  kanaDaysStore.set((d) => ({ ...d, [day]: { h, k } }));
 }
 
 /** 0 = 還沒練，1 = 練習中，2 = 熟悉（連對 3 次） */
@@ -179,10 +208,21 @@ export function recordWriting(ch: string, mode: 'trace' | 'recall', mistakes: nu
 }
 
 /* ---------------- 單字卡 ---------------- */
+export interface SrsDay {
+  /** 作答次數（含新卡和學習中的卡片） */
+  reviews: number;
+  /** 學了幾張新卡 */
+  fresh: number;
+  /** 到期複習（已經學會、間隔一天以上的卡片）的次數 */
+  rev: number;
+  /** 其中按「忘記了」的次數（算「記得的比例」用） */
+  forgot: number;
+}
+
 export interface SrsData {
   cards: Record<string, CardState>;
-  /** 每個學習日：複習幾張、學了幾張新卡 */
-  days: Record<string, { reviews: number; fresh: number }>;
+  /** 每個學習日的作答紀錄 */
+  days: Record<string, SrsDay>;
 }
 
 export const srsStore = createStore<SrsData>('nk.srs', () => ({ cards: {}, days: {} }), (raw) => {
@@ -203,18 +243,33 @@ export const srsStore = createStore<SrsData>('nk.srs', () => ({ cards: {}, days:
     }
   }
   if (isObj(raw.days)) {
-    for (const [k, v] of Object.entries(raw.days)) if (isObj(v)) out.days[k] = { reviews: num(v.reviews), fresh: num(v.fresh) };
+    for (const [k, v] of Object.entries(raw.days)) {
+      if (isObj(v)) out.days[k] = { reviews: num(v.reviews), fresh: num(v.fresh), rev: num(v.rev), forgot: num(v.forgot) };
+    }
   }
   return out;
 });
 
-export function saveCard(id: string, card: CardState, wasNew: boolean) {
+/**
+ * 存一次作答。review：這次是不是到期複習（作答前已經是學會的卡片），以及有沒有按「忘記了」，
+ * 學習紀錄頁用來算「到期複習時記得的比例」。
+ */
+export function saveCard(id: string, card: CardState, wasNew: boolean, review?: { due: boolean; forgot: boolean }) {
   const key = studyDayKey(Date.now());
   srsStore.set((d) => {
-    const day = d.days[key] ?? { reviews: 0, fresh: 0 };
+    const day = d.days[key] ?? { reviews: 0, fresh: 0, rev: 0, forgot: 0 };
+    const due = review?.due ? 1 : 0;
     return {
       cards: { ...d.cards, [id]: card },
-      days: { ...d.days, [key]: { reviews: day.reviews + 1, fresh: day.fresh + (wasNew ? 1 : 0) } },
+      days: {
+        ...d.days,
+        [key]: {
+          reviews: day.reviews + 1,
+          fresh: day.fresh + (wasNew ? 1 : 0),
+          rev: day.rev + due,
+          forgot: day.forgot + (due && review?.forgot ? 1 : 0),
+        },
+      },
     };
   });
   logActivity('review');
@@ -315,7 +370,7 @@ export function markExported() {
 }
 
 /* ---------------- 備份：匯出／匯入（不含 API 金鑰） ---------------- */
-const BACKUP_STORES = [settingsStore, kanaStore, lessonStore, writingStore, srsStore, missStore, activityStore, usageStore];
+const BACKUP_STORES = [settingsStore, kanaStore, kanaDaysStore, lessonStore, writingStore, srsStore, missStore, activityStore, usageStore];
 
 export function exportBackup(): string {
   const data: Record<string, unknown> = {};
@@ -345,6 +400,6 @@ export function importBackup(text: string): number {
 }
 
 export function resetAllProgress() {
-  for (const s of [kanaStore, lessonStore, writingStore, srsStore, missStore, activityStore, usageStore]) s.reset();
+  for (const s of [kanaStore, kanaDaysStore, lessonStore, writingStore, srsStore, missStore, activityStore, usageStore]) s.reset();
 }
 

@@ -103,6 +103,7 @@ export default function Home() {
             <Icon name="flame" size={18} />
             {days > 0 ? `連續學習 ${days} 天` : '今天開始第一天'}
           </span>
+          <Link to="/stats">看學習紀錄</Link>
         </p>
       </header>
 

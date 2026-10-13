@@ -86,7 +86,7 @@ function Review({ deck, onRestart }: { deck: string; onRestart: () => void }) {
       const before = srsStore.get().cards[currentId] ?? newCard(t);
       const wasNew = before.reps === 0;
       const after = review(before, g, t);
-      saveCard(currentId, after, wasNew);
+      saveCard(currentId, after, wasNew, { due: before.reps > 0 && before.step === -1, forgot: g === 'again' });
       // 按「忘記了」的卡片收進錯題本
       if (g === 'again') recordVocabMiss(currentId);
       const m = main.filter((x) => x !== currentId);

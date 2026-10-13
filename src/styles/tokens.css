@@ -26,6 +26,14 @@
   --knob: #ffffff;
   --lift: 0 1px 0 rgba(28, 36, 64, 0.04), 0 6px 18px -10px rgba(28, 36, 64, 0.22);
   --scrim: rgba(28, 36, 64, 0.35);
+  /* 圖表（學習紀錄頁）：多寡用一個色相由淺到深；兩條線用綠和藍。都用色盲模擬和對比檢查過 */
+  --heat-0: #e3ece6;
+  --heat-1: #79c592;
+  --heat-2: #57a271;
+  --heat-3: #348052;
+  --heat-4: #086034;
+  --series-1: #348052;
+  --series-2: #2a78d6;
 
   /* NK Kana／NK Display 是建置時裁切過的字型（scripts/nk-fonts.mjs），缺的字再往下找完整的 Klee One */
   --font-kana: 'NK Kana', 'Klee One', 'UD Digi Kyokasho N-R', 'UD デジタル 教科書体 N-R', 'Hiragino Mincho ProN', 'Yu Mincho', serif;
@@ -61,6 +69,13 @@
     --knob: #eaf0eb;
     --lift: none;
     --scrim: rgba(0, 0, 0, 0.5);
+    --heat-0: #2c4740;
+    --heat-1: #307a4f;
+    --heat-2: #539b6e;
+    --heat-3: #75be8f;
+    --heat-4: #98e2b1;
+    --series-1: #539b6e;
+    --series-2: #3987e5;
     color-scheme: dark;
   }
 }
@@ -88,5 +103,12 @@
   --knob: #eaf0eb;
   --lift: none;
   --scrim: rgba(0, 0, 0, 0.5);
+  --heat-0: #2c4740;
+  --heat-1: #307a4f;
+  --heat-2: #539b6e;
+  --heat-3: #75be8f;
+  --heat-4: #98e2b1;
+  --series-1: #539b6e;
+  --series-2: #3987e5;
   color-scheme: dark;
 }

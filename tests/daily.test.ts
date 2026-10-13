@@ -56,7 +56,7 @@ describe('今天的任務', () => {
 
   it('單字卡：沒有到期、今天的新卡學完了就完成', () => {
     const tasks = todayTasks(
-      input({ lessons: lessonsDone(6), srs: { cards: { 'n5-0001': card({}) }, days: { [TODAY]: { reviews: 14, fresh: 10 } } } }),
+      input({ lessons: lessonsDone(6), srs: { cards: { 'n5-0001': card({}) }, days: { [TODAY]: { reviews: 14, fresh: 10, rev: 4, forgot: 0 } } } }),
     );
     const vocab = tasks.find((t) => t.id === 'vocab')!;
     expect(vocab.done).toBe(true);

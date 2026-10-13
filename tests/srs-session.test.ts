@@ -96,9 +96,14 @@ describe('每天新卡的計數', () => {
     saveCard('y', card, true);
     vi.setSystemTime(new Date(2026, 9, 13, 3, 30)); // 還是 10/12 的學習日
     saveCard('z', card, true);
-    expect(srsStore.get().days['2026-10-12']).toEqual({ reviews: 4, fresh: 3 });
+    expect(srsStore.get().days['2026-10-12']).toEqual({ reviews: 4, fresh: 3, rev: 0, forgot: 0 });
+    // 到期複習另外記：記得的比例只算已經學會的卡片
+    saveCard('x', card, false, { due: true, forgot: true });
+    saveCard('y', card, false, { due: true, forgot: false });
+    saveCard('z', card, false, { due: false, forgot: true }); // 學習中按「忘記了」不算
+    expect(srsStore.get().days['2026-10-12']).toEqual({ reviews: 7, fresh: 3, rev: 2, forgot: 1 });
     vi.setSystemTime(new Date(2026, 9, 13, 4, 30));
     saveCard('w', card, true);
-    expect(srsStore.get().days['2026-10-13']).toEqual({ reviews: 1, fresh: 1 });
+    expect(srsStore.get().days['2026-10-13']).toEqual({ reviews: 1, fresh: 1, rev: 0, forgot: 0 });
   });
 });

@@ -19,6 +19,7 @@ const PRIMARY: { to: string; label: string; icon: IconName; end?: boolean }[] = 
 const SECONDARY: { to: string; label: string; icon: IconName }[] = [
   { to: '/chart', label: '五十音表', icon: 'grid' },
   { to: '/roadmap', label: '學習地圖', icon: 'map' },
+  { to: '/stats', label: '學習紀錄', icon: 'chart' },
   { to: '/settings', label: '設定', icon: 'gear' },
 ];
 

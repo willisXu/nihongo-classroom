@@ -1,0 +1,197 @@
+/**
+ * 學習紀錄頁的統計：每天、每週的練習量，進步曲線，和目前的熟悉度。
+ * 全部從瀏覽器裡的學習紀錄算出來；學習日從凌晨 4 點開始（見 date.ts）。
+ */
+import { SEION_CELLS } from '../data/kana';
+import { DECK_META, metaItemIds } from '../data/vocab/meta';
+import { kanaLevel, type Activity, type KanaDays, type KanaStats, type SrsData } from '../state';
+import { addDays, studyDayKey, studyDayStart } from './date';
+import type { CardState } from './srs';
+
+/** 學習日代號（2026-10-13）→ 那個學習日的開始時間（凌晨 4 點） */
+export function keyStart(key: string): number {
+  const [y, m, d] = key.split('-').map(Number);
+  return studyDayStart(new Date(y, m - 1, d, 12).getTime());
+}
+
+export interface DayActivity {
+  kana: number;
+  review: number;
+  writing: number;
+  lesson: number;
+  tutor: number;
+  /** 全部加起來的練習次數 */
+  total: number;
+}
+
+export function dayActivity(activity: Activity, key: string): DayActivity {
+  const d = activity[key] ?? {};
+  const kana = d.kana ?? 0;
+  const review = d.review ?? 0;
+  const writing = d.writing ?? 0;
+  const lesson = d.lesson ?? 0;
+  const tutor = d.tutor ?? 0;
+  return { kana, review, writing, lesson, tutor, total: kana + review + writing + lesson + tutor };
+}
+
+/** 日曆格子的深淺：0 沒學；1–9、10–29、30–59、60 以上次練習分成 1～4 */
+export const HEAT_LIMITS = [10, 30, 60] as const;
+export type HeatLevel = 0 | 1 | 2 | 3 | 4;
+export function heatLevel(total: number): HeatLevel {
+  if (total <= 0) return 0;
+  if (total < HEAT_LIMITS[0]) return 1;
+  if (total < HEAT_LIMITS[1]) return 2;
+  if (total < HEAT_LIMITS[2]) return 3;
+  return 4;
+}
+
+export interface CalendarDay {
+  key: string;
+  /** 學習日開始時間 */
+  date: number;
+  /** 今天以後（還沒到） */
+  future: boolean;
+  act: DayActivity;
+  level: HeatLevel;
+}
+
+/** 最近幾週的日曆：每一欄是一週（週日在最上面），最後一欄是這一週 */
+export function calendar(activity: Activity, now: number, weeks: number): CalendarDay[][] {
+  const today = studyDayStart(now);
+  const start = addDays(today, -new Date(today).getDay() - (weeks - 1) * 7);
+  return Array.from({ length: weeks }, (_, w) =>
+    Array.from({ length: 7 }, (_, d) => {
+      const date = addDays(start, w * 7 + d);
+      const key = studyDayKey(date);
+      const act = dayActivity(activity, key);
+      const future = date > today;
+      return { key, date, future, act, level: future ? 0 : heatLevel(act.total) };
+    }),
+  );
+}
+
+/** 有學習的天數、最長連續天數、第一天 */
+export function studySummary(activity: Activity): { days: number; longest: number; first: string | null } {
+  const keys = Object.keys(activity)
+    .filter((k) => dayActivity(activity, k).total > 0)
+    .sort();
+  let longest = 0;
+  let run = 0;
+  let prev: string | null = null;
+  for (const k of keys) {
+    run = prev && studyDayKey(addDays(keyStart(prev), 1)) === k ? run + 1 : 1;
+    longest = Math.max(longest, run);
+    prev = k;
+  }
+  return { days: keys.length, longest, first: keys[0] ?? null };
+}
+
+export interface WeekTotal {
+  /** 這一週第一天（週日）的學習日開始時間 */
+  start: number;
+  kana: number;
+  review: number;
+  writing: number;
+}
+
+/** 最近幾週每週的練習量（最後一週是這一週，算到今天） */
+export function weeklyTotals(activity: Activity, now: number, weeks: number): WeekTotal[] {
+  return calendar(activity, now, weeks).map((col) =>
+    col.reduce<WeekTotal>(
+      (w, d) => ({ ...w, kana: w.kana + d.act.kana, review: w.review + d.act.review, writing: w.writing + d.act.writing }),
+      { start: col[0].date, kana: 0, review: 0, writing: 0 },
+    ),
+  );
+}
+
+export interface Point {
+  key: string;
+  date: number;
+  value: number;
+}
+
+/** 從 firstKey 到今天的每一天 */
+function eachDay(firstKey: string, now: number): { key: string; date: number }[] {
+  const out: { key: string; date: number }[] = [];
+  const today = studyDayStart(now);
+  for (let date = keyStart(firstKey); date <= today && out.length < 3660; date = addDays(date, 1)) {
+    out.push({ key: studyDayKey(date), date });
+  }
+  return out;
+}
+
+/** 學過的單字（每天學的新卡累加），從第一次背單字那天到今天 */
+export function vocabLearnedSeries(srs: SrsData, now: number): Point[] {
+  const first = Object.keys(srs.days)
+    .filter((k) => srs.days[k].fresh > 0)
+    .sort()[0];
+  if (!first) return [];
+  let total = 0;
+  return eachDay(first, now).map(({ key, date }) => {
+    total += srs.days[key]?.fresh ?? 0;
+    return { key, date, value: total };
+  });
+}
+
+/** 熟悉的平假名、片假名（每天最後的數字；沒有練的那天沿用前一天），從開始記錄那天到今天 */
+export function kanaMasterySeries(kanaDays: KanaDays, now: number): { h: Point[]; k: Point[] } {
+  const first = Object.keys(kanaDays).sort()[0];
+  if (!first) return { h: [], k: [] };
+  let last = { h: 0, k: 0 };
+  const h: Point[] = [];
+  const k: Point[] = [];
+  for (const { key, date } of eachDay(first, now)) {
+    last = kanaDays[key] ?? last;
+    h.push({ key, date, value: last.h });
+    k.push({ key, date, value: last.k });
+  }
+  return { h, k };
+}
+
+/** 最近 days 天，到期複習時記得的比例（還沒有到期複習時 rate 是 null） */
+export function retention(srs: SrsData, now: number, days: number): { rev: number; forgot: number; rate: number | null } {
+  let rev = 0;
+  let forgot = 0;
+  const today = studyDayStart(now);
+  for (let i = 0; i < days; i++) {
+    const d = srs.days[studyDayKey(addDays(today, -i))];
+    rev += d?.rev ?? 0;
+    forgot += d?.forgot ?? 0;
+  }
+  return { rev, forgot, rate: rev ? (rev - forgot) / rev : null };
+}
+
+/** 單字卡目前的狀態：熟卡（間隔 21 天以上）、複習中、學習中、還沒學 */
+export function cardStates(cards: Record<string, CardState | undefined>) {
+  const out = { mature: 0, young: 0, learning: 0, unseen: 0 };
+  for (const d of DECK_META) {
+    for (const id of metaItemIds(d)) {
+      const c = cards[id];
+      if (!c || c.reps === 0) out.unseen++;
+      else if (c.step >= 0) out.learning++;
+      else if (c.ivl >= 21) out.mature++;
+      else out.young++;
+    }
+  }
+  return out;
+}
+
+/** 平假名或片假名（清音 46 個）：熟悉、練習中、還沒練 */
+export function kanaStates(kana: KanaStats, script: 'h' | 'k') {
+  const out = { mastered: 0, practicing: 0, none: 0 };
+  for (const c of SEION_CELLS) {
+    const lv = kanaLevel(kana, `${script}:${c[script]}`);
+    if (lv === 2) out.mastered++;
+    else if (lv === 1) out.practicing++;
+    else out.none++;
+  }
+  return out;
+}
+
+/** y 軸的上限取整：讓刻度是好讀的數字（5、10、20、50、100…） */
+export function niceMax(max: number): number {
+  if (max <= 5) return 5;
+  const p = 10 ** Math.floor(Math.log10(max));
+  for (const m of [1, 2, 2.5, 5, 10]) if (m * p >= max) return m * p;
+  return 10 * p;
+}
