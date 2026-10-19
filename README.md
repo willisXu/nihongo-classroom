@@ -142,7 +142,7 @@ src/
     today.ts           首頁「今天的任務」：依進度算出今天該做的事和完成度
     mistakes.ts        錯題本：答錯的假名、常忘的單字、寫錯的字
     reminder.ts        每天提醒：Google 行事曆連結、.ics 檔
-    stats.ts           學習紀錄頁的統計：學習日曆、每週練習量、進步曲線、熟悉度
+    stats.ts           學習紀錄頁的統計：學習日曆、每週練習量、進步曲線、複習時記得的比例
     speech.ts          日文語音合成
   state/               localStorage 狀態（設定、進度、紀錄、備份）
   components/          共用元件（練習格、描字畫布、發音鈕、學習紀錄的圖表 Charts.tsx…）

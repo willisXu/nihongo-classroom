@@ -3,7 +3,7 @@
  * 顏色都用 CSS 變數（tokens.css 的 --heat-*、--series-*），深色模式有自己的一組；
  * 細線條、單一基線、滑過（或點一下）有提示；每張圖下面都有「看數字」的表格，提示不是唯一的讀法。
  */
-import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import type { CalendarDay, Point } from '../lib/stats';
 
 /* ---------------- 提示框 ---------------- */
@@ -379,51 +379,5 @@ export function LineChart({ series, max, unit, label, legend = true }: { series:
       </svg>
       {box}
     </div>
-  );
-}
-
-/* ---------------- 比例條（目前的熟悉度） ---------------- */
-
-export interface Segment {
-  label: string;
-  value: number;
-  color: string;
-}
-
-export function StackBar({ title, segments, note }: { title: ReactNode; segments: Segment[]; note?: string }) {
-  const { ref, show, hide, box } = useTip();
-  const total = segments.reduce((s, x) => s + x.value, 0);
-  const desc = segments.map((s) => `${s.label} ${s.value}`).join('、');
-  return (
-    <div className="viz-fig stackbar" ref={ref}>
-      <p className="stackbar-title">
-        {title}
-        {note ? <span className="small"> {note}</span> : null}
-      </p>
-      <div className="stackbar-bar" role="img" aria-label={`${desc}（共 ${total}）`} onPointerLeave={hide}>
-        {segments
-          .filter((s) => s.value > 0)
-          .map((s) => {
-            const onShow = (e: ReactPointerEvent) =>
-              show(e, [{ text: `${s.value.toLocaleString('zh-TW')}（${Math.round((s.value / total) * 100)}%）`, strong: true }, { text: s.label, color: s.color }]);
-            return <span key={s.label} style={{ flexGrow: s.value, background: s.color }} onPointerMove={onShow} onPointerDown={onShow} />;
-          })}
-      </div>
-      {box}
-    </div>
-  );
-}
-
-/** 比例條共用的圖例 */
-export function Legend({ items }: { items: { label: string; color: string }[] }) {
-  return (
-    <p className="viz-legend">
-      {items.map((s) => (
-        <span key={s.label}>
-          <span className="viz-key box" style={{ background: s.color }} />
-          {s.label}
-        </span>
-      ))}
-    </p>
   );
 }

@@ -1,7 +1,7 @@
 // 學習紀錄頁的統計
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  calendar, cardCounts, cardStates, heatLevel, kanaMasterySeries, kanaStates, keyStart, niceMax, retention, studySummary, vocabLearnedSeries, weeklyTotals,
+  calendar, cardCounts, heatLevel, kanaMasterySeries, kanaStates, keyStart, niceMax, retention, studySummary, vocabLearnedSeries, weeklyTotals,
 } from '../src/lib/stats';
 import { studyDayKey, DAY_MS } from '../src/lib/date';
 import { activityLines, monthLabels } from '../src/components/Charts';
@@ -93,20 +93,15 @@ describe('學習紀錄', () => {
     expect(retention({ cards: {}, days: {} }, NOW, 30).rate).toBeNull();
   });
 
-  it('單字卡狀態、假名熟悉度', () => {
+  it('學過的單字卡、假名熟悉度', () => {
     const c = (p: Partial<CardState>): CardState => ({ due: NOW, ivl: 0, ease: 2.5, reps: 1, lapses: 0, step: -1, last: NOW, ...p });
-    const s = cardStates({ 'n5-0001': c({ ivl: 30 }), 'n5-0002': c({ ivl: 3 }), 'n5-0003': c({ step: 0 }), 'n5-0004': c({ reps: 0 }) });
-    expect(s.mature).toBe(1);
-    expect(s.young).toBe(1);
-    expect(s.learning).toBe(1);
-    // 還沒學的照「字」算：1,257 張卡片裡有 103 張是別的牌組重複的字
-    expect(s.unseen).toBe(1154 - 3);
-    expect(s.mature + s.young + s.learning + s.unseen).toBe(1154);
-    // 同一個字在兩個牌組各學一次：只算一個字，看學得比較熟的那一張；總數還是 1,154
-    const both = { 'n5-0370': c({ ivl: 3 }), 'travel-0002': c({ ivl: 30 }) };
-    expect(cardStates(both)).toEqual({ mature: 1, young: 0, learning: 0, unseen: 1153 });
-    // 上面的「學過的單字」照卡片算，和每天新學幾張的曲線一致
-    expect(cardCounts(both)).toEqual({ learned: 2, mature: 1 });
+    // 「學過的單字」照卡片算，和每天新學幾張的曲線一致：同一個字在兩個牌組各學一次算兩張
+    expect(cardCounts({ 'n5-0370': c({ ivl: 3 }), 'travel-0002': c({ ivl: 30 }) })).toEqual({ learned: 2, mature: 1 });
+    // 學習中（step ≥ 0）不算熟卡，還沒學（reps 0）不算學過
+    expect(cardCounts({ 'n5-0001': c({ ivl: 30 }), 'n5-0002': c({ ivl: 3 }), 'n5-0003': c({ step: 0, ivl: 30 }), 'n5-0004': c({ reps: 0 }) })).toEqual({
+      learned: 3,
+      mature: 1,
+    });
     expect(kanaStates({ 'h:あ': { c: 3, w: 0, s: 3, t: 1 }, 'h:い': { c: 1, w: 1, s: 0, t: 1 }, 'k:ア': { c: 3, w: 0, s: 3, t: 1 } }, 'h')).toEqual({
       mastered: 1,
       practicing: 1,

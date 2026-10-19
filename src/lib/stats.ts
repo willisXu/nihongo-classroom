@@ -1,9 +1,9 @@
 /**
- * 學習紀錄頁的統計：每天、每週的練習量，進步曲線，和目前的熟悉度。
+ * 學習紀錄頁的統計：每天、每週的練習量，進步曲線，熟悉的假名，和複習時記得的比例。
  * 全部從瀏覽器裡的學習紀錄算出來；學習日從凌晨 4 點開始（見 date.ts）。
  */
 import { SEION_CELLS } from '../data/kana';
-import { DECK_META, metaItemIds, wordGroups } from '../data/vocab/meta';
+import { DECK_META, metaItemIds } from '../data/vocab/meta';
 import { kanaLevel, type Activity, type KanaDays, type KanaStats, type SrsData } from '../state';
 import { addDays, studyDayKey, studyDayStart } from './date';
 import type { CardState } from './srs';
@@ -175,28 +175,6 @@ export function retention(srs: SrsData, now: number, days: number): { rev: numbe
     forgot += d?.forgot ?? 0;
   }
   return { rev, forgot, rate: rev ? (rev - forgot) / rev : null };
-}
-
-/**
- * 單字目前的狀態：熟卡（間隔 21 天以上）、複習中、學習中、還沒學。
- * 全部照「字」算：同一個字在好幾個牌組只算一次，看學得最熟的那一張
- * （「全部牌組」裡同一個字也只出一次；加起來就是全部的字數，不會因為在兩個牌組各學一次就變多）。
- */
-export function cardStates(cards: Record<string, CardState | undefined>) {
-  const out = { mature: 0, young: 0, learning: 0, unseen: 0 };
-  for (const group of wordGroups()) {
-    let best = 0; // 0 還沒學、1 學習中、2 複習中、3 熟卡
-    for (const id of group) {
-      const c = cards[id];
-      if (!c || c.reps === 0) continue;
-      best = Math.max(best, c.step >= 0 ? 1 : c.ivl >= 21 ? 3 : 2);
-    }
-    if (best === 3) out.mature++;
-    else if (best === 2) out.young++;
-    else if (best === 1) out.learning++;
-    else out.unseen++;
-  }
-  return out;
 }
 
 /**

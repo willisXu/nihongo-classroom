@@ -879,14 +879,7 @@ select { min-width: 0; text-overflow: ellipsis; }
 }
 .viz-tip .strong { color: var(--ink); font-weight: 600; font-size: 14px; }
 .viz-key { display: inline-block; width: 12px; height: 2px; border-radius: 1px; vertical-align: middle; margin-right: 6px; }
-.viz-key.box { width: 10px; height: 10px; border-radius: 2px; }
 .viz-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--ink-2); margin-block: 2px 6px; }
-.stack-group { display: grid; gap: 10px; max-width: 560px; }
-.stack-group + .stack-group { margin-top: 10px; }
-.stackbar-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
-.stackbar-title .small { font-weight: 400; }
-.stackbar-bar { display: flex; gap: 2px; height: 14px; border-radius: 4px; overflow: hidden; background: var(--sheet); }
-.stackbar-bar span { min-width: 3px; }
 .viz-table { margin-top: 8px; }
 .viz-table summary { font-size: 13px; color: var(--accent); cursor: pointer; width: max-content; }
 .viz-table-scroll { overflow-x: auto; max-width: 100%; margin-top: 6px; }
@@ -912,7 +905,7 @@ select { min-width: 0; text-overflow: ellipsis; }
   }
   .subnav-link.active, .bb-item.active, .ptab.active { outline: 2px solid CanvasText; outline-offset: -2px; }
   .tab.active::after { forced-color-adjust: none; background: CanvasText; }
-  .heatmap, .hm-swatch, .viz-fig svg, .stackbar-bar, .viz-key, .mc, .legend i { forced-color-adjust: none; }
+  .heatmap, .hm-swatch, .viz-fig svg, .viz-key, .mc, .legend i { forced-color-adjust: none; }
   /* 選到的格子、答對的選項：原本靠底色和陰影，高對比下會被拿掉，改用系統強調色框 */
   .gj-cell[aria-pressed='true']:not(:focus-visible), .cs-btn[aria-pressed='true']:not(:focus-visible),
   .opt.is-right, .opt.is-answer { outline: 3px solid Highlight; outline-offset: -4px; }

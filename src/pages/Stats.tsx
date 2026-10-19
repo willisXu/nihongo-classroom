@@ -6,21 +6,16 @@ import { useStore } from '../state/store';
 import { studyDayKey } from '../lib/date';
 import { nextLesson, streak } from '../lib/progress';
 import {
-  calendar, cardCounts, cardStates, kanaMasterySeries, kanaStates, keyStart, niceMax, retention, studySummary, vocabLearnedSeries, weeklyTotals,
+  calendar, cardCounts, kanaMasterySeries, kanaStates, keyStart, niceMax, retention, studySummary, vocabLearnedSeries, weeklyTotals,
 } from '../lib/stats';
 import { usePageTitle } from '../lib/title';
 import { useNow } from '../lib/useNow';
-import { Columns, DataTable, Heatmap, Legend, LineChart, StackBar, md, mdw } from '../components/Charts';
+import { Columns, DataTable, Heatmap, LineChart, md, mdw } from '../components/Charts';
 
 const CAL_WEEKS = 16;
 const C = {
   s1: 'var(--series-1)',
   s2: 'var(--series-2)',
-  h0: 'var(--heat-0)',
-  h1: 'var(--heat-1)',
-  h2: 'var(--heat-2)',
-  h3: 'var(--heat-3)',
-  h4: 'var(--heat-4)',
 };
 
 export default function Stats() {
@@ -39,11 +34,9 @@ export default function Stats() {
   const current = streak(activity, now);
   const hira = kanaStates(kana, 'h');
   const kata = kanaStates(kana, 'k');
-  // 上面的數字和曲線照卡片算（張）；下面的比例條照字算（同一個字在兩個牌組只算一個）
+  // 學過的單字照卡片算（張），和進步曲線一致
   const counts = cardCounts(srs.cards);
   const learned = counts.learned;
-  const cards = cardStates(srs.cards);
-  const learnedWords = cards.mature + cards.young + cards.learning;
   const freshToday = srs.days[todayKey]?.fresh ?? 0;
   const ret = retention(srs, now, 30);
 
@@ -68,7 +61,7 @@ export default function Stats() {
       <header className="ph">
         <p className="eyebrow">學習紀錄</p>
         <h1>看看自己的進步</h1>
-        <p className="lede">每天練了多少、假名和單字怎麼增加、現在的熟悉度。紀錄都存在這個瀏覽器裡。</p>
+        <p className="lede">每天練了多少、假名和單字怎麼增加。紀錄都存在這個瀏覽器裡。</p>
       </header>
 
       <section className="kpis" aria-label="總覽">
@@ -214,66 +207,6 @@ export default function Stats() {
             )}
           </div>
         </div>
-      </section>
-
-      <section className="block" aria-labelledby="h-now">
-        <h2 id="h-now">現在的熟悉度</h2>
-        <div className="stack-group">
-          <StackBar
-            title="平假名"
-            note={`${hira.mastered}／46 熟悉`}
-            segments={[
-              { label: '熟悉', value: hira.mastered, color: C.h4 },
-              { label: '練習中', value: hira.practicing, color: C.h2 },
-              { label: '還沒練', value: hira.none, color: C.h0 },
-            ]}
-          />
-          <StackBar
-            title="片假名"
-            note={`${kata.mastered}／46 熟悉`}
-            segments={[
-              { label: '熟悉', value: kata.mastered, color: C.h4 },
-              { label: '練習中', value: kata.practicing, color: C.h2 },
-              { label: '還沒練', value: kata.none, color: C.h0 },
-            ]}
-          />
-          <Legend
-            items={[
-              { label: '熟悉（連對 3 次）', color: C.h4 },
-              { label: '練習中', color: C.h2 },
-              { label: '還沒練', color: C.h0 },
-            ]}
-          />
-        </div>
-        <div className="stack-group">
-          <StackBar
-            title="單字卡"
-            note={`${learnedWords.toLocaleString('zh-TW')}／${(learnedWords + cards.unseen).toLocaleString('zh-TW')} 個字學過`}
-            segments={[
-              { label: '熟卡', value: cards.mature, color: C.h4 },
-              { label: '複習中', value: cards.young, color: C.h3 },
-              { label: '學習中', value: cards.learning, color: C.h1 },
-              { label: '還沒學', value: cards.unseen, color: C.h0 },
-            ]}
-          />
-          <Legend
-            items={[
-              { label: '熟卡（間隔 21 天以上）', color: C.h4 },
-              { label: '複習中', color: C.h3 },
-              { label: '學習中', color: C.h1 },
-              { label: '還沒學', color: C.h0 },
-            ]}
-          />
-        </div>
-        <DataTable
-          caption="現在的熟悉度"
-          head={['項目', '熟悉／熟卡', '練習中／複習中', '學習中', '還沒學']}
-          rows={[
-            ['平假名', hira.mastered, hira.practicing, '—', hira.none],
-            ['片假名', kata.mastered, kata.practicing, '—', kata.none],
-            ['單字卡', cards.mature, cards.young, cards.learning, cards.unseen],
-          ]}
-        />
       </section>
 
       <section className="block" aria-labelledby="h-lessons">
