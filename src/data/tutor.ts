@@ -10,9 +10,16 @@ export { PURPOSE_LABEL, SCENARIOS };
 export type { Purpose, Scenario };
 
 export const LEVEL_LABEL: Record<TutorLevel, string> = {
-  kana: '只用假名（剛學完五十音）',
+  kana: '只用假名（學五十音中、剛學完）',
   n5: '初級前半（N5）',
   n4: '初級後半（N4）',
+};
+
+/** 選單「自動」那一項後面的短名稱（完整名稱太長，手機上會超出畫面） */
+export const LEVEL_SHORT: Record<TutorLevel, string> = {
+  kana: '只用假名',
+  n5: 'N5',
+  n4: 'N4',
 };
 
 /** 學習者的程度（會話、批改共用） */
@@ -21,6 +28,18 @@ const LEVEL_DESC: Record<TutorLevel, string> = {
   n5: 'The learner is around JLPT N5 (です／ます, 〜てください, 〜たいです, 〜ませんか, basic particles, common vocabulary).',
   n4: 'The learner is around JLPT N4 (plain form, 〜たら, 〜と思います, potential form, basic honorific set phrases, natural vocabulary).',
 };
+
+/**
+ * 程度說明。還在學五十音（knownKana 是學過的假名）時，照實告訴模型：只認得這些字；
+ * 畫面上有附羅馬拼音（romaji）時也說一聲，沒學過的字也跟得上。
+ */
+function levelDesc(level: TutorLevel, knownKana = '', romaji = false): string {
+  if (level !== 'kana' || !knownKana) return LEVEL_DESC[level];
+  const help = romaji
+    ? 'The app shows romaji under every Japanese line, so they can follow even words with kana they have not learned; when it is natural, prefer words written with the kana above.'
+    : 'Prefer words written with the kana above whenever it is natural.';
+  return `The learner is still learning kana and can read only these so far: ${knownKana}. They know almost no grammar. ${help}`;
+}
 
 /** 寫日文的規則：只會假名的人看不懂漢字，每一個日文欄位（不只是回覆）都只用假名 */
 const SCRIPT_RULE: Record<TutorLevel, string> = {
@@ -55,7 +74,7 @@ export const CONVERSATION_SCHEMA = obj({
   done: B,
 });
 
-export function conversationSystem(s: Scenario, level: TutorLevel): string {
+export function conversationSystem(s: Scenario, level: TutorLevel, knownKana = '', romaji = false): string {
   return [
     'You are a friendly Japanese conversation partner and teacher for a Taiwanese adult learner whose native language is Traditional Chinese (Taiwan).',
     '',
@@ -63,10 +82,11 @@ export function conversationSystem(s: Scenario, level: TutorLevel): string {
     `You play: ${s.aiRole}. The learner plays: ${s.learnerRole}.`,
     `The learner's goal: ${s.goal}`,
     '',
-    `Learner level: ${LEVEL_DESC[level]} ${SPEECH_RULE[level]} ${SCRIPT_RULE[level]}`,
+    `Learner level: ${levelDesc(level, knownKana, romaji)} ${SPEECH_RULE[level]} ${SCRIPT_RULE[level]}`,
     '',
     'Rules:',
     '- Stay in character. Keep each reply to one or two short sentences so the learner can follow.',
+    ...(s.learnerFirst ? ['- In this scene the learner speaks first (they pick up the phone). Their first message starts the scene; answer it in character.'] : []),
     // 常體（普通形）是 N4 才教：只會假名、N5 的學習者，朋友情境也用簡單的です／ます
     s.casual
       ? level === 'n4'
@@ -107,10 +127,10 @@ export const CORRECTION_SCHEMA = obj({
   tip: S,
 });
 
-export function correctionSystem(level: TutorLevel): string {
+export function correctionSystem(level: TutorLevel, knownKana = '', romaji = false): string {
   return [
     'You are a careful, encouraging Japanese teacher for a Taiwanese adult learner (native Traditional Chinese, Taiwan).',
-    `Learner level: ${LEVEL_DESC[level]} ${SCRIPT_RULE[level]} Keep the learner\'s meaning and roughly their sentence length; prefer words at their level.`,
+    `Learner level: ${levelDesc(level, knownKana, romaji)} ${SCRIPT_RULE[level]} Keep the learner\'s meaning and roughly their sentence length; prefer words at their level.`,
     'The learner sends a Japanese sentence they wrote, sometimes followed by the meaning they intended in Chinese. Check it and answer in the JSON format:',
     '- verdict: "correct" (natural and correct), "minor" (understandable but with small mistakes or unnatural wording), or "wrong" (grammar or meaning problems).',
     '- corrected: the most natural correct version that keeps the intended meaning and politeness level. If already correct, repeat it.',
@@ -211,7 +231,9 @@ export function sanitizeTurn(raw: unknown): ConversationTurn | null {
 /** 檢查並清理一則批改結果；沒有更正後的句子就回傳 null */
 export function sanitizeCorrection(raw: unknown): Correction | null {
   if (!isRec(raw) || typeof raw.corrected !== 'string') return null;
-  const verdict = raw.verdict === 'correct' || raw.verdict === 'minor' || raw.verdict === 'wrong' ? raw.verdict : 'minor';
+  // 大小寫不同（Correct、MINOR）也認得
+  const v = typeof raw.verdict === 'string' ? raw.verdict.trim().toLowerCase() : '';
+  const verdict = v === 'correct' || v === 'minor' || v === 'wrong' ? v : 'minor';
   return {
     verdict,
     corrected: raw.corrected,
@@ -227,7 +249,8 @@ export function sanitizeCorrection(raw: unknown): Correction | null {
 
 /** 選項的文字：照模型說的；以前存下來的題目沒有這一欄，就從選項猜（有假名是日文、全是英數是拼音，其他當中文） */
 function choiceLangOf(raw: unknown, choices: string[]): ChoiceLang {
-  if (raw === 'ja' || raw === 'zh' || raw === 'romaji') return raw;
+  const v = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  if (v === 'ja' || v === 'zh' || v === 'romaji') return v;
   if (choices.some((c) => /[\u3040-\u30ff]/.test(c))) return 'ja';
   if (choices.every((c) => /^[\x20-\x7e]+$/.test(c))) return 'romaji';
   return 'zh';

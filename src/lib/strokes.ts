@@ -43,6 +43,16 @@ export function hasStrokes(ch: string): boolean {
 export const SMALL_KANA = new Set([...'ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮ']);
 const SMALL_SCALE = 0.62;
 const SMALL_ANCHOR: Pt = { x: 16, y: 96 };
+/** KanjiVG 的小字本來就是一般字的八成大 */
+const KANJIVG_SMALL = 0.8;
+
+/**
+ * 判定門檻的比例：小字縮到一般字的一半左右，「很小的筆畫（點一下也算）」「要看方向」這些用長度判斷的門檻也跟著縮，
+ * 不然 ッ、ょ、ゥ 的每一筆都會被當成點，反方向寫、只點一下也算對。
+ */
+export function judgeScale(ch: string): number {
+  return SMALL_KANA.has(ch) ? SMALL_SCALE * KANJIVG_SMALL : 1;
+}
 
 /** 把一筆 SVG path 縮小到小字的位置：大寫（絕對座標）縮放加平移，小寫（相對座標）只縮放 */
 export function shrinkSmallStroke(d: string): string {
@@ -290,6 +300,8 @@ function chamfer(a: readonly Pt[], b: readonly Pt[]): number {
 
 /** 一筆參考筆畫的比對資料 */
 type RefInfo = {
+  /** 算門檻用的比例（見 judgeScale） */
+  scale: number;
   pts: Pt[];
   c: Pt;
   /** 以重心為原點的點（順向、反向） */
@@ -305,25 +317,26 @@ type RefInfo = {
 
 const refInfoCache = new WeakMap<readonly Pt[], RefInfo>();
 
-function refInfo(stroke: readonly Pt[]): RefInfo {
+function refInfo(stroke: readonly Pt[], scale = 1): RefInfo {
   const cached = refInfoCache.get(stroke);
-  if (cached) return cached;
+  if (cached && cached.scale === scale) return cached;
   const pts = resample(stroke, JUDGE_POINTS);
   const length = polylineLength(stroke);
   const first = pts[0];
   const last = pts[pts.length - 1];
   const span = Math.hypot(first.x - last.x, first.y - last.y);
-  const closed = length >= TINY_STROKE && span < CLOSED_SPAN;
+  const closed = length >= TINY_STROKE * scale && span < CLOSED_SPAN * scale;
   const c = centroid(pts);
   const centered = centerOn(pts, c);
   const info: RefInfo = {
+    scale,
     pts,
     c,
     centered,
     centeredRev: [...centered].reverse(),
     length,
     closed,
-    directional: !closed && span >= DIRECTION_SPAN,
+    directional: !closed && span >= DIRECTION_SPAN * scale,
     shapeTol: shapeTolerance(stroke),
   };
   refInfoCache.set(stroke, info);
@@ -402,6 +415,8 @@ export function judgeStroke(
   user: readonly Pt[],
   expectedIndex: number,
   ref: readonly (readonly Pt[])[],
+  /** 小字用 judgeScale(字) 的比例縮小門檻 */
+  scale = 1,
 ): StrokeJudgement {
   if (!Number.isInteger(expectedIndex) || expectedIndex < 0 || expectedIndex >= ref.length) {
     throw new RangeError(`expectedIndex ${expectedIndex} 超出範圍（共 ${ref.length} 筆）`);
@@ -409,7 +424,7 @@ export function judgeStroke(
   if (user.length === 0) return { ok: false, reason: 'tooShort', distance: Infinity };
 
   const k = expectedIndex;
-  const exp = refInfo(ref[k]);
+  const exp = refInfo(ref[k], scale);
   const u = resample(user, JUDGE_POINTS);
   const cu = centroid(u);
   const userLen = polylineLength(user);
@@ -417,7 +432,7 @@ export function judgeStroke(
   const distance = m.dFwd;
 
   // 只是點一下：除非這一筆本來就是很小的點（濁音點），否則請使用者寫完整
-  if (userLen < TAP_LENGTH && exp.length >= TINY_STROKE) {
+  if (userLen < TAP_LENGTH && exp.length >= TINY_STROKE * scale) {
     return { ok: false, reason: 'tooShort', distance };
   }
 
@@ -433,7 +448,7 @@ export function judgeStroke(
   // 後面還沒寫的筆畫裡，整筆吻合而且比這一筆更像的
   const expectedFit = overallFit(m);
   for (let j = k + 1; j < ref.length; j++) {
-    const rj = refInfo(ref[j]);
+    const rj = refInfo(ref[j], scale);
     const mj = matchStroke(u, cu, rj);
     const fj = overallFit(mj);
     if (fj <= 1 && fj < expectedFit && !isReversed(mj, rj)) {

@@ -59,12 +59,14 @@ export function todayTasks({ activity, kana, lessons, srs, newPerDay, now }: Tod
   if (seen > 0 || lessonsDone(lessons) >= VOCAB_AFTER_LESSONS) {
     const day = srs.days[key] ?? { reviews: 0, fresh: 0, rev: 0, forgot: 0 };
     const newLeft = Math.min(unseen, Math.max(0, newPerDay - day.fresh));
+    const practiced = today.review ?? 0;
     const done = due === 0 && newLeft === 0;
     const parts = [due ? `${due} 張到期` : '', newLeft ? `${newLeft} 張新卡` : ''].filter(Boolean);
     tasks.push({
       id: 'vocab',
       title: '單字卡',
-      detail: done ? (day.reviews ? `今天複習了 ${day.reviews} 次，都完成了` : '今天沒有要複習的卡片') : `還有 ${parts.join('、')}`,
+      // 次數和學習紀錄頁一樣：單字卡複習加上錯題本的加強練習
+      detail: done ? (practiced ? `今天複習了 ${practiced} 次，都完成了` : '今天沒有要複習的卡片') : `還有 ${parts.join('、')}`,
       done,
       to: '/review/all',
       action: due ? '開始複習' : '學新卡',

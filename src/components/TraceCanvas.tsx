@@ -13,6 +13,7 @@ import {
   TAP_LENGTH,
   getStrokePaths,
   getStrokePoints,
+  judgeScale,
   judgeStroke,
   pathLength,
   polylineLength,
@@ -229,7 +230,7 @@ export function TraceCanvas({ char, mode, onComplete, onStroke, demoKey, resetKe
   const finishStroke = (points: Pt[]) => {
     const index = done;
     if (index >= total) return;
-    const j = judgeStroke(points, index, model);
+    const j = judgeStroke(points, index, model, judgeScale(char));
     onStroke?.(j, index);
     const id = ++seqRef.current;
     if (j.ok) {

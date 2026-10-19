@@ -33,6 +33,17 @@ export function learnedKana(progress: LessonProgress): string {
   return LESSON_META.filter((l) => l.id < upTo).flatMap((l) => l.newKana).join('');
 }
 
+/**
+ * 假名測驗的干擾選項可以用的字：學過的課教的字、測驗做過的字、加上這次的範圍。
+ * 還沒教的字不拿來當選項（第 1 課的題目不會冒出 は、ち）。
+ */
+export function quizKnownChars(stats: KanaStats, progress: LessonProgress, scope: { ch: string }[]): Set<string> {
+  const known = new Set<string>(learnedKana(progress));
+  for (const key of Object.keys(stats)) known.add(key.slice(key.indexOf(':') + 1));
+  for (const it of scope) known.add(it.ch);
+  return known;
+}
+
 /** 連續學習天數：從今天（今天還沒學就從昨天）往回數 */
 export function streak(activity: Activity, now: number): number {
   let day = studyDayStart(now);

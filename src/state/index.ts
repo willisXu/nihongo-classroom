@@ -1,4 +1,4 @@
-import { createStore, isObj, num, bool, str, oneOf } from './store';
+import { createStore, isObj, num, bool, str, oneOf, readJSON, removeKey } from './store';
 import { SEION_CELLS } from '../data/kana';
 import type { CardState } from '../lib/srs';
 import { studyDayKey } from '../lib/date';
@@ -17,6 +17,8 @@ export interface Settings {
   voiceURI: string;
   /** 單字卡顯示羅馬拼音 */
   showRomaji: boolean;
+  /** 單字卡翻到下一張時自動念 */
+  autoplay: boolean;
   /** 每天新單字上限 */
   newPerDay: number;
   model: ModelId;
@@ -32,6 +34,8 @@ const defaultSettings = (): Settings => ({
   slow: false,
   voiceURI: '',
   showRomaji: true,
+  // 以前「自動發音」另外存在 nk.autoplay（沒有放進備份）：還沒有新設定時沿用舊的
+  autoplay: readJSON('nk.autoplay') !== false,
   newPerDay: 10,
   model: 'claude-sonnet-5-5',
   tutorLevel: 'auto',
@@ -48,6 +52,7 @@ export const settingsStore = createStore<Settings>('nk.settings', defaultSetting
     slow: bool(raw.slow, d.slow),
     voiceURI: str(raw.voiceURI, d.voiceURI),
     showRomaji: bool(raw.showRomaji, d.showRomaji),
+    autoplay: bool(raw.autoplay, d.autoplay),
     newPerDay: Math.min(50, Math.max(0, Math.round(num(raw.newPerDay, d.newPerDay)))),
     model: oneOf(raw.model, MODEL_IDS, d.model),
     tutorLevel: oneOf(raw.tutorLevel, ['auto', 'kana', 'n5', 'n4'] as const, d.tutorLevel),
@@ -62,6 +67,8 @@ export const NEW_PER_DAY_OPTIONS = [0, 5, 10, 15, 20, 30, 50];
 
 export function updateSettings(patch: Partial<Settings>) {
   settingsStore.set((s) => ({ ...s, ...patch }));
+  // 自動發音改存在設定裡了：舊的那一份用不到，拿掉才不會在匯入舊備份時又被沿用
+  if ('autoplay' in patch) removeKey('nk.autoplay');
 }
 
 /* ---------------- API 金鑰（只存在這個瀏覽器，不會匯出） ---------------- */
@@ -355,11 +362,18 @@ export function logActivity(kind: ActivityKind) {
 }
 
 /* ---------------- AI 家教用量 ---------------- */
+/** 一個模型的用量。input 是全部的輸入（含快取），其中 cacheWrite 寫進快取、cacheRead 從快取讀（計價不同） */
+export interface ModelUsage {
+  input: number;
+  output: number;
+  cacheWrite: number;
+  cacheRead: number;
+}
 export interface TutorUsage {
   calls: number;
   input: number;
   output: number;
-  byModel: Record<string, { input: number; output: number }>;
+  byModel: Record<string, ModelUsage>;
 }
 export const usageStore = createStore<TutorUsage>('nk.usage', () => ({ calls: 0, input: 0, output: 0, byModel: {} }), (raw) => {
   const d: TutorUsage = { calls: 0, input: 0, output: 0, byModel: {} };
@@ -367,19 +381,29 @@ export const usageStore = createStore<TutorUsage>('nk.usage', () => ({ calls: 0,
   d.calls = num(raw.calls);
   d.input = num(raw.input);
   d.output = num(raw.output);
-  if (isObj(raw.byModel)) for (const [k, v] of Object.entries(raw.byModel)) if (isObj(v)) d.byModel[k] = { input: num(v.input), output: num(v.output) };
+  if (isObj(raw.byModel)) {
+    for (const [k, v] of Object.entries(raw.byModel)) {
+      if (isObj(v)) d.byModel[k] = { input: num(v.input), output: num(v.output), cacheWrite: num(v.cacheWrite), cacheRead: num(v.cacheRead) };
+    }
+  }
   return d;
 });
 
-/** 記下 AI 家教的用量。study：算不算一次學習（測試金鑰不算，不然連續學習天數會多一天） */
-export function addUsage(model: string, input: number, output: number, study = true) {
+/**
+ * 記下 AI 家教的用量。input 是全部的輸入（含快取的部分）。
+ * study：算不算一次學習（測試金鑰不算，不然連續學習天數會多一天）
+ */
+export function addUsage(model: string, input: number, output: number, study = true, cache = { write: 0, read: 0 }) {
   usageStore.set((u) => {
-    const m = u.byModel[model] ?? { input: 0, output: 0 };
+    const m = u.byModel[model] ?? { input: 0, output: 0, cacheWrite: 0, cacheRead: 0 };
     return {
       calls: u.calls + 1,
       input: u.input + input,
       output: u.output + output,
-      byModel: { ...u.byModel, [model]: { input: m.input + input, output: m.output + output } },
+      byModel: {
+        ...u.byModel,
+        [model]: { input: m.input + input, output: m.output + output, cacheWrite: m.cacheWrite + cache.write, cacheRead: m.cacheRead + cache.read },
+      },
     };
   });
   if (study) logActivity('tutor');
@@ -404,12 +428,8 @@ export function exportBackup(): string {
   return JSON.stringify({ app: 'nihongo-classroom', version: BACKUP_VERSION, exportedAt: new Date().toISOString(), data }, null, 2);
 }
 
-/**
- * 匯入備份（覆蓋這個瀏覽器的學習紀錄）；回傳匯入了幾類，格式不對時丟出錯誤訊息。
- * 先檢查整個檔案，有問題就什麼都不改，不會只還原一半；
- * 備份裡沒有的項目（比較舊的備份還沒有錯題本、假名曲線）清空，不和原本的紀錄混在一起。
- */
-export function importBackup(text: string): number {
+/** 檢查整個備份檔，回傳裡面的資料和匯出時間；有問題就丟出錯誤訊息（什麼都不改） */
+function checkBackup(text: string): { data: Record<string, unknown>; exportedAt: number | null } {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
@@ -426,6 +446,98 @@ export function importBackup(text: string): number {
   if (BACKUP_STORES.some((s) => s.key in data && !isObj(data[s.key]))) {
     throw new Error('備份檔的內容有問題（有些資料格式不對），這次沒有匯入任何東西。請用「匯出備份」產生的原始檔案。');
   }
+  // 一類紀錄都沒有：匯入只會把現有的紀錄清光
+  if (!BACKUP_STORES.some((s) => s.key in data)) {
+    throw new Error('這個備份檔裡沒有任何學習紀錄，這次沒有匯入。請用「匯出備份」產生的原始檔案。');
+  }
+  const at = typeof parsed.exportedAt === 'string' ? Date.parse(parsed.exportedAt) : NaN;
+  return { data, exportedAt: Number.isFinite(at) ? at : null };
+}
+
+/** 備份或目前紀錄的摘要：匯入前讓使用者比一比，避免拿舊的備份蓋掉新的紀錄 */
+export interface BackupSummary {
+  /** 完成的課 */
+  lessons: number;
+  /** 熟悉的假名（連對 3 次） */
+  kana: number;
+  /** 學過的單字卡 */
+  words: number;
+  /** 有學習紀錄的天數 */
+  days: number;
+}
+
+function summarize(lessons: LessonProgress, kana: KanaStats, srs: SrsData, activity: Activity): BackupSummary {
+  return {
+    lessons: Object.keys(lessons.done).length,
+    kana: Object.keys(kana).filter((k) => kanaLevel(kana, k) === 2).length,
+    words: Object.values(srs.cards).filter((c) => c.reps > 0).length,
+    days: Object.values(activity).filter((d) => Object.values(d).some((v) => (v ?? 0) > 0)).length,
+  };
+}
+
+export interface BackupPreview {
+  /** 備份匯出的時間（很舊的備份可能沒有） */
+  exportedAt: number | null;
+  backup: BackupSummary;
+  current: BackupSummary;
+}
+
+/** 匯入前先看備份的內容（不改任何東西）；格式不對時丟出錯誤訊息 */
+export function peekBackup(text: string): BackupPreview {
+  const { data, exportedAt } = checkBackup(text);
+  return {
+    exportedAt,
+    backup: summarize(lessonStore.parse(data[lessonStore.key]), kanaStore.parse(data[kanaStore.key]), srsStore.parse(data[srsStore.key]), activityStore.parse(data[activityStore.key])),
+    current: summarize(lessonStore.get(), kanaStore.get(), srsStore.get(), activityStore.get()),
+  };
+}
+
+/* ---------- 匯入前的紀錄：匯入錯了可以復原（存不進去時，這次開網頁之內還能復原） ---------- */
+const PRE_IMPORT_KEY = 'nk.preImport';
+/** 匯入前的紀錄留多久 */
+const PRE_IMPORT_DAYS = 30;
+
+export interface PreImport {
+  /** 匯入的時間 */
+  at: number;
+  lastExport: number;
+  /** 匯入前的紀錄（和匯出的備份檔同樣格式） */
+  backup: string;
+}
+
+function readPreImport(): PreImport | null {
+  const raw = readJSON(PRE_IMPORT_KEY);
+  if (!isObj(raw) || typeof raw.backup !== 'string' || typeof raw.at !== 'number') return null;
+  if (Date.now() - raw.at > PRE_IMPORT_DAYS * 86_400_000) {
+    removeKey(PRE_IMPORT_KEY);
+    return null;
+  }
+  return { at: raw.at, lastExport: num(raw.lastExport), backup: raw.backup };
+}
+
+let preImport: PreImport | null = typeof window === 'undefined' ? null : readPreImport();
+const preImportListeners = new Set<() => void>();
+
+function setPreImport(next: PreImport | null) {
+  preImport = next;
+  try {
+    if (next) localStorage.setItem(PRE_IMPORT_KEY, JSON.stringify(next));
+    else localStorage.removeItem(PRE_IMPORT_KEY);
+  } catch {
+    // 空間不夠存不進去：不算存檔失敗（學習紀錄本身還是存得進去），這次開網頁之內仍然可以復原
+  }
+  preImportListeners.forEach((l) => l());
+}
+
+export const preImportStore = {
+  get: (): PreImport | null => preImport,
+  subscribe(listener: () => void): () => void {
+    preImportListeners.add(listener);
+    return () => preImportListeners.delete(listener);
+  },
+};
+
+function applyBackup(data: Record<string, unknown>): number {
   let n = 0;
   for (const s of BACKUP_STORES) {
     if (s.key in data) {
@@ -438,7 +550,34 @@ export function importBackup(text: string): number {
   return n;
 }
 
+/**
+ * 匯入備份（覆蓋這個瀏覽器的學習紀錄）；回傳匯入了幾類，格式不對時丟出錯誤訊息。
+ * 先檢查整個檔案，有問題就什麼都不改，不會只還原一半；
+ * 備份裡沒有的項目（比較舊的備份還沒有錯題本、假名曲線）清空，不和原本的紀錄混在一起。
+ * 匯入前先把目前的紀錄留一份，可以用 undoImport 復原。
+ */
+export function importBackup(text: string): number {
+  const { data } = checkBackup(text);
+  setPreImport({ at: Date.now(), lastExport: lastExportStore.get(), backup: exportBackup() });
+  const n = applyBackup(data);
+  // 現在這個瀏覽器的紀錄和備份檔一樣：從現在起算「多久沒備份」，不會一匯入就提醒備份
+  markExported();
+  return n;
+}
+
+/** 換回匯入前的紀錄；回傳還原了幾類 */
+export function undoImport(): number {
+  const snap = preImport;
+  if (!snap) throw new Error('沒有匯入前的紀錄可以復原。');
+  const n = applyBackup(checkBackup(snap.backup).data);
+  lastExportStore.set(snap.lastExport);
+  setPreImport(null);
+  return n;
+}
+
 export function resetAllProgress() {
   for (const s of [kanaStore, kanaDaysStore, lessonStore, writingStore, srsStore, missStore, activityStore, usageStore]) s.reset();
+  // 全部清除就是全部：匯入前留的那一份也不留
+  setPreImport(null);
 }
 

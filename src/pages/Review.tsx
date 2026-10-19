@@ -2,14 +2,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { vocabById } from '../data/vocab';
 import { recordVocabMiss, saveCard, settingsStore, srsStore, updateSettings } from '../state';
-import { useStore, readJSON, writeJSON } from '../state/store';
+import { useStore } from '../state/store';
 import {
   LEARN_AHEAD_MS, buildSession, formatMinutes, newCard, pickNext, previewLabel, review, GRADES, type CardState, type Grade, type Pending,
 } from '../lib/srs';
 import { studyDayKey, studyDayStart, addDays } from '../lib/date';
 import { romaji } from '../lib/romaji';
 import { speak } from '../lib/speech';
-import { POS_LABEL, VERB_GROUP_LABEL, deckItemIds, deckTitle, speechText } from '../lib/vocab';
+import { POS_LABEL, VERB_GROUP_LABEL, deckItemIds, deckTitle, speechText, exampleSpeech } from '../lib/vocab';
 import { SpeakIcon } from '../components/Speak';
 import { Switch } from '../components/Controls';
 import { Icon } from '../components/Icon';
@@ -59,7 +59,7 @@ function Review({ deck, restarted, onRestart }: { deck: string; restarted: boole
   const srs = useStore(srsStore);
   // 開場時決定牌組內容（全部牌組要看哪些重複的字已經學過）
   const ids = useMemo(() => deckItemIds(deck, srsStore.get().cards), [deck]);
-  const [autoplay, setAutoplay] = useState<boolean>(() => readJSON('nk.autoplay') !== false);
+  const autoplay = settings.autoplay;
 
   // 開場時決定這一輪的卡片（之後才到期的卡片，在結束畫面按「繼續複習」開下一輪）
   const [session] = useState(() => {
@@ -148,7 +148,7 @@ function Review({ deck, restarted, onRestart }: { deck: string; restarted: boole
       }
       const before = cardsNow[currentId] ?? newCard(t);
       const wasNew = before.reps === 0;
-      const after = review(before, g, t);
+      const after = review(before, g, t, currentId);
       saveCard(currentId, after, wasNew, { due: before.reps > 0 && before.step === -1, forgot: g === 'again' });
       // 按「忘記了」的卡片收進錯題本
       if (g === 'again') recordVocabMiss(currentId);
@@ -246,10 +246,7 @@ function Review({ deck, restarted, onRestart }: { deck: string; restarted: boole
           <Switch
             id="rv-auto"
             checked={autoplay}
-            onChange={(v) => {
-              setAutoplay(v);
-              writeJSON('nk.autoplay', v);
-            }}
+            onChange={(v) => updateSettings({ autoplay: v })}
           >
             自動發音
           </Switch>
@@ -333,7 +330,7 @@ function Review({ deck, restarted, onRestart }: { deck: string; restarted: boole
               </p>
               {item.ex ? (
                 <div className="v-ex">
-                  <SpeakIcon text={item.ex.ja} label="播放例句" />
+                  <SpeakIcon text={exampleSpeech(item.ex)} label="播放例句" />
                   <div>
                     <p lang="ja" className="v-ex-ja">
                       {item.ex.ja}
@@ -358,7 +355,7 @@ function Review({ deck, restarted, onRestart }: { deck: string; restarted: boole
                 {GRADES.map((g, i) => (
                   <button key={g} type="button" className={`grade grade-${g}`} onClick={() => grade(g)}>
                     <span className="g-label">{GRADE_LABEL[g]}</span>
-                    <span className="g-ivl">{previewLabel(card ?? newCard(now), g, now)}</span>
+                    <span className="g-ivl">{previewLabel(card ?? newCard(now), g, now, currentId ?? undefined)}</span>
                     <span className="kbd" aria-hidden="true">
                       {i + 1}
                     </span>

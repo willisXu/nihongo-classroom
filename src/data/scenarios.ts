@@ -23,6 +23,11 @@ export interface Scenario {
   learnerRole: string;
   /** 朋友之間的對話用普通體 */
   casual?: boolean;
+  /**
+   * 由學習者先開口（例如接電話，要先說「はい、〇〇です」）：AI 不先說第一句，
+   * 畫面顯示 hint 和兩個參考說法（只用假名，各種程度都看得懂）。
+   */
+  learnerFirst?: { hint: string; suggestions: { ja: string; reading: string; zh: string }[] };
 }
 
 export const SCENARIOS: Scenario[] = [
@@ -67,6 +72,13 @@ export const SCENARIOS: Scenario[] = [
     goal: '接電話、說明同事不在，問要不要回電並記下對方的名字。',
     aiRole: 'a Japanese client calling the office and asking for a colleague named 田中 (Tanaka)',
     learnerRole: 'an office worker answering the phone',
+    learnerFirst: {
+      hint: '電話響了。你先接起來說第一句：報上公司的名字。',
+      suggestions: [
+        { ja: 'はい、エービーシーです。', reading: 'はい、エービーシーです。', zh: '您好，這裡是 ABC 公司。' },
+        { ja: 'おでんわ ありがとうございます。エービーシーです。', reading: 'おでんわ ありがとうございます。エービーシーです。', zh: '謝謝您的來電，這裡是 ABC 公司。' },
+      ],
+    },
   },
   {
     id: 'meeting', purpose: 'business', title: '會議前寒暄',

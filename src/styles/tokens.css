@@ -12,6 +12,7 @@
   --grid: #8dbaa3;        /* 原稿紙的綠格線 */
   --guide: #c7dccf;       /* 格子裡的虛線十字 */
   --line: #dae5dd;
+  --field-line: #848f9f;  /* 輸入框的框線：和卡片、紙張都有 3:1 的對比 */
   --accent: #2c4f94;      /* 藍：所有可以按的東西 */
   --accent-soft: #e4ebf7;
   --on-accent: #ffffff;
@@ -55,6 +56,7 @@
     --grid: #5c8c77;
     --guide: #35574c;
     --line: #2c4740;
+    --field-line: #5c8c77;
     --accent: #f0d06a;
     --accent-soft: rgba(240, 208, 106, 0.15);
     --on-accent: #1a2e28;
@@ -89,6 +91,7 @@
   --grid: #5c8c77;
   --guide: #35574c;
   --line: #2c4740;
+  --field-line: #5c8c77;
   --accent: #f0d06a;
   --accent-soft: rgba(240, 208, 106, 0.15);
   --on-accent: #1a2e28;

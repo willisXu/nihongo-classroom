@@ -40,7 +40,7 @@ export const DUPLICATE_OF: Record<string, string> = {
   'travel-0175': 'n5-0457', 'travel-0176': 'n5-0604', 'travel-0184': 'n5-0344', 'travel-0185': 'n5-0229', 'travel-0187': 'n5-0662',
   'travel-0190': 'n5-0228', 'travel-0194': 'n5-0354', 'travel-0198': 'n5-0658', 'travel-0200': 'n5-0384', 'travel-0202': 'n5-0387',
   'travel-0203': 'n5-0439', 'travel-0204': 'n5-0388', 'travel-0205': 'n5-0676', 'travel-0206': 'n5-0655', 'travel-0207': 'n5-0678',
-  'travel-0208': 'n5-0409', 'travel-0209': 'n5-0416', 'travel-0210': 'n5-0611', 'travel-0211': 'n5-0570', 'travel-0219': 'n5-0458',
+  'travel-0208': 'n5-0409', 'travel-0209': 'n5-0416', 'travel-0210': 'n5-0611', 'travel-0211': 'n5-0570', 'travel-0212': 'n5-0617', 'travel-0219': 'n5-0458',
   'travel-0220': 'n5-0776', 'travel-0225': 'n5-0274', 'travel-0226': 'n5-0358', 'business-0001': 'n5-0011', 'business-0014': 'n5-0342',
   'business-0015': 'n5-0197', 'business-0030': 'n5-0213', 'business-0031': 'n5-0620', 'business-0039': 'n5-0332', 'business-0041': 'n5-0448',
   'business-0046': 'n5-0325', 'business-0068': 'n5-0026', 'business-0100': 'n5-0018', 'anime-0005': 'n5-0774', 'anime-0017': 'n5-0732',
@@ -68,6 +68,22 @@ export function wordGroups(): string[][] {
     groupsCache = [...groups.values()];
   }
   return groupsCache;
+}
+
+let groupOfCache: Map<string, string[]> | null = null;
+/** 這張卡片所屬的字的所有卡片 id（包含自己） */
+export function wordGroupOf(id: string): string[] {
+  if (!groupOfCache) {
+    groupOfCache = new Map();
+    for (const g of wordGroups()) for (const x of g) groupOfCache.set(x, g);
+  }
+  return groupOfCache.get(id) ?? [id];
+}
+
+/** 這張卡片還沒學，但同一個字已經在別的牌組學過 */
+export function learnedInOtherDeck(cards: Record<string, { reps: number } | undefined>, id: string): boolean {
+  if ((cards[id]?.reps ?? 0) > 0) return false;
+  return wordGroupOf(id).some((x) => x !== id && (cards[x]?.reps ?? 0) > 0);
 }
 
 /** 還沒學過的字有幾個：同一個字在好幾個牌組只算一次，任何一張學過就不算 */

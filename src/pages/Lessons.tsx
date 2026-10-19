@@ -33,7 +33,7 @@ export default function Lessons() {
                 </span>
                 <span className="lesson-body">
                   <span className="lesson-title">
-                    第 {l.id} 課　<span lang="ja">{l.title}</span>
+                    第 {l.id} 課　<span className="ja" lang={/[\u3041-\u3096\u30a1-\u30fa]/u.test(l.title) ? 'ja' : undefined}>{l.title}</span>
                     {isNow ? <span className="now-pill">下一課</span> : null}
                     {isDone ? <span className="sr-only">（已完成）</span> : null}
                   </span>

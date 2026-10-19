@@ -2,7 +2,9 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import Anthropic from '@anthropic-ai/sdk';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { TIMEOUT_MESSAGE, TutorError, callJSON, normalizeApiKey, testConnection, toTutorError as toTutorErrorLazy } from '../src/lib/claude';
+import {
+  CONNECT_MESSAGE, TIMEOUT_MESSAGE, TutorError, callJSON, estimateCost, normalizeApiKey, testConnection, toTutorError as toTutorErrorLazy,
+} from '../src/lib/claude';
 // 錯誤對照表在真正呼叫 API 的模組裡（含 SDK）；claude.ts 的 toTutorError 在 SDK 載入後會交給它
 import { STREAM_LIMITS, estimateTokens, toTutorError } from '../src/lib/claude-api';
 
@@ -76,7 +78,9 @@ describe('toTutorError', () => {
     expect(map(new Anthropic.APIUserAbortError())).toEqual(['aborted', '已取消。']);
     const timeout = new Anthropic.APIConnectionTimeoutError();
     expect(timeout).toBeInstanceOf(Anthropic.APIConnectionError);
-    expect(map(timeout)).toEqual(['timeout', TIMEOUT_MESSAGE]);
+    // 串流只等到伺服器開始回應：等不到是連線的問題，不建議換模型
+    expect(map(timeout)).toEqual(['network', CONNECT_MESSAGE]);
+    expect(CONNECT_MESSAGE).not.toMatch('Haiku');
     expect(TIMEOUT_MESSAGE).toMatch('Haiku 5.5');
     expect(map(new Anthropic.APIConnectionError({ message: 'Connection error.' }))[0]).toBe('network');
   });
@@ -158,13 +162,13 @@ function sseEvent(res: http.ServerResponse, event: string, data: unknown) {
 }
 
 /** 依序送出一則完整的串流回覆：thinking 區塊 + 分段送出的 JSON 文字 */
-function streamReply(res: http.ServerResponse, opts: { text: string; stop?: string; input?: number; output?: number }) {
+function streamReply(res: http.ServerResponse, opts: { text: string; stop?: string; input?: number; output?: number; cacheWrite?: number; cacheRead?: number }) {
   sseHead(res);
   sseEvent(res, 'message_start', {
     type: 'message_start',
     message: {
       id: 'msg_1', type: 'message', role: 'assistant', model: 'claude-sonnet-5-5', content: [], stop_reason: null, stop_sequence: null,
-      usage: { input_tokens: opts.input ?? 1234, output_tokens: 1, cache_creation_input_tokens: null, cache_read_input_tokens: null },
+      usage: { input_tokens: opts.input ?? 1234, output_tokens: 1, cache_creation_input_tokens: opts.cacheWrite ?? null, cache_read_input_tokens: opts.cacheRead ?? null },
     },
   });
   sseEvent(res, 'content_block_start', { type: 'content_block_start', index: 0, content_block: { type: 'thinking', thinking: '', signature: '' } });
@@ -243,7 +247,89 @@ describe('callJSON (streaming)', () => {
     expect(body.output_config).toEqual({ effort: 'medium', format: { type: 'json_schema', schema: SCHEMA } });
     expect(headers['x-api-key']).toBe(KEY);
     expect(headers['anthropic-dangerous-direct-browser-access']).toBe('true');
-    expect(headers['x-stainless-timeout']).toBe('30');
+    expect(headers['x-stainless-timeout']).toBe('15');
+    expect(body.cache_control).toBeUndefined();
+  });
+
+  it('caches the conversation when asked, and reports cache reads and writes separately', async () => {
+    handler = (_req, res) => streamReply(res, { text: '{"reply":"はい"}', input: 50, output: 9, cacheWrite: 1200, cacheRead: 3400 });
+    const usage: unknown[][] = [];
+    let connects = 0;
+    await callJSON({ ...base, cache: true, onConnect: () => connects++, onUsage: (i, o, c) => usage.push([i, o, c]) });
+    expect(requests[0].body.cache_control).toEqual({ type: 'ephemeral' });
+    expect(usage).toEqual([[50, 9, { write: 1200, read: 3400 }]]);
+    expect(connects).toBe(1);
+    // 寫快取 1.25 倍、讀快取一成：Sonnet 輸入 $2、輸出 $10 每百萬
+    expect(estimateCost('claude-sonnet-5-5', 50, 9, 1200, 3400)).toBeCloseTo((50 * 2 + 1200 * 2.5 + 3400 * 0.2 + 9 * 10) / 1e6, 12);
+    expect(estimateCost('claude-sonnet-5-5', 1000, 0)).toBeCloseTo(0.002, 12);
+  });
+
+  it('gives up with a connection message when the server never starts answering', async () => {
+    handler = () => {
+      // 不回應（連不到 api.anthropic.com 時的樣子）
+    };
+    const saved = STREAM_LIMITS.connectMs;
+    STREAM_LIMITS.connectMs = 300;
+    try {
+      const started = Date.now();
+      const err = await failure(callJSON(base));
+      expect(err.kind).toBe('network');
+      expect(err.message).toBe(CONNECT_MESSAGE);
+      expect(Date.now() - started).toBeLessThan(5000);
+    } finally {
+      STREAM_LIMITS.connectMs = saved;
+    }
+  });
+
+  it('when the server keeps answering 429/529 and the SDK waits to retry, says rate limit / busy instead of "cannot connect"', async () => {
+    const saved = STREAM_LIMITS.connectMs;
+    STREAM_LIMITS.connectMs = 500;
+    try {
+      for (const [status, type, kind] of [[429, 'rate_limit_error', 'rate'], [529, 'overloaded_error', 'busy']] as const) {
+        requests.length = 0;
+        handler = (_req, res) => {
+          // retry-after 2 秒：SDK 會等 2 秒再試，比上限長
+          res.writeHead(status, { 'content-type': 'application/json', 'retry-after': '2', 'request-id': 'req_r' });
+          res.end(JSON.stringify({ type: 'error', error: { type, message: 'slow down' } }));
+        };
+        const err = await failure(callJSON(base));
+        expect(err.kind, String(status)).toBe(kind);
+        expect(err.message).not.toBe(CONNECT_MESSAGE);
+      }
+    } finally {
+      STREAM_LIMITS.connectMs = saved;
+    }
+  });
+
+  it('does not treat a long silent thinking block as a stalled stream', async () => {
+    handler = (_req, res) => {
+      sseHead(res);
+      sseEvent(res, 'message_start', {
+        type: 'message_start',
+        message: { id: 'm', type: 'message', role: 'assistant', model: 'claude-sonnet-5-5', content: [], stop_reason: null, stop_sequence: null, usage: { input_tokens: 7, output_tokens: 1 } },
+      });
+      // 思考的內容不送出（display: omitted）：一段時間完全沒有資料
+      sseEvent(res, 'content_block_start', { type: 'content_block_start', index: 0, content_block: { type: 'thinking', thinking: '', signature: '' } });
+      setTimeout(() => {
+        sseEvent(res, 'content_block_delta', { type: 'content_block_delta', index: 0, delta: { type: 'signature_delta', signature: 'sig' } });
+        sseEvent(res, 'content_block_stop', { type: 'content_block_stop', index: 0 });
+        sseEvent(res, 'content_block_start', { type: 'content_block_start', index: 1, content_block: { type: 'text', text: '', citations: null } });
+        sseEvent(res, 'content_block_delta', { type: 'content_block_delta', index: 1, delta: { type: 'text_delta', text: '{"reply":"はい"}' } });
+        sseEvent(res, 'content_block_stop', { type: 'content_block_stop', index: 1 });
+        sseEvent(res, 'message_delta', { type: 'message_delta', delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { output_tokens: 30 } });
+        sseEvent(res, 'message_stop', { type: 'message_stop' });
+        res.end();
+      }, 500);
+    };
+    const saved = { ...STREAM_LIMITS };
+    STREAM_LIMITS.stallMs = 200;
+    STREAM_LIMITS.thinkingStallMs = 2000;
+    try {
+      const res = await callJSON<{ reply: string }>(base);
+      expect(res.data).toEqual({ reply: 'はい' });
+    } finally {
+      Object.assign(STREAM_LIMITS, saved);
+    }
   });
 
   it('cleans invisible characters out of the key before building the request', async () => {
@@ -407,6 +493,7 @@ describe('SDK 延後載入', () => {
     await import('../src/lib/claude-api');
     const e = new Anthropic.APIConnectionTimeoutError();
     // 測試裡 callJSON 已經跑過，SDK 已載入
-    expect(toTutorErrorLazy(e).message).toBe(TIMEOUT_MESSAGE);
+    expect(toTutorErrorLazy(e).message).toBe(CONNECT_MESSAGE);
+    expect(toTutorErrorLazy(httpError(504, 'timeout_error', 'Request timed out')).message).toBe(TIMEOUT_MESSAGE);
   });
 });

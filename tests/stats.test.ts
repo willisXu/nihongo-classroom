@@ -49,8 +49,15 @@ describe('學習紀錄', () => {
 
   it('學習天數和最長連續天數（中間斷一天就重算）', () => {
     const a = { [key(9)]: { kana: 1 }, [key(8)]: { kana: 1 }, [key(7)]: { kana: 1 }, [key(5)]: { review: 2 }, [key(4)]: { kana: 0 }, [key(1)]: { writing: 1 }, [key(0)]: { kana: 3 } };
-    expect(studySummary(a)).toEqual({ days: 6, longest: 3, first: key(9) });
-    expect(studySummary({})).toEqual({ days: 0, longest: 0, first: null });
+    expect(studySummary(a, NOW)).toEqual({ days: 6, longest: 3, first: key(9) });
+    expect(studySummary({}, NOW)).toEqual({ days: 0, longest: 0, first: null });
+  });
+
+  it('手機時間調快過：記在未來日期的紀錄不算進學習天數和這一週', () => {
+    const future = studyDayKey(NOW + 2 * DAY_MS);
+    const a = { [key(0)]: { kana: 5 }, [future]: { kana: 50 } };
+    expect(studySummary(a, NOW)).toEqual({ days: 1, longest: 1, first: key(0) });
+    expect(weeklyTotals(a, NOW, 4)[3].kana).toBe(5);
   });
 
   it('每週練習量：照週加總，最後一週是這一週', () => {

@@ -123,6 +123,30 @@ export function romaji(input: string): string {
   return out.replace(/\s+/g, ' ').trim();
 }
 
+/** 詞尾是 は 卻不是助詞的詞（分詞讀音裡單獨成一段時照字念） */
+const HA_WORDS = new Set(['はは', 'ははは']);
+
+/**
+ * 分好詞（詞和詞之間有空格）的假名讀音轉羅馬拼音：每一段最後的 は、へ 是助詞，念 wa、e
+ * （こんにちは、では 這類說法最後的 は 也念 wa，正好一樣）。
+ * AI 家教用：還在學五十音時，每句日文下面附上拼音。
+ */
+export function phraseRomaji(reading: string): string {
+  return reading
+    .split(/[\s　]+/)
+    .filter(Boolean)
+    .map((seg) => {
+      const m = /^(.*?)([はへ])([、。？！!?,.]*)$/u.exec(seg);
+      if (!m || HA_WORDS.has(m[1] + m[2])) return romaji(seg);
+      const particle = m[2] === 'は' ? 'wa' : 'e';
+      return `${m[1] ? `${romaji(m[1])} ` : ''}${particle}${romaji(m[3])}`;
+    })
+    .join(' ')
+    .replace(/\s+([,.?!])/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 /** 是否只由假名（含小字、長音符號）組成 */
 export function isKanaOnly(s: string): boolean {
   return /^[ぁ-ゖァ-ヺー]+$/.test(s);

@@ -61,6 +61,8 @@ export interface Store<T> {
   subscribe(listener: () => void): () => void;
   /** 從外部資料（匯入備份）重新載入 */
   load(raw: unknown): void;
+  /** 把外部資料整理成正確形狀，但不載入（匯入前先看備份的內容） */
+  parse(raw: unknown): T;
   reset(): void;
 }
 
@@ -99,6 +101,7 @@ export function createStore<T>(key: string, initial: () => T, normalize: (raw: u
       writeJSON(key, state);
       emit();
     },
+    parse: normalize,
     reset() {
       state = initial();
       removeKey(key);

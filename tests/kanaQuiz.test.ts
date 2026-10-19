@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildPool, makeOptions, normalizeRows, pickItem, ALL_ROW_IDS } from '../src/lib/kanaQuiz';
-import { streak } from '../src/lib/progress';
+import { quizKnownChars, streak } from '../src/lib/progress';
+import type { KanaStats, LessonProgress } from '../src/state';
 import { studyDayKey, addDays, studyDayStart } from '../src/lib/date';
 
 function seeded(seed: number) {
@@ -55,6 +56,50 @@ describe('kana quiz', () => {
   it('works with a tiny pool', () => {
     const pool = buildPool(['a'], 'h', 'see');
     const opts = makeOptions(pool[0], pool, 'see', seeded(1));
+    expect(opts).toHaveLength(4);
+  });
+
+  it('only offers kana the learner has seen (no untaught lookalikes in lesson 1–2)', () => {
+    const progress: LessonProgress = { done: {}, hw: {} };
+    for (const [lesson, rows, script] of [
+      [1, ['a', 'k', 's'], 'h'],
+      [2, ['t', 'n'], 'h'],
+      [3, ['h', 'm'], 'h'],
+      [7, ['a', 'k', 's', 't', 'n', 'g', 'z', 'd'], 'k'],
+    ] as const) {
+      // 前面的課都完成了，這一課還沒
+      const done: Record<string, number> = {};
+      for (let i = 1; i < lesson; i++) done[i] = Date.UTC(2026, 9, 10);
+      progress.done = done;
+      for (const mode of ['see', 'listen'] as const) {
+        const pool = buildPool([...rows], script, mode);
+        const known = quizKnownChars({}, progress, pool);
+        for (const item of pool) {
+          for (let seed = 1; seed <= 40; seed++) {
+            const opts = makeOptions(item, pool, mode, seeded(seed), known);
+            expect(opts).toHaveLength(4);
+            for (const o of opts) expect(known.has(o.ch), `第 ${lesson} 課 ${mode} ${item.ch}：${o.ch}`).toBe(true);
+          }
+        }
+      }
+    }
+  });
+
+  it('weak-kana drill: options come from kana already practised, then any kana as a last resort', () => {
+    const progress: LessonProgress = { done: {}, hw: {} };
+    const st = (s: number, w: number) => ({ c: s, w, s, t: 1 });
+    const stats: KanaStats = { 'h:け': st(0, 2), 'h:あ': st(3, 0), 'h:い': st(1, 0), 'h:く': st(2, 1) };
+    const full = buildPool(ALL_ROW_IDS, 'mix', 'see');
+    const weak = full.filter((it) => it.key === 'h:け');
+    const known = quizKnownChars(stats, progress, weak);
+    expect([...known].sort()).toEqual(['あ', 'い', 'く', 'け']);
+    for (let seed = 1; seed <= 40; seed++) {
+      const opts = makeOptions(weak[0], full, 'see', seeded(seed), known);
+      expect(opts.map((o) => o.ch).sort()).toEqual(['あ', 'い', 'く', 'け']);
+    }
+    // 只看過兩個字：湊不滿時才用其他清音補，選項一定有 4 個
+    const few = quizKnownChars({ 'h:け': st(0, 1) }, progress, weak);
+    const opts = makeOptions(weak[0], full, 'see', seeded(3), few);
     expect(opts).toHaveLength(4);
   });
 

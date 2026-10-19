@@ -17,6 +17,8 @@ export interface KanaCell {
   koTc?: string;
   /** 發音提示（繁體中文） */
   tip?: string;
+  /** 片假名另外的提示（和平假名說法不同時才填，例如 ヲ） */
+  tipK?: string;
   /** 平假名例字 [假名, 中文]（羅馬拼音由程式產生） */
   ex?: [string, string];
   /** 片假名例字 [假名, 中文] */
@@ -86,7 +88,8 @@ export type LessonBlock =
   /** 三種文字的介紹卡（第 1 課專用） */
   | { type: 'scripts' }
   /** 手寫與電腦字型對照 */
-  | { type: 'fontcompare'; chars: string; caption?: Inline }
+  /** labels：兩欄的說明（沒填時是「筆畫分開／常連成一筆」，只適合 き さ そ り 這種會連筆的字） */
+  | { type: 'fontcompare'; chars: string; caption?: Inline; labels?: [string, string] }
   /** 小表格 */
   | { type: 'table'; head: string[]; rows: Inline[][] };
 
@@ -151,8 +154,16 @@ export interface VocabItem {
   pos: Pos;
   /** 動詞分類：1 = 五段，2 = 一段，3 = する・くる */
   verbGroup?: 1 | 2 | 3;
-  /** 例句：ja 可含漢字，kana 為全假名讀音，zh 為中文翻譯 */
-  ex?: { ja: string; kana: string; zh: string };
+  /**
+   * 要念的寫法（很少用）：只有假名時語音容易念錯才填。例如 はち 有些語音會把 は 當助詞念成 wa，改念 八。
+   * 沒填就念 kana（見 lib/vocab.ts 的 speechText）。
+   */
+  say?: string;
+  /**
+   * 例句：ja 可含漢字，kana 為全假名讀音，zh 為中文翻譯。
+   * say：漢字有好幾種念法、語音容易念錯時才填（例如 辛い 可能念成 つらい），播放例句時念這個。
+   */
+  ex?: { ja: string; kana: string; zh: string; say?: string };
   /** 用法提醒（繁體中文），例如「口語」「對上司用」 */
   note?: string;
   /** 主題分類，例如「餐廳」「交通」 */

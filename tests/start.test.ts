@@ -125,6 +125,22 @@ describe('install stamp', () => {
     expect(depsInstalled(dir)).toBe(false);
   });
 
+  it('a manual npm ci / npm install writes the stamp too (postinstall), so the launcher does not reinstall', () => {
+    const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8')) as { scripts: Record<string, string> };
+    expect(pkg.scripts.postinstall).toBe('node scripts/stamp.mjs');
+    // 在暫存資料夾裡照 npm 的方式跑：scripts/stamp.mjs 用自己所在的位置找專案根目錄
+    mkdirSync(join(dir, 'scripts'));
+    for (const f of ['stamp.mjs', 'start-lib.mjs']) writeFileSync(join(dir, 'scripts', f), readFileSync(join(__dirname, '..', 'scripts', f)));
+    installNodeModules();
+    expect(depsInstalled(dir)).toBe(false);
+    const run = spawnSync(process.execPath, [join(dir, 'scripts', 'stamp.mjs')], { cwd: tmpdir(), encoding: 'utf8' });
+    expect(run.status).toBe(0);
+    expect(depsInstalled(dir)).toBe(true);
+    // 沒有 node_modules（安裝失敗）時不會出錯，安裝本身不受影響
+    rmSync(join(dir, 'node_modules'), { recursive: true, force: true });
+    expect(spawnSync(process.execPath, [join(dir, 'scripts', 'stamp.mjs')], { encoding: 'utf8' }).status).toBe(0);
+  });
+
   it('reinstalls when the folder moves to another OS', () => {
     installNodeModules();
     const otherPlatform = process.platform === 'win32' ? 'darwin' : 'win32';

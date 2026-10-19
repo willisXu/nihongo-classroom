@@ -2,20 +2,45 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { DECKS } from '../src/data/vocab';
 import { DUPLICATE_OF, unseenWords } from '../src/data/vocab/meta';
-import { deckItemIds, speechText } from '../src/lib/vocab';
+import { deckItemIds, exampleSpeech, speechText } from '../src/lib/vocab';
 import { voiceRank } from '../src/lib/speech';
 
 const ALL = DECKS.flatMap((d) => d.items);
 const HAS_KANJI = /[一-鿿々〆]/;
 
 describe('單字發音', () => {
-  it('一律念假名，不念「〜」', () => {
+  it('念假名（少數指定念法的字除外），不念「〜」', () => {
+    // はち、はは 只有假名時，有些語音會把 は 當助詞念成 wa：改念只有一種讀音的漢字
+    expect(ALL.filter((it) => it.say).map((it) => it.id).sort()).toEqual(['n5-0044', 'n5-0165']);
     for (const it of ALL) {
       const t = speechText(it);
-      expect(t, it.id).not.toMatch(HAS_KANJI);
+      if (it.say) {
+        const readings = new Set(ALL.filter((x) => x.kanji === it.say).map((x) => x.kana));
+        expect([...readings], `${it.id} 指定念 ${it.say}`).toEqual([it.kana]);
+      } else {
+        expect(t, it.id).not.toMatch(HAS_KANJI);
+      }
       expect(t, it.id).not.toMatch(/[〜～]/);
       expect(t.length, it.id).toBeGreaterThan(0);
     }
+  });
+
+  it('例句指定的念法（say）只把容易念錯的漢字換成假名，其他照原句', () => {
+    const withSay = ALL.filter((it) => it.ex?.say);
+    expect(withSay.length).toBe(7);
+    for (const it of withSay) {
+      const ex = it.ex!;
+      expect(exampleSpeech(ex), it.id).toBe(ex.say);
+      // 換掉的部分要出現在全假名讀音裡：把 say 的漢字部分拿掉後，剩下的假名都依序出現在 kana 裡
+      const kanaParts = ex.say!.split(/[一-鿿々〆]+/).filter(Boolean);
+      let at = 0;
+      for (const part of kanaParts) {
+        const i = ex.kana.indexOf(part, at);
+        expect(i, `${it.id}：「${part}」不在讀音裡`).toBeGreaterThanOrEqual(0);
+        at = i + part.length;
+      }
+    }
+    for (const it of ALL) if (it.ex && !it.ex.say) expect(exampleSpeech(it.ex)).toBe(it.ex.ja);
   });
 
   it('同一個漢字、不同讀音的卡片，念出來的也不同', () => {
@@ -42,6 +67,30 @@ describe('單字發音', () => {
     ];
     const sorted = [...names].sort((a, b) => voiceRank(a) - voiceRank(b));
     expect(sorted).toEqual([names[1], names[2], names[0], names[3]]);
+  });
+});
+
+describe('單一牌組', () => {
+  it('在別的牌組學過的同一個字不再當新卡；這個牌組自己學過的照常複習', () => {
+    const travel = DECKS.find((d) => d.id === 'travel')!;
+    const dupIds = travel.items.filter((it) => DUPLICATE_OF[it.id]?.startsWith('n5-')).map((it) => it.id);
+    expect(dupIds.length).toBeGreaterThan(50);
+    // 學完 N5 的對應單字
+    const cards: Record<string, { reps: number }> = {};
+    for (const id of dupIds) cards[DUPLICATE_OF[id]] = { reps: 3 };
+    const ids = deckItemIds('travel', cards);
+    expect(ids.length).toBe(travel.items.length - dupIds.length);
+    for (const id of dupIds) expect(ids).not.toContain(id);
+    // 旅遊牌組自己學過的卡片，即使 N5 也學過，照常留著複習
+    cards[dupIds[0]] = { reps: 1 };
+    expect(deckItemIds('travel', cards)).toContain(dupIds[0]);
+    // 沒學過別的牌組時，整個牌組都在
+    expect(deckItemIds('travel')).toHaveLength(travel.items.length);
+  });
+
+  it('はく（N5 只寫假名、旅遊原本寫 履く）當成同一個字', () => {
+    expect(DUPLICATE_OF['travel-0212']).toBe('n5-0617');
+    expect(deckItemIds('travel', { 'n5-0617': { reps: 2 } })).not.toContain('travel-0212');
   });
 });
 

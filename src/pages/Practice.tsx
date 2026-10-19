@@ -8,7 +8,7 @@ import {
   ALL_ROW_IDS, ROW_CHOICES, SEI_ROW_IDS, buildPool, hintFor, makeOptions, normalizeRows, pickItem,
   type QuizItem, type QuizMode, type QuizOption, type QuizScript,
 } from '../lib/kanaQuiz';
-import { countMastered, HIRA_KEYS, KATA_KEYS, nextLesson } from '../lib/progress';
+import { countMastered, HIRA_KEYS, KATA_KEYS, nextLesson, quizKnownChars } from '../lib/progress';
 import { weakKanaKeys } from '../lib/mistakes';
 import { speak } from '../lib/speech';
 import { Masu, Segmented } from '../components/Controls';
@@ -97,8 +97,9 @@ export default function Practice() {
       }
       const item = pickItem(live, latest, lastKey.current);
       lastKey.current = item.key;
-      // 干擾選項從完整的五十音挑（錯題只有幾個字時才有像樣的選項）
-      setQ({ item, options: makeOptions(item, focus ? fullPool : pool, prefs.mode), picked: null, hint: false });
+      // 干擾選項：錯題練習從完整的五十音挑（錯題只有幾個字時才有像樣的選項），但都只用學過、做過的字
+      const known = quizKnownChars(latest, lessonStore.get(), pool);
+      setQ({ item, options: makeOptions(item, focus ? fullPool : pool, prefs.mode, Math.random, known), picked: null, hint: false });
       if (prefs.mode === 'listen' && (fromUser || armed.current)) speak(item.ch);
     },
     [pool, fullPool, focus, prefs.mode],

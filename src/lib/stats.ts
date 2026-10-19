@@ -70,10 +70,11 @@ export function calendar(activity: Activity, now: number, weeks: number): Calend
   );
 }
 
-/** 有學習的天數、最長連續天數、第一天 */
-export function studySummary(activity: Activity): { days: number; longest: number; first: string | null } {
+/** 有學習的天數、最長連續天數、第一天（手機時間調快過、記在未來日期的紀錄不算） */
+export function studySummary(activity: Activity, now: number): { days: number; longest: number; first: string | null } {
+  const today = studyDayKey(now);
   const keys = Object.keys(activity)
-    .filter((k) => dayActivity(activity, k).total > 0)
+    .filter((k) => k <= today && dayActivity(activity, k).total > 0)
     .sort();
   let longest = 0;
   let run = 0;
@@ -94,11 +95,11 @@ export interface WeekTotal {
   writing: number;
 }
 
-/** 最近幾週每週的練習量（最後一週是這一週，算到今天） */
+/** 最近幾週每週的練習量（最後一週是這一週，算到今天；記在未來日期的紀錄不算） */
 export function weeklyTotals(activity: Activity, now: number, weeks: number): WeekTotal[] {
   return calendar(activity, now, weeks).map((col) =>
     col.reduce<WeekTotal>(
-      (w, d) => ({ ...w, kana: w.kana + d.act.kana, review: w.review + d.act.review, writing: w.writing + d.act.writing }),
+      (w, d) => (d.future ? w : { ...w, kana: w.kana + d.act.kana, review: w.review + d.act.review, writing: w.writing + d.act.writing }),
       { start: col[0].date, kana: 0, review: 0, writing: 0 },
     ),
   );

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildQueue, deckStats, newCard, previewLabel, review, MIN_MS, MIN_EASE } from '../src/lib/srs';
-import { studyDayStart, addDays } from '../src/lib/date';
+import { buildQueue, deckStats, formatDays, fuzzDays, fuzzRange, newCard, previewLabel, review, MIN_MS, MIN_EASE, type CardState } from '../src/lib/srs';
+import { studyDayStart, addDays, DAY_MS } from '../src/lib/date';
 
 const NOW = new Date(2026, 9, 12, 10, 0, 0).getTime(); // 2026-10-12 10:00 local
 
@@ -95,5 +95,56 @@ describe('srs', () => {
     expect(previewLabel(c, 'again', NOW)).toBe('1 分鐘');
     expect(previewLabel(c, 'good', NOW)).toBe('10 分鐘');
     expect(previewLabel(c, 'easy', NOW)).toBe('4 天');
+  });
+});
+
+describe('間隔分散', () => {
+  const now = new Date(2026, 9, 15, 20, 0).getTime();
+  const grown = (ivl: number, ease = 2.5): CardState => ({ due: now - 1000, ivl, ease, reps: 5, lapses: 0, step: -1, last: now - ivl * DAY_MS });
+
+  it('同一個 seed 一定排同一天，按鈕預告的天數和實際一樣', () => {
+    for (const g of ['hard', 'good', 'easy'] as const) {
+      const a = review(grown(10), g, now, 'n5-0001');
+      const b = review(grown(10), g, now, 'n5-0001');
+      expect(a.due).toBe(b.due);
+      expect(previewLabel(grown(10), g, now, 'n5-0001')).toBe(formatDays(a.ivl));
+    }
+  });
+
+  it('同一天學、狀態一樣的卡，之後分散到不同天；差距在範圍內，困難＜普通＜簡單', () => {
+    const goods = new Set<number>();
+    for (let i = 1; i <= 40; i++) {
+      const id = `n5-${String(i).padStart(4, '0')}`;
+      const h = review(grown(10), 'hard', now, id).ivl;
+      const g = review(grown(10), 'good', now, id).ivl;
+      const e = review(grown(10), 'easy', now, id).ivl;
+      expect(h).toBeLessThan(g);
+      expect(g).toBeLessThan(e);
+      expect(Math.abs(g - 25)).toBeLessThanOrEqual(3); // 10 × 2.5 = 25，約 ±10%
+      goods.add(g);
+    }
+    expect(goods.size).toBeGreaterThanOrEqual(4);
+  });
+
+  it('3 天以下不分散；幅度照 Anki（一週 ±2、一個月 ±3、一年約 ±20）；沒有 seed 時照原本的算法', () => {
+    expect(fuzzDays(1, 'x')).toBe(1);
+    expect(fuzzDays(2, 'y')).toBe(2);
+    expect([3, 7, 30, 365].map(fuzzRange)).toEqual([1, 2, 3, 20]);
+    for (const seed of ['a', 'b', 'c', 'd', 'e']) expect(Math.abs(fuzzDays(5, seed) - 5)).toBeLessThanOrEqual(1);
+    expect(review(grown(10), 'good', now).ivl).toBe(25);
+  });
+
+  it('分散之後仍然守住下限：困難至少比現在多 1 天，困難＜普通＜簡單（各種間隔、熟悉係數、776 張卡）', () => {
+    const bad: string[] = [];
+    for (const ease of [1.3, 1.7, 2.5, 3]) {
+      for (let ivl = 1; ivl <= 40; ivl++) {
+        for (let i = 1; i <= 776; i += 7) {
+          const id = `n5-${String(i).padStart(4, '0')}`;
+          const [h, g, e] = (['hard', 'good', 'easy'] as const).map((gr) => review(grown(ivl, ease), gr, now, id).ivl);
+          if (!(h >= ivl + 1 && h < g && g < e)) bad.push(`ivl ${ivl} ease ${ease} ${id}: ${h}/${g}/${e}`);
+        }
+      }
+    }
+    expect(bad.slice(0, 5)).toEqual([]);
   });
 });

@@ -54,13 +54,17 @@ describe('今天的任務', () => {
     expect(vocab.action).toBe('開始複習');
   });
 
-  it('單字卡：沒有到期、今天的新卡學完了就完成', () => {
+  it('單字卡：沒有到期、今天的新卡學完了就完成；複習次數含錯題本的加強練習（和學習紀錄頁一樣）', () => {
     const tasks = todayTasks(
-      input({ lessons: lessonsDone(6), srs: { cards: { 'n5-0001': card({}) }, days: { [TODAY]: { reviews: 14, fresh: 10, rev: 4, forgot: 0 } } } }),
+      input({
+        lessons: lessonsDone(6),
+        activity: { [TODAY]: { review: 17 } },
+        srs: { cards: { 'n5-0001': card({}) }, days: { [TODAY]: { reviews: 14, fresh: 10, rev: 4, forgot: 0 } } },
+      }),
     );
     const vocab = tasks.find((t) => t.id === 'vocab')!;
     expect(vocab.done).toBe(true);
-    expect(vocab.detail).toBe('今天複習了 14 次，都完成了');
+    expect(vocab.detail).toBe('今天複習了 17 次，都完成了');
   });
 
   it('還沒學完平假名，但已經開始背單字，也會列入', () => {

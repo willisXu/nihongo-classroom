@@ -26,10 +26,19 @@ export function modelInfo(id: string): ModelInfo {
   return MODELS.find((m) => m.id === id) ?? MODELS[1];
 }
 
-/** 估算費用（美元） */
-export function estimateCost(model: string, input: number, output: number): number {
+/**
+ * 估算費用（美元）。input 是沒有用到快取的輸入；
+ * 寫進快取的輸入算 1.25 倍、從快取讀的算一成（Claude API 的 5 分鐘快取價格）。
+ */
+export function estimateCost(model: string, input: number, output: number, cacheWrite = 0, cacheRead = 0): number {
   const [pi, po] = modelInfo(model).price;
-  return (input * pi + output * po) / 1_000_000;
+  return (input * pi + cacheWrite * pi * 1.25 + cacheRead * pi * 0.1 + output * po) / 1_000_000;
+}
+
+/** 一次呼叫寫進快取、從快取讀的輸入 token */
+export interface CacheUsage {
+  write: number;
+  read: number;
 }
 
 export type Effort = 'low' | 'medium' | 'high';
@@ -43,8 +52,12 @@ export interface JsonCall {
   maxTokens?: number;
   effort?: Effort;
   signal?: AbortSignal;
-  /** 收到回應就回報用量（即使之後因格式或截斷而失敗，也已經計費） */
-  onUsage?: (input: number, output: number) => void;
+  /** 把前面的對話快取起來（會話每一句都重送整段對話時用） */
+  cache?: boolean;
+  /** 伺服器開始回應（連上了）時呼叫：畫面從「連線中」換成「正在回覆」 */
+  onConnect?: () => void;
+  /** 收到回應就回報用量（即使之後因格式或截斷而失敗，也已經計費）；input 不含快取的部分 */
+  onUsage?: (input: number, output: number, cache: CacheUsage) => void;
 }
 
 export interface JsonResult<T> {
@@ -84,6 +97,10 @@ export function normalizeApiKey(raw: string): { key: string; error: string | nul
 
 export const TIMEOUT_MESSAGE =
   'Claude 太久沒有回應，已停止等待。請確認網路連線後再試一次；如果常常這樣，可以到「設定」換成較快的 Haiku 5.5。';
+
+/** 一直連不上（伺服器沒有開始回應）：是網路或地區的問題，換模型沒有用 */
+export const CONNECT_MESSAGE =
+  '連不上 Claude API（等了很久都沒有回應）。請確認網路連線後再試；網路正常卻一直連不上的話，可能是所在的網路或地區連不到 api.anthropic.com。';
 
 /* ---------------- 呼叫 API（第一次用到才載入 SDK） ---------------- */
 

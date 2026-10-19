@@ -13,6 +13,8 @@ body {
 img { max-width: 100%; }
 [hidden] { display: none !important; }
 [lang='ja'], .ja { font-family: var(--font-kana); }
+/* 混在中文句子、標題裡的假名：只標語言（螢幕閱讀器用日文念），字型照原本的 */
+.ja-inline { font-family: inherit; }
 h1, h2, h3 { font-family: var(--font-display); font-weight: 700; line-height: 1.3; text-wrap: balance; margin: 0; }
 p { margin: 0; }
 a { color: var(--accent); text-underline-offset: 3px; }
@@ -199,10 +201,12 @@ html { scroll-padding-top: 56px; }
 
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; }
 select, input[type='text'], input[type='search'], input[type='password'], input[type='time'], textarea {
-  border: 1px solid var(--line); background: var(--sheet); border-radius: 8px; padding: 6px 10px; font-size: 15px; max-width: 100%;
+  /* 輸入框的框線要和背景有 3:1 的對比，看得出可以輸入（--line 太淡，只適合分隔線） */
+  border: 1px solid var(--field-line); background: var(--sheet); border-radius: 8px; padding: 6px 10px; font-size: 15px; max-width: 100%;
 }
 textarea { width: 100%; resize: vertical; line-height: 1.6; }
-select:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
+/* 時間欄位用 Tab 進去時，焦點在裡面的「時」「分」，:focus-visible 不成立：用 :focus 一樣畫框 */
+select:focus-visible, input:focus-visible, textarea:focus-visible, input[type='time']:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
 
 .toc { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 8px; counter-reset: toc; }
 .toc li { counter-increment: toc; }
@@ -441,8 +445,12 @@ table.jlpt { min-width: 560px; }
 .rchip[lang='ja'] { font-family: var(--font-kana); font-weight: 600; }
 .rchip[aria-pressed='true'] { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
 .rchip-n { font-size: 11.5px; margin-left: 5px; color: var(--ink-3); }
+/* 選中的範圍底色比較深（尤其深色模式）：數字改用次要文字色，對比才夠 */
+.rchip[aria-pressed='true'] .rchip-n { color: var(--ink-2); }
 .rsep { width: 1px; height: 18px; background: var(--line); margin-inline: 2px; }
 .quick { display: flex; flex-wrap: wrap; gap: 6px 12px; margin-left: calc(2.6em + 12px); }
+.pick-note { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: 10px 0 0 calc(2.6em + 12px); font-size: 14px; color: var(--ink-2); }
+.pick-note [lang='ja'] { font-family: var(--font-kana); color: var(--ink); }
 .quiz { display: grid; gap: 16px; justify-items: center; padding: 18px 18px 22px; }
 .q-top { display: flex; gap: 6px 18px; flex-wrap: wrap; justify-content: space-between; width: 100%; font-size: 13.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .q-top b { font-weight: 500; color: var(--ink); }
@@ -601,6 +609,14 @@ table.jlpt { min-width: 560px; }
 .key-input.masked { -webkit-text-security: disc; }
 .file-input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: 2px; }
 .confirm-row { background: var(--mark-soft); border-radius: 8px; padding: 8px 12px; }
+.import-confirm { display: grid; gap: 8px; font-size: 14px; max-width: 34em; }
+.import-confirm p { margin: 0; }
+.import-cmp { border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.import-cmp th, .import-cmp td { padding: 3px 14px 3px 0; text-align: right; font-weight: 400; }
+.import-cmp th[scope='row'] { text-align: left; color: var(--ink-2); }
+.import-cmp thead th { font-size: 13px; color: var(--ink-2); }
+.import-cmp .is-less { color: var(--mark); font-weight: 600; }
+.import-warn { color: var(--ink); font-weight: 500; }
 .key-row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; font-size: 14px; }
 .key-mask { display: inline-flex; align-items: center; gap: 6px; color: var(--ok); font-weight: 500; }
 .model-pick { display: grid; gap: 4px; justify-items: start; }
@@ -610,7 +626,8 @@ table.jlpt { min-width: 560px; }
 .tone-mark { background: var(--mark-soft); color: var(--ink); }
 .tone-busy { background: var(--accent-soft); }
 .tutor-tools { margin-block: 4px 14px; }
-.inline-select { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--ink-2); }
+.inline-select { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 14px; color: var(--ink-2); max-width: 100%; white-space: nowrap; }
+.inline-select select { min-width: 0; max-width: 100%; }
 .usage-line { font-size: 13px; color: var(--ink-3); margin-left: auto; }
 .scenario-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; margin-block: 12px; }
 .scenario { appearance: none; display: grid; gap: 6px; justify-items: start; text-align: left; cursor: pointer; color: var(--ink); align-content: start; }
@@ -635,12 +652,15 @@ table.jlpt { min-width: 560px; }
 .b-top { display: flex; gap: 10px; align-items: flex-start; justify-content: space-between; }
 .b-ja { font-weight: 600; font-size: 19px; line-height: 1.5; }
 .b-reading { font-size: 14px; color: var(--ink-2); }
+.b-romaji { font-size: 14px; color: var(--ink-2); letter-spacing: 0.01em; }
 .b-zh { font-size: 14.5px; color: var(--ink-2); }
 .fb-ok { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--ok); }
 .fb-card { max-width: min(560px, 92%); border: 1.5px dashed var(--mark); border-radius: 10px; padding: 8px 12px; display: grid; gap: 4px; background: var(--sheet); }
 .fb-label { font-size: 12px; color: var(--mark); letter-spacing: 0.06em; font-weight: 500; }
 .fb-why { font-size: 14px; color: var(--ink-2); }
-.typing { padding: 12px 16px; }
+.typing { padding: 12px 16px; display: flex; align-items: center; gap: 10px; }
+.typing-label { font-size: 13.5px; color: var(--ink-2); }
+.chat-starter { border: 1.5px dashed var(--grid); border-radius: var(--r); padding: 10px 14px; font-size: 15px; background: var(--sheet); }
 .dots { display: inline-flex; gap: 5px; }
 .dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); animation: blink 1.2s infinite ease-in-out; }
 .dots i:nth-child(2) { animation-delay: 0.15s; }
@@ -656,6 +676,7 @@ table.jlpt { min-width: 560px; }
 .sugg:hover { border-color: var(--accent); }
 .sugg-ja { font-weight: 600; font-size: 16px; }
 .sugg-reading { font-size: 12.5px; color: var(--ink-2); }
+.sugg-romaji { font-size: 12.5px; color: var(--ink-2); }
 .sugg-zh { font-size: 13px; color: var(--ink-2); }
 .composer { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; padding-top: 4px; scroll-margin-bottom: 16px; }
 .composer textarea { min-height: 52px; font-size: 16px; }
@@ -667,6 +688,7 @@ table.jlpt { min-width: 560px; }
 .correction { display: grid; gap: 8px; }
 .c-input { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
 .c-label { font-size: 12.5px; color: var(--ink-3); letter-spacing: 0.06em; }
+.c-meaning { font-size: 14px; color: var(--ink-2); }
 .verdict { font-size: 12.5px; border-radius: 999px; padding: 0 9px; line-height: 1.75; border: 1px solid currentColor; }
 .v-correct { color: var(--ok); }
 .v-minor { color: var(--accent); }
@@ -774,7 +796,7 @@ table.jlpt { min-width: 560px; }
   .trio { grid-template-columns: minmax(0, 1fr); }
   .words, .loans { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .phase { grid-template-columns: minmax(0, 1fr); }
-  .quick { margin-left: 0; }
+  .quick, .pick-note { margin-left: 0; }
   .deck-grid { grid-template-columns: minmax(0, 1fr); }
   .grades { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .lesson-link { grid-template-columns: auto minmax(0, 1fr); }
@@ -805,6 +827,8 @@ table.jlpt { min-width: 560px; }
 /* ============ 鍵盤焦點、對比、手機輸入 ============ */
 /* 外層有 overflow 的元件，焦點框畫在內側才不會被裁掉 */
 .segc button:focus-visible, .tabs .tab:focus-visible { outline-offset: -3px; }
+/* 選中的分段按鈕底色就是強調色：焦點框改用反白的顏色，才看得出焦點在哪 */
+.segc button[aria-pressed='true']:focus-visible { outline-color: var(--on-accent); }
 #main:focus { outline: none; }
 .table-scroll:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .toc a:focus-visible { outline-offset: 1px; }
@@ -821,10 +845,10 @@ select { min-width: 0; text-overflow: ellipsis; }
 }
 /* 深色模式：螢光筆底色上的小字改用主要文字色，對比才夠 */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) :is(.s-kanji, .s-hira, .s-kata) rt,
+  :root:not([data-theme='light']) :is(.s-kanji, .s-hira, .s-kata) :is(rt, .seg-l),
   :root:not([data-theme='light']) .db-seg span { color: var(--ink); }
 }
-:root[data-theme='dark'] :is(.s-kanji, .s-hira, .s-kata) rt,
+:root[data-theme='dark'] :is(.s-kanji, .s-hira, .s-kata) :is(rt, .seg-l),
 :root[data-theme='dark'] .db-seg span { color: var(--ink); }
 
 @media (prefers-reduced-motion: reduce) {
@@ -903,6 +927,13 @@ select { min-width: 0; text-overflow: ellipsis; }
   .segc button[aria-pressed='true'], .rchip[aria-pressed='true'], .chip-btn[aria-pressed='true'] {
     forced-color-adjust: none; background: Highlight; color: HighlightText; border-color: Highlight;
   }
+  .segc button[aria-pressed='true']:focus-visible { outline-color: HighlightText; }
+  /* 進度條：底和填滿的部分都會變成背景色而看不見，改用系統顏色畫框和填滿 */
+  .meter-bar { forced-color-adjust: none; background: Canvas; outline: 1px solid CanvasText; }
+  .meter-bar > span { background: Highlight; }
+  /* 課程的圓點：完成的填滿、目前這一課用強調色框，和還沒上的分得出來 */
+  .ldot.done { forced-color-adjust: none; background: Highlight; border-color: Highlight; color: HighlightText; }
+  .ldot.now { forced-color-adjust: none; background: Canvas; color: CanvasText; border-color: Highlight; border-width: 2px; }
   .subnav-link.active, .bb-item.active, .ptab.active { outline: 2px solid CanvasText; outline-offset: -2px; }
   .tab.active::after { forced-color-adjust: none; background: CanvasText; }
   .heatmap, .hm-swatch, .viz-fig svg, .viz-key, .mc, .legend i { forced-color-adjust: none; }

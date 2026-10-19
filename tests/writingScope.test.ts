@@ -1,9 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { LESSONS } from '../src/data/lessons';
 import { getStrokePaths } from '../src/lib/strokes';
-import { EXTRA_CHARS, extraOf, lessonWriteRows, rowsFor, writingChars } from '../src/lib/writingScope';
+import { EXTRA_CHARS, extraOf, lessonWriteRows, pickedChars, rowsFor, writingChars } from '../src/lib/writingScope';
 
 describe('手寫描字的範圍', () => {
+  it('課文帶過來的一組字（?chars=）：去掉重複和沒有筆順的字，平假名或片假名看第一個字', () => {
+    expect(pickedChars('シツソシ')).toEqual({ chars: ['シ', 'ツ', 'ソ'], script: 'k' });
+    expect(pickedChars('ぬめx')).toEqual({ chars: ['ぬ', 'め'], script: 'h' });
+    expect(pickedChars('ャッ')).toEqual({ chars: ['ャ', 'ッ'], script: 'k' });
+    expect(pickedChars('')).toBeNull();
+    expect(pickedChars('abc')).toBeNull();
+    expect(pickedChars(null)).toBeNull();
+  });
+
   it('每一課「去寫字」的範圍剛好是這一課新教的字（不會混進後面幾課的字）', () => {
     for (const l of LESSONS) {
       const chars = writingChars(lessonWriteRows(l.newKana), l.quiz.script);

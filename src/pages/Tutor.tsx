@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import '@fontsource/klee-one/600.css';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
-  CONVERSATION_SCHEMA, CORRECTION_SCHEMA, LEVEL_LABEL, OPENING_MESSAGE, PURPOSE_LABEL, QUIZ_SCHEMA, SCENARIOS,
+  CONVERSATION_SCHEMA, CORRECTION_SCHEMA, LEVEL_LABEL, LEVEL_SHORT, OPENING_MESSAGE, PURPOSE_LABEL, QUIZ_SCHEMA, SCENARIOS,
   conversationSystem, correctionSystem, quizSystem, quizUserMessage, sanitizeCorrection, sanitizeFeedback, sanitizeQuiz, sanitizeTurn,
   type ConversationTurn, type Correction, type Purpose, type QuizQuestion, type Scenario,
 } from '../data/tutor';
@@ -14,7 +14,8 @@ import {
 } from '../state';
 import { isObj, num, oneOf, str, useStore } from '../state/store';
 import { TutorError, callJSON, estimateCost, preloadClaudeApi, toTutorError } from '../lib/claude';
-import { learnedKana, suggestedLevel } from '../lib/progress';
+import { learnedKana, lessonsDone, nextLesson, suggestedLevel } from '../lib/progress';
+import { phraseRomaji } from '../lib/romaji';
 import { speak } from '../lib/speech';
 import { usePageTitle } from '../lib/title';
 import { focusLost } from '../lib/flashcard';
@@ -45,6 +46,22 @@ const hasKana = (text: string) => /[぀-ヿ]/.test(text);
 /** 選項標日文的條件：模型說選項是日文（只有漢字的單字也算），或選項裡有假名 */
 const choiceLang = (q: QuizQuestion, c: string) => (q.choiceLang === 'ja' || hasKana(c) ? 'ja' : undefined);
 
+/** 讀音和原句只差在空格（只用假名的程度）：顯示分好詞的讀音，比較好念 */
+const sameKana = (a: string, b: string) => a.replace(/\s/g, '') === b.replace(/\s/g, '');
+
+/** 等待中：還沒連上（連線中）或已經在回覆 */
+type Phase = 'connect' | 'reply';
+const WAIT_LABEL: Record<Phase, string> = { connect: '正在連線…', reply: 'AI 正在回覆…' };
+
+/** 一句日文下面的羅馬拼音（還在學五十音時才顯示） */
+function RomajiLine({ reading, className = 'b-romaji' }: { reading: string; className?: string }) {
+  const text = phraseRomaji(reading);
+  return text ? <p className={className}>{text}</p> : null;
+}
+
+/** 有沒有設定「減少動態效果」：自動捲動時不用平滑捲動 */
+const reducedMotion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
 /**
  * 剛按的按鈕消失（送出換成停止、作答後選項停用…），焦點掉回 body 時，放到下一個該用的地方。
  * 只在有滑鼠或鍵盤的裝置上把焦點放回輸入框：手機上會把鍵盤叫出來，蓋住剛收到的回覆。
@@ -63,6 +80,10 @@ function ask<T>(opts: {
   maxTokens: number;
   effort: 'low' | 'medium';
   signal?: AbortSignal;
+  /** 把前面的對話快取起來（會話用） */
+  cache?: boolean;
+  /** 連上了（伺服器開始回應） */
+  onConnect?: () => void;
   onUsage?: (cost: Cost) => void;
 }) {
   const model = settingsStore.get().model;
@@ -71,9 +92,10 @@ function ask<T>(opts: {
     apiKey: apiKeyStore.get(),
     model,
     ...rest,
-    onUsage: (input, output) => {
-      addUsage(model, input, output);
-      onUsage?.({ input, output, usd: estimateCost(model, input, output) });
+    onUsage: (input, output, cache) => {
+      const all = input + cache.write + cache.read;
+      addUsage(model, all, output, true, cache);
+      onUsage?.({ input: all, output, usd: estimateCost(model, input, output, cache.write, cache.read) });
     },
   });
 }
@@ -150,6 +172,9 @@ export default function Tutor() {
   const [level, levelPref] = useLevel();
   const lessons = useStore(lessonStore);
   const online = useOnline();
+  // 還在學五十音：告訴 AI 學過哪些假名（加上正在學的這一課），畫面上附羅馬拼音
+  const knownKana =
+    lessonsDone(lessons) >= LESSONS.length ? '' : learnedKana(lessons) + (nextLesson(lessons)?.newKana.join('') ?? '');
 
   // 在這一頁設定好金鑰時，設定的區塊會整個換成家教畫面（「連線成功」來不及看到、焦點也會掉）：
   // 另外顯示一行成功訊息，焦點放在那裡
@@ -225,7 +250,7 @@ export default function Tutor() {
                 value={levelPref}
                 onChange={(e) => updateSettings({ tutorLevel: e.target.value as TutorLevel | 'auto' })}
               >
-                <option value="auto">自動（目前：{LEVEL_LABEL[suggestedLevel(lessons)]}）</option>
+                <option value="auto">自動（目前：{LEVEL_SHORT[suggestedLevel(lessons)]}）</option>
                 {(Object.keys(LEVEL_LABEL) as TutorLevel[]).map((l) => (
                   <option key={l} value={l}>
                     {LEVEL_LABEL[l]}
@@ -237,10 +262,10 @@ export default function Tutor() {
           </div>
           {/* 三個模式都保持掛載，切換時不會丟掉對話或重新呼叫 API；離開這頁再回來時從分頁紀錄還原 */}
           <div hidden={mode !== 'chat'}>
-            <Conversation level={level} scenarioParam={scenarioParam} isShown={shown('chat')} />
+            <Conversation level={level} knownKana={knownKana} scenarioParam={scenarioParam} isShown={shown('chat')} />
           </div>
           <div hidden={mode !== 'correct'}>
-            <Corrector level={level} isShown={shown('correct')} />
+            <Corrector level={level} knownKana={knownKana} isShown={shown('correct')} />
           </div>
           <div hidden={mode !== 'quiz'}>
             <AiQuiz level={level} />
@@ -319,7 +344,9 @@ function loadChat(): ChatSession | null {
 function bootChat(scenarioId: string | null): { saved: ChatSession | null; start: Scenario | null } {
   const saved = loadChat();
   const wanted = scenarioId ? (SCENARIOS.find((s) => s.id === scenarioId) ?? null) : null;
-  if (wanted && !(saved && saved.scenario.id === wanted.id && saved.history.length)) return { saved: null, start: wanted };
+  // 由學習者先開口的情境，還沒說話時也接上（保留打到一半的第一句；反正開場不用呼叫 API）
+  const resumable = saved && saved.scenario.id === wanted?.id && (saved.history.length > 0 || !!saved.scenario.learnerFirst);
+  if (wanted && !resumable) return { saved: null, start: wanted };
   return { saved, start: null };
 }
 
@@ -335,14 +362,18 @@ function restoredError(s: ChatSession): string | null {
 
 function Conversation({
   level,
+  knownKana,
   scenarioParam,
   isShown,
 }: {
   level: TutorLevel;
+  knownKana: string;
   scenarioParam: RefObject<string | null>;
   isShown: () => boolean;
 }) {
   const settings = useStore(settingsStore);
+  // 只用假名的程度：每句日文附羅馬拼音（和單字卡的「羅馬拼音」同一個設定）
+  const romajiOn = level === 'kana' && settings.showRomaji;
   const [boot] = useState(() => bootChat(scenarioParam.current));
   const [scenario, setScenario] = useState<Scenario | null>(boot.start ?? boot.saved?.scenario ?? null);
   const [entries, setEntries] = useState<ChatEntry[]>(boot.saved?.entries ?? []);
@@ -350,11 +381,12 @@ function Conversation({
    * 讀螢幕軟體只念最新的一則回覆（和對我那句話的回饋）。整串對話不設成播報區：
    * 打開「假名讀音」「中文翻譯」時每個泡泡都會多出一行，整段對話會被重念一次。
    */
-  const [heard, setHeard] = useState<{ id: number; ok: boolean; corrected: string; ja: string; zh: string } | null>(null);
+  const [heard, setHeard] = useState<{ id: number; ok: boolean; corrected: string; ja: string; zh: string; done: boolean } | null>(null);
   /** 已送出的對話紀錄；最後一則若是 user，代表還在等（或等失敗了，可以重試或改送別句） */
   const [history, setHistory] = useState<Msg[]>(boot.saved?.history ?? []);
   const [input, setInput] = useState(boot.saved?.input ?? '');
   const [busy, setBusy] = useState(false);
+  const [phase, setPhase] = useState<Phase>('connect');
   const [error, setError] = useState<string | null>(() => (boot.saved ? restoredError(boot.saved) : null));
   const [cost, setCost] = useState<Cost>(boot.saved?.cost ?? NO_COST);
   const [filter, setFilter] = useState<Purpose | 'all'>('all');
@@ -388,22 +420,29 @@ function Conversation({
     const conv = conversation.current;
     stopGuard.arm();
     setBusy(true);
+    setPhase('connect');
     setError(null);
     try {
-      const res = await ask<ConversationTurn>({
-        system: conversationSystem(sc, level),
+      const res = await ask<unknown>({
+        system: conversationSystem(sc, level, knownKana, romajiOn),
         messages: msgs,
         schema: CONVERSATION_SCHEMA,
         maxTokens: 4000,
         effort: 'low',
         signal: ctrl.signal,
+        cache: true,
+        onConnect: () => {
+          if (abort.current === ctrl) setPhase('reply');
+        },
         // 和總用量同一個時機記：收到回應就計費，之後格式不對或被拒絕也一樣
         onUsage: (u) => {
           if (conversation.current === conv) setCost((c) => ({ input: c.input + u.input, output: c.output + u.output, usd: c.usd + u.usd }));
         },
       });
       if (ctrl.signal.aborted) return;
-      const turn = res.data;
+      // 少了欄位（例如沒有建議說法）也不會讓畫面出錯；連回覆的句子都沒有才算格式不對
+      const turn = sanitizeTurn(res.data);
+      if (!turn) throw new TutorError('收到的回覆格式不對，請再試一次。', 'invalid');
       setHistory([...msgs, { role: 'assistant', content: JSON.stringify(turn) }]);
       setEntries((list) => {
         const out = list.slice();
@@ -426,6 +465,7 @@ function Conversation({
         corrected: answered && !turn.feedback.ok ? turn.feedback.corrected : '',
         ja: turn.reply,
         zh: settingsStore.get().showTranslation ? turn.translation : '',
+        done: turn.done,
       }));
       // 回覆送到時可能已經切到別的模式：看不到的面板不出聲，免得打斷正在播放的發音
       if (isShown()) speak(turn.reply);
@@ -443,11 +483,19 @@ function Conversation({
 
   const start = (sc: Scenario) => {
     abort.current?.abort();
+    abort.current = null;
     conversation.current += 1;
     setScenario(sc);
     setEntries([]);
     setCost(NO_COST);
     setError(null);
+    setHeard(null);
+    // 由學習者先開口的情境（接電話）：AI 不先說話，等學習者說第一句
+    if (sc.learnerFirst) {
+      setBusy(false);
+      setHistory([]);
+      return;
+    }
     const msgs: Msg[] = [{ role: 'user', content: OPENING_MESSAGE }];
     setHistory(msgs);
     void send(msgs, sc);
@@ -483,10 +531,10 @@ function Conversation({
 
   useEffect(() => () => abort.current?.abort(), []);
 
-  // 新訊息出現時，把輸入框捲到畫面下緣，最新的回覆和建議就在它上方
+  // 新訊息出現時，把輸入框捲到畫面下緣，最新的回覆和建議就在它上方（設定了減少動態效果就直接跳過去）
   useEffect(() => {
     if (!entries.length && !busy) return;
-    composerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    composerRef.current?.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'end' });
   }, [entries, busy, error]);
 
   const submit = () => {
@@ -560,12 +608,17 @@ function Conversation({
             </button>
           ))}
         </div>
-        <p className="small">程度：{LEVEL_LABEL[level]}。每次 AI 回覆會附上假名讀音、中文翻譯，以及對你上一句的批改。</p>
+        <p className="small">
+          程度：{LEVEL_LABEL[level]}。每次 AI 回覆會附上{level === 'kana' ? '羅馬拼音' : '假名讀音'}、中文翻譯，以及對你上一句的批改。
+        </p>
       </section>
     );
   }
 
   const last = [...entries].reverse().find((e) => e.role === 'ai')?.turn;
+  // 參考說法：AI 上一句附的；由學習者先開口的情境，還沒開始時用情境準備好的
+  const starter = scenario.learnerFirst && !entries.length && !busy ? scenario.learnerFirst : null;
+  const suggestions = last ? (last.done ? [] : last.suggestions) : (starter?.suggestions ?? []);
 
   return (
     <section className="chat" aria-label={`情境會話：${scenario.title}`}>
@@ -588,6 +641,11 @@ function Conversation({
           <Switch id="sw-trans" checked={settings.showTranslation} onChange={(v) => updateSettings({ showTranslation: v })}>
             中文翻譯
           </Switch>
+          {level === 'kana' ? (
+            <Switch id="sw-romaji" checked={settings.showRomaji} onChange={(v) => updateSettings({ showRomaji: v })}>
+              羅馬拼音
+            </Switch>
+          ) : null}
           <div className="btn-row">
             <button type="button" className="btn btn-sm" onClick={() => start(scenario)}>
               <Icon name="refresh" size={16} /> 重新開始
@@ -611,8 +669,13 @@ function Conversation({
             ) : null}
             AI 說：<span lang="ja">{heard.ja}</span>
             {heard.zh ? `（${heard.zh}）` : ''}
+            {heard.done ? '情境完成！' : ''}
           </p>
         ) : null}
+      </div>
+      {/* 等待中的狀態另外播報：回覆來了以後上面那一區才念回覆 */}
+      <div className="sr-only" aria-live="polite">
+        {busy ? <p>{WAIT_LABEL[phase]}</p> : null}
       </div>
       <div className="chat-list">
         {entries.map((e, i) =>
@@ -621,15 +684,16 @@ function Conversation({
               <div className="bubble ai-bubble">
                 <div className="b-top">
                   <p className="b-ja" lang="ja">
-                    {e.turn.reply}
+                    {level === 'kana' && e.turn.reading && sameKana(e.turn.reading, e.turn.reply) ? e.turn.reading : e.turn.reply}
                   </p>
                   <SpeakIcon text={e.turn.reply} label="播放這句" />
                 </div>
-                {settings.showReading && e.turn.reading && e.turn.reading.replace(/\s/g, '') !== e.turn.reply.replace(/\s/g, '') ? (
+                {settings.showReading && e.turn.reading && !sameKana(e.turn.reading, e.turn.reply) ? (
                   <p className="b-reading" lang="ja">
                     {e.turn.reading}
                   </p>
                 ) : null}
+                {romajiOn ? <RomajiLine reading={e.turn.reading || e.turn.reply} /> : null}
                 {settings.showTranslation ? <p className="b-zh">{e.turn.translation}</p> : null}
               </div>
             </div>
@@ -648,15 +712,16 @@ function Conversation({
                     <p className="fb-label">更自然的說法</p>
                     <div className="b-top">
                       <p className="b-ja" lang="ja">
-                        {e.feedback.corrected}
+                        {level === 'kana' && e.feedback.reading && sameKana(e.feedback.reading, e.feedback.corrected) ? e.feedback.reading : e.feedback.corrected}
                       </p>
                       {e.feedback.corrected ? <SpeakIcon text={e.feedback.corrected} label="播放更正後的句子" /> : null}
                     </div>
-                    {settings.showReading && e.feedback.reading && e.feedback.reading.replace(/\s/g, '') !== e.feedback.corrected.replace(/\s/g, '') ? (
+                    {settings.showReading && e.feedback.reading && !sameKana(e.feedback.reading, e.feedback.corrected) ? (
                       <p className="b-reading" lang="ja">
                         {e.feedback.reading}
                       </p>
                     ) : null}
+                    {romajiOn && e.feedback.corrected ? <RomajiLine reading={e.feedback.reading || e.feedback.corrected} /> : null}
                     {e.feedback.explanation ? <p className="fb-why">{e.feedback.explanation}</p> : null}
                   </div>
                 )
@@ -664,6 +729,11 @@ function Conversation({
             </div>
           ),
         )}
+        {starter ? (
+          <div className="chat-starter">
+            <p>{starter.hint}</p>
+          </div>
+        ) : null}
         {busy ? (
           <div className="bubble-row ai">
             <div className="bubble ai-bubble typing">
@@ -672,7 +742,8 @@ function Conversation({
                 <i />
                 <i />
               </span>
-              <span className="sr-only">AI 正在回覆</span>
+              {/* 連不上時會等比較久：寫出來，知道還在連線 */}
+              {phase === 'connect' ? <span className="typing-label">正在連線…</span> : null}
             </div>
           </div>
         ) : null}
@@ -699,11 +770,11 @@ function Conversation({
         </div>
       ) : null}
 
-      {last && last.suggestions.length && !last.done && !busy ? (
+      {suggestions.length && !busy ? (
         <div className="suggest">
-          <p className="small">不知道怎麼回？點一個參考說法放進輸入框：</p>
+          <p className="small">{starter ? '不知道怎麼說？點一個參考說法放進輸入框：' : '不知道怎麼回？點一個參考說法放進輸入框：'}</p>
           <div className="suggest-list">
-            {last.suggestions.map((s, i) => (
+            {suggestions.map((s, i) => (
               <button
                 key={i}
                 type="button"
@@ -714,13 +785,14 @@ function Conversation({
                 }}
               >
                 <span lang="ja" className="sugg-ja">
-                  {s.ja}
+                  {level === 'kana' && s.reading && sameKana(s.reading, s.ja) ? s.reading : s.ja}
                 </span>
-                {settings.showReading && s.reading.replace(/\s/g, '') !== s.ja.replace(/\s/g, '') ? (
+                {settings.showReading && s.reading && !sameKana(s.reading, s.ja) ? (
                   <span lang="ja" className="sugg-reading">
                     {s.reading}
                   </span>
                 ) : null}
+                {romajiOn ? <span className="sugg-romaji">{phraseRomaji(s.reading || s.ja)}</span> : null}
                 <span className="sugg-zh">{s.zh}</span>
               </button>
             ))}
@@ -805,7 +877,8 @@ function useAbortOnUnmount() {
   return ref;
 }
 
-type CorrectionItem = { id: number; input: string; result: Correction };
+/** meaning：一起送出的「想表達的意思」（顯示在結果上，知道這次批改是照什麼意思改的） */
+type CorrectionItem = { id: number; input: string; meaning?: string; result: Correction };
 
 function loadCorrector(): { ja: string; meaning: string; results: CorrectionItem[] } {
   const raw = readSession().correct;
@@ -813,17 +886,20 @@ function loadCorrector(): { ja: string; meaning: string; results: CorrectionItem
   const results = (Array.isArray(r.results) ? r.results : []).flatMap((x: unknown, i: number): CorrectionItem[] => {
     if (!isObj(x) || typeof x.input !== 'string') return [];
     const result = sanitizeCorrection(x.result);
-    return result ? [{ id: num(x.id, i), input: x.input, result }] : [];
+    const meaning = str(x.meaning);
+    return result ? [{ id: num(x.id, i), input: x.input, ...(meaning ? { meaning } : {}), result }] : [];
   });
   return { ja: str(r.ja), meaning: str(r.meaning), results: results.slice(0, 10) };
 }
 
-function Corrector({ level, isShown }: { level: TutorLevel; isShown: () => boolean }) {
+function Corrector({ level, knownKana, isShown }: { level: TutorLevel; knownKana: string; isShown: () => boolean }) {
   const settings = useStore(settingsStore);
+  const romajiOn = level === 'kana' && settings.showRomaji;
   const [saved] = useState(loadCorrector);
   const [ja, setJa] = useState(saved.ja);
   const [meaning, setMeaning] = useState(saved.meaning);
   const [busy, setBusy] = useState(false);
+  const [phase, setPhase] = useState<Phase>('connect');
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<CorrectionItem[]>(saved.results);
   const abort = useAbortOnUnmount();
@@ -837,26 +913,35 @@ function Corrector({ level, isShown }: { level: TutorLevel; isShown: () => boole
 
   const check = async () => {
     const text = ja.trim();
+    const intended = meaning.trim();
     if (!text || busy) return;
     const ctrl = new AbortController();
     abort.current = ctrl;
     setBusy(true);
+    setPhase('connect');
     setError(null);
     try {
-      const res = await ask<Correction>({
-        system: correctionSystem(level),
-        messages: [{ role: 'user', content: meaning.trim() ? `${text}\n（我想表達：${meaning.trim()}）` : text }],
+      const res = await ask<unknown>({
+        system: correctionSystem(level, knownKana, romajiOn),
+        messages: [{ role: 'user', content: intended ? `${text}\n（我想表達：${intended}）` : text }],
         schema: CORRECTION_SCHEMA,
         maxTokens: 6000,
         effort: 'medium',
         signal: ctrl.signal,
+        onConnect: () => {
+          if (abort.current === ctrl) setPhase('reply');
+        },
       });
       if (ctrl.signal.aborted) return;
-      setResults((r) => [{ id: Date.now(), input: text, result: res.data }, ...r].slice(0, 10));
+      const result = sanitizeCorrection(res.data);
+      if (!result) throw new TutorError('收到的回覆格式不對，請再試一次。', 'invalid');
+      setResults((r) => [{ id: Date.now(), input: text, ...(intended ? { meaning: intended } : {}), result }, ...r].slice(0, 10));
+      // 「想表達的意思」是這一句的：清掉，寫下一句時不會把舊的意思一起送出（這次用的意思顯示在結果上）
+      if (intended) setMeaning((cur) => (cur.trim() === intended ? '' : cur));
       // 每次都換一個新的段落：再批改一次、結果一樣時也會念
-      setAnnounce((a) => ({ id: a.id + 1, text: `批改完成：${(VERDICT[res.data.verdict] ?? VERDICT.minor).label}。${res.data.corrected}` }));
+      setAnnounce((a) => ({ id: a.id + 1, text: `批改完成：${VERDICT[result.verdict].label}。${result.corrected}` }));
       // 切到別的模式時不出聲
-      if (res.data.corrected && isShown()) speak(res.data.corrected);
+      if (result.corrected && isShown()) speak(result.corrected);
     } catch (e) {
       if (!ctrl.signal.aborted) setError(toTutorError(e).message);
     } finally {
@@ -893,7 +978,7 @@ function Corrector({ level, isShown }: { level: TutorLevel; isShown: () => boole
         <input id="cm" type="text" value={meaning} onChange={(e) => setMeaning(e.target.value)} placeholder="例：我是台灣人。" />
         <div className="btn-row">
           <button type="submit" className="btn btn-primary" disabled={busy || !ja.trim()}>
-            {busy ? '批改中…' : '批改'}
+            {busy ? (phase === 'connect' ? '連線中…' : '批改中…') : '批改'}
           </button>
           {busy ? (
             <button key="stop" type="button" className="btn" onClick={stop}>
@@ -920,17 +1005,19 @@ function Corrector({ level, isShown }: { level: TutorLevel; isShown: () => boole
               <span lang="ja">{r.input}</span>
               <span className={`verdict ${v.cls}`}>{v.label}</span>
             </p>
+            {r.meaning ? <p className="c-meaning">想表達：{r.meaning}</p> : null}
             <div className="b-top">
               <p className="c-fixed" lang="ja">
-                {r.result.corrected}
+                {level === 'kana' && r.result.reading && sameKana(r.result.reading, r.result.corrected) ? r.result.reading : r.result.corrected}
               </p>
               <SpeakIcon text={r.result.corrected} label="播放更正後的句子" />
             </div>
-            {settings.showReading ? (
+            {settings.showReading && r.result.reading && !sameKana(r.result.reading, r.result.corrected) ? (
               <p className="b-reading" lang="ja">
                 {r.result.reading}
               </p>
             ) : null}
+            {romajiOn ? <RomajiLine reading={r.result.reading || r.result.corrected} /> : null}
             <p className="b-zh">{r.result.translation}</p>
             {r.result.issues.length ? (
               <ul className="issues">
@@ -954,11 +1041,12 @@ function Corrector({ level, isShown }: { level: TutorLevel; isShown: () => boole
                       <button type="button" className="say-inline" lang="ja" onClick={() => speak(a.ja)}>
                         {a.ja}
                       </button>
-                      {settings.showReading && a.reading && a.reading.replace(/\s/g, '') !== a.ja.replace(/\s/g, '') ? (
+                      {settings.showReading && a.reading && !sameKana(a.reading, a.ja) ? (
                         <span className="small" lang="ja">
                           {a.reading}
                         </span>
                       ) : null}
+                      {romajiOn ? <span className="small">{phraseRomaji(a.reading || a.ja)}</span> : null}
                       <span className="small">{a.zh}</span>
                     </li>
                   ))}
@@ -991,6 +1079,7 @@ function loadQuiz(): { focus: QuizFocus; questions: QuizQuestion[]; idx: number;
 }
 
 function AiQuiz({ level }: { level: TutorLevel }) {
+  const [phase, setPhase] = useState<Phase>('connect');
   const lessons = useStore(lessonStore);
   const kana = useStore(kanaStore);
   const srs = useStore(srsStore);
@@ -1037,6 +1126,7 @@ function AiQuiz({ level }: { level: TutorLevel }) {
     const ctrl = new AbortController();
     abort.current = ctrl;
     setBusy(true);
+    setPhase('connect');
     setError(null);
     try {
       const res = await ask<unknown>({
@@ -1058,6 +1148,9 @@ function AiQuiz({ level }: { level: TutorLevel }) {
         maxTokens: 8000,
         effort: 'medium',
         signal: ctrl.signal,
+        onConnect: () => {
+          if (abort.current === ctrl) setPhase('reply');
+        },
       });
       if (ctrl.signal.aborted) return;
       const qs = sanitizeQuiz(res.data);
@@ -1128,7 +1221,7 @@ function AiQuiz({ level }: { level: TutorLevel }) {
           ) : null}
           <div className="btn-row">
             <button type="button" className="btn btn-primary" onClick={() => void generate()} disabled={busy}>
-              {busy ? '出題中…' : finished ? '再出 5 題' : '開始出題'}
+              {busy ? (phase === 'connect' ? '連線中…' : '出題中…') : finished ? '再出 5 題' : '開始出題'}
             </button>
             {busy ? (
               <button key="stop" type="button" className="btn" onClick={stop}>

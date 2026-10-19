@@ -7,7 +7,7 @@ import { useStore } from '../state/store';
 import type { CardState } from '../lib/srs';
 import { romaji } from '../lib/romaji';
 import { daysBetween } from '../lib/date';
-import { POS_LABEL, VERB_GROUP_LABEL, groupByTopic, speechText } from '../lib/vocab';
+import { POS_LABEL, VERB_GROUP_LABEL, groupByTopic, speechText, exampleSpeech } from '../lib/vocab';
 import { SpeakIcon } from '../components/Speak';
 import { Switch } from '../components/Controls';
 import { Icon } from '../components/Icon';
@@ -179,7 +179,7 @@ const VocabRow = memo(function VocabRow({
           <div className="v-more">
             {item.ex ? (
               <div className="v-ex">
-                <SpeakIcon text={item.ex.ja} label="播放例句" />
+                <SpeakIcon text={exampleSpeech(item.ex)} label="播放例句" />
                 <div>
                   <p lang="ja" className="v-ex-ja">
                     {item.ex.ja}

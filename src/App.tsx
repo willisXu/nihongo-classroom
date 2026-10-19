@@ -21,10 +21,18 @@ const Roadmap = lazy(() => import('./pages/Roadmap'));
 const Mistakes = lazy(() => import('./pages/Mistakes'));
 const Stats = lazy(() => import('./pages/Stats'));
 
+/** 網址列、安裝後 App 標題列的顏色（和 index.html、tokens.css 的紙張顏色一樣） */
+const BAR_COLOR = { light: '#f5f8f3', dark: '#1a2e28' };
+
 export function applyTheme(theme: ThemePref) {
   const root = document.documentElement;
   if (theme === 'system') root.removeAttribute('data-theme');
   else root.setAttribute('data-theme', theme);
+  // 跟隨系統時兩個 meta 各自照系統的深淺；指定了筆記紙或黑板，兩個都用那個顏色，標題列才不會和頁面不搭
+  document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]').forEach((m) => {
+    const own = m.media.includes('dark') ? BAR_COLOR.dark : BAR_COLOR.light;
+    m.content = theme === 'system' ? own : BAR_COLOR[theme];
+  });
 }
 
 function NotFound() {

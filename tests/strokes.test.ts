@@ -6,6 +6,7 @@ import {
   getStrokePaths,
   getStrokePoints,
   hasStrokes,
+  judgeScale,
   judgeStroke,
   pathLength,
   polylineLength,
@@ -540,5 +541,43 @@ describe('小字的範本（照第 6 課：寫成一半左右，放在格子左�
       expect(written.length, small).toBe(ref.length);
       written.forEach((stroke, i) => expect(judgeStroke(stroke, i, ref).ok, `${small} 第 ${i + 1} 筆`).toBe(true));
     }
+  });
+});
+
+/* ───────── 小字：門檻跟著縮小（反方向寫、只點一下不算對） ───────── */
+describe('judgeStroke on small kana (thresholds scale with the glyph)', () => {
+  const SMALL = [...'ゃゅょっャュョッァィゥェォ'].filter((ch) => getStrokePoints(ch));
+
+  it('accepts the reference strokes and small jitter', () => {
+    const rnd = prng(42);
+    const failures: string[] = [];
+    for (const ch of SMALL) {
+      const ref = refOf(ch);
+      const scale = judgeScale(ch);
+      expect(scale).toBeLessThan(0.6);
+      ref.forEach((_, k) => {
+        if (!judgeStroke(ref[k], k, ref, scale).ok) failures.push(`${ch}#${k + 1} ref`);
+        for (let rep = 0; rep < 4; rep++) {
+          const j = judgeStroke(jitter(ref[k], 1.5, rnd), k, ref, scale);
+          if (!j.ok) failures.push(`${ch}#${k + 1} jitter: ${describeJ(j)}`);
+        }
+      });
+    }
+    expect(failures).toEqual([]);
+  });
+
+  it('rejects reversed strokes and taps where the full-size kana would', () => {
+    // 課程評審實測：這幾筆以前反方向寫、點一下都算對（大字的 よ、ツ、ウ 不算）
+    for (const [ch, k] of [['ょ', 0], ['ッ', 0], ['ッ', 1], ['ゥ', 0], ['ゥ', 1]] as const) {
+      const ref = refOf(ch);
+      const scale = judgeScale(ch);
+      const rev = judgeStroke(reversed(ref[k]), k, ref, scale);
+      expect(rev.ok, `${ch}#${k + 1} 反方向`).toBe(false);
+      expect(rev.reason).toBe('direction');
+      const tap = judgeStroke([ref[k][0]], k, ref, scale);
+      expect(tap.ok, `${ch}#${k + 1} 點一下`).toBe(false);
+    }
+    // 一般大小的字不受影響
+    expect(judgeScale('あ')).toBe(1);
   });
 });

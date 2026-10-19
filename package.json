@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "strokes": "node scripts/fetch-kanjivg.mjs"
+    "strokes": "node scripts/fetch-kanjivg.mjs",
+    "postinstall": "node scripts/stamp.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.133.0",

@@ -1,5 +1,6 @@
 import type { Pos, VocabItem } from '../data/types';
 import { DECKS } from '../data/vocab';
+import { learnedInOtherDeck } from '../data/vocab/meta';
 
 export const POS_LABEL: Record<Pos, string> = {
   noun: '名詞',
@@ -35,14 +36,20 @@ export function displayForm(item: VocabItem): string {
  * 單獨把漢字丟給語音引擎，念出來的不一定是這張卡要教的讀音。
  * 「〜にん」這類接尾詞的「〜」不念。
  */
-export function speechText(item: Pick<VocabItem, 'kana'>): string {
-  return item.kana.replace(/[〜～]/g, '').trim();
+export function speechText(item: Pick<VocabItem, 'kana' | 'say'>): string {
+  return item.say ?? item.kana.replace(/[〜～]/g, '').trim();
+}
+
+/** 例句要念的文字：有指定念法（漢字容易念錯）就念那個 */
+export function exampleSpeech(ex: NonNullable<VocabItem['ex']>): string {
+  return ex.say ?? ex.ja;
 }
 
 /**
  * 'all' 或牌組代號 → 卡片 id 清單。
  * 「全部牌組」裡，同一個字（假名＋漢字相同）出現在好幾個牌組時：學過的卡片照常複習（各自有排程，
  * 到期數才對得上）；還沒學過的只留一張當新卡，而且已經在別的牌組學過的字不再當新卡出現。
+ * 單一牌組也一樣：已經在別的牌組學過的字不再當新卡（例如學完 N5 再背旅遊牌組，不會重教 63 個字）。
  */
 export function deckItemIds(deckId: string, cards: Record<string, { reps: number } | undefined> = {}): string[] {
   if (deckId === 'all') {
@@ -65,7 +72,8 @@ export function deckItemIds(deckId: string, cards: Record<string, { reps: number
     }
     return ids;
   }
-  return DECKS.find((d) => d.id === deckId)?.items.map((i) => i.id) ?? [];
+  const deck = DECKS.find((d) => d.id === deckId);
+  return deck ? deck.items.filter((it) => !learnedInOtherDeck(cards, it.id)).map((it) => it.id) : [];
 }
 
 export function deckTitle(deckId: string): string {

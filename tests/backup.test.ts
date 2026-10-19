@@ -1,6 +1,9 @@
 // 備份：匯出、匯入（覆蓋）、壞掉的檔案不會清掉資料
-import { afterEach, describe, expect, it } from 'vitest';
-import { exportBackup, importBackup, kanaDaysStore, kanaStore, missStore, resetAllProgress, srsStore } from '../src/state';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  activityStore, exportBackup, importBackup, kanaDaysStore, kanaStore, lastExportStore, lessonStore, missStore, peekBackup, preImportStore,
+  resetAllProgress, settingsStore, srsStore, undoImport, updateSettings,
+} from '../src/state';
 
 const card = { due: 1_800_000_000_000, ivl: 3, ease: 2.5, reps: 2, lapses: 0, step: -1, last: 1_790_000_000_000 };
 
@@ -49,6 +52,87 @@ describe('備份', () => {
     expect(srsStore.get().cards.a).toBeUndefined();
     expect(srsStore.get().cards.b.step).toBe(-1);
     expect(Object.keys(srsStore.get().days)).toEqual(['2026-10-13']);
+  });
+
+  it('一類紀錄都沒有的檔案不匯入（不會把現有紀錄清光還說成功）', () => {
+    srsStore.set({ cards: { 'n5-0001': card }, days: {} });
+    expect(() => importBackup(JSON.stringify({ app: 'nihongo-classroom', version: 1, data: {} }))).toThrow(/沒有任何學習紀錄/);
+    expect(() => peekBackup(JSON.stringify({ app: 'nihongo-classroom', version: 1, data: { other: 1 } }))).toThrow(/沒有任何學習紀錄/);
+    expect(srsStore.get().cards['n5-0001']).toEqual(card);
+  });
+
+  it('匯入前先看內容：匯出時間、課程／假名／單字／天數，和目前的紀錄對照', () => {
+    lessonStore.set({ done: { 1: 1 }, hw: {} });
+    kanaStore.set({ 'h:あ': { c: 3, w: 0, s: 3, t: 5 }, 'h:い': { c: 1, w: 0, s: 1, t: 5 } });
+    activityStore.set({ '2026-10-12': { kana: 3 }, '2026-10-13': { review: 2 } });
+    const old = exportBackup();
+    srsStore.set({ cards: { 'n5-0001': card, 'n5-0002': { ...card, reps: 0 } }, days: {} });
+    kanaStore.set({ 'h:あ': { c: 3, w: 0, s: 3, t: 5 }, 'h:い': { c: 3, w: 0, s: 3, t: 6 } });
+    lessonStore.set({ done: { 1: 1, 2: 2 }, hw: {} });
+    const p = peekBackup(old);
+    expect(p.exportedAt).toBeGreaterThan(Date.now() - 60_000);
+    expect(p.backup).toEqual({ lessons: 1, kana: 1, words: 0, days: 2 });
+    expect(p.current).toEqual({ lessons: 2, kana: 2, words: 1, days: 2 });
+    // 很舊的備份沒有匯出時間
+    expect(peekBackup(JSON.stringify({ app: 'nihongo-classroom', version: 1, data: { 'nk.kana': {} } })).exportedAt).toBeNull();
+  });
+
+  it('匯入錯了可以復原；匯入後從現在起算多久沒備份', () => {
+    srsStore.set({ cards: { 'n5-0001': card }, days: {} });
+    lessonStore.set({ done: { 1: 1, 2: 2 }, hw: {} });
+    lastExportStore.set(123);
+    const empty = JSON.stringify({ app: 'nihongo-classroom', version: 1, data: { 'nk.kana': {} } });
+    importBackup(empty);
+    expect(srsStore.get().cards).toEqual({});
+    expect(lessonStore.get().done).toEqual({});
+    expect(lastExportStore.get()).toBeGreaterThan(Date.now() - 60_000);
+    expect(preImportStore.get()).not.toBeNull();
+    undoImport();
+    expect(srsStore.get().cards['n5-0001']).toEqual(card);
+    expect(lessonStore.get().done).toEqual({ 1: 1, 2: 2 });
+    expect(lastExportStore.get()).toBe(123);
+    expect(preImportStore.get()).toBeNull();
+    expect(() => undoImport()).toThrow(/沒有匯入前的紀錄/);
+  });
+
+  it('以前另外存的「自動發音：關」，沒有其他設定時也沿用；改過之後舊的那一份拿掉', async () => {
+    vi.resetModules();
+    const saved: Record<string, string> = { 'nk.autoplay': 'false' };
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => saved[k] ?? null,
+      setItem: (k: string, v: string) => {
+        saved[k] = v;
+      },
+      removeItem: (k: string) => {
+        delete saved[k];
+      },
+    });
+    try {
+      const st = await import('../src/state');
+      expect(st.settingsStore.get().autoplay).toBe(false);
+      st.updateSettings({ autoplay: true });
+      expect(saved['nk.autoplay']).toBeUndefined();
+      expect(JSON.parse(saved['nk.settings']).autoplay).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+      vi.resetModules();
+    }
+  });
+
+  it('全部清除時，匯入前留的那一份也清掉', () => {
+    importBackup(JSON.stringify({ app: 'nihongo-classroom', version: 1, data: { 'nk.kana': {} } }));
+    expect(preImportStore.get()).not.toBeNull();
+    resetAllProgress();
+    expect(preImportStore.get()).toBeNull();
+  });
+
+  it('「自動發音」放在設定裡，跟著備份走', () => {
+    updateSettings({ autoplay: false });
+    const text = exportBackup();
+    updateSettings({ autoplay: true });
+    importBackup(text);
+    expect(settingsStore.get().autoplay).toBe(false);
+    updateSettings({ autoplay: true });
   });
 
   it('不是備份檔', () => {

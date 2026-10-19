@@ -30,7 +30,7 @@ export default function Stats() {
   const now = useNow();
   const todayKey = studyDayKey(now);
 
-  const summary = studySummary(activity);
+  const summary = studySummary(activity, now);
   const current = streak(activity, now);
   const hira = kanaStates(kana, 'h');
   const kata = kanaStates(kana, 'k');

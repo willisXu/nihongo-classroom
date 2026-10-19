@@ -101,4 +101,41 @@ describe('程度規則', () => {
     }
     expect(conversationSystem(casual, 'n4')).toMatch(/use natural casual speech \(plain form\)/);
   });
+
+  it('還在學五十音：告訴 AI 學過哪些假名、畫面有羅馬拼音；學完了就照原本的說明', async () => {
+    const { conversationSystem, correctionSystem, SCENARIOS } = await import('../src/data/tutor');
+    const known = 'あいうえおかきくけこさしすせそ';
+    for (const sys of [conversationSystem(SCENARIOS[0], 'kana', known, true), correctionSystem('kana', known, true)]) {
+      expect(sys).toContain(`can read only these so far: ${known}`);
+      expect(sys).toMatch(/romaji under every Japanese line/);
+      expect(sys).toMatch(/ALL Japanese you produce/);
+    }
+    // 關掉羅馬拼音時不說畫面上有拼音
+    expect(conversationSystem(SCENARIOS[0], 'kana', known, false)).not.toMatch(/romaji under every Japanese line/);
+    expect(conversationSystem(SCENARIOS[0], 'kana', known, false)).toContain(known);
+    expect(conversationSystem(SCENARIOS[0], 'kana')).toMatch(/has just finished learning hiragana and katakana/);
+    // N5 以上不受影響
+    expect(conversationSystem(SCENARIOS[0], 'n5', known)).not.toContain(known);
+  });
+
+  it('接電話的情境由學習者先開口：AI 不先說話，系統提示說明第一句是學習者的', async () => {
+    const { conversationSystem, SCENARIOS } = await import('../src/data/tutor');
+    const phone = SCENARIOS.find((s) => s.id === 'phone')!;
+    expect(phone.learnerFirst?.suggestions.length).toBe(2);
+    // 參考說法只用假名：各種程度都看得懂
+    for (const sg of phone.learnerFirst!.suggestions) expect(sg.ja).toMatch(/^[\u3040-\u30ff、。！？ー\s]+$/u);
+    expect(conversationSystem(phone, 'n5')).toMatch(/learner speaks first/);
+    expect(SCENARIOS.filter((s) => s.learnerFirst).map((s) => s.id)).toEqual(['phone']);
+    expect(conversationSystem(SCENARIOS[0], 'n5')).not.toMatch(/learner speaks first/);
+  });
+});
+
+describe('模型回覆的大小寫', () => {
+  it('判定、選項語言大小寫不同也認得', () => {
+    expect(sanitizeCorrection({ verdict: 'Correct', corrected: 'はい' })?.verdict).toBe('correct');
+    expect(sanitizeCorrection({ verdict: ' WRONG ', corrected: 'はい' })?.verdict).toBe('wrong');
+    expect(sanitizeCorrection({ verdict: 'great', corrected: 'はい' })?.verdict).toBe('minor');
+    const qs = sanitizeQuiz({ questions: [{ prompt: '？', ja: '', choices: ['a', 'b'], choiceLang: 'ZH', answer: 0, explanation: '' }] });
+    expect(qs[0].choiceLang).toBe('zh');
+  });
 });

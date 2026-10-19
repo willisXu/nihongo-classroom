@@ -253,9 +253,8 @@ function Detail({ ch, onClose, written }: { ch: string; onClose: () => void; wri
   let exLabel = '例字';
   if (inf.kind === 'sei') {
     ghost = s === 'h' ? c.ho : c.ko ?? undefined;
-    tip = c.tip ?? '';
+    tip = (s === 'k' ? c.tipK : undefined) ?? c.tip ?? '';
     ex = s === 'h' ? c.ex : c.kx;
-    if (ch === 'ヲ') tip += ' 片假名的 ヲ 現在很少用到。';
   } else if (inf.kind === 'daku') {
     tip = inf.row?.tip ?? '';
     ex = c.ex;

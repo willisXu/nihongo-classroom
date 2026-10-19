@@ -6,7 +6,7 @@ import type { Script } from '../data/types';
 import { lessonStore, recordWriting, writingStore } from '../state';
 import { readJSON, useStore, writeJSON } from '../state/store';
 import { ROW_CHOICES, SEI_ROW_IDS } from '../lib/kanaQuiz';
-import { EXTRA_ROWS, extraOf, lessonWriteRows, normalizeWriteRows, rowsFor, writingChars } from '../lib/writingScope';
+import { EXTRA_ROWS, extraOf, lessonWriteRows, normalizeWriteRows, pickedChars, rowsFor, writingChars } from '../lib/writingScope';
 import { nextLesson } from '../lib/progress';
 import { getStrokePaths } from '../lib/strokes';
 import { speak } from '../lib/speech';
@@ -65,10 +65,14 @@ export default function Writing() {
   const [params, setParams] = useSearchParams();
   const writing = useStore(writingStore);
   const lessons = useStore(lessonStore);
+  // 課文「長得像的字」帶一組字過來（?chars=）：這次只練這幾個字，按範圍、換文字就回到一般的行。
+  // 只是暫時的：存起來的範圍（prefs）不動，下次打開還是原本的
+  const [pick, setPick] = useState(() => (params.get('lesson') ? null : pickedChars(params.get('chars'))));
   const [prefs, setPrefs] = useState<WritePrefs>(() => {
     const p = loadPrefs();
     const l = lessonById(Number(params.get('lesson')));
     if (l) return { ...p, script: l.quiz.script, rows: lessonWriteRows(l.newKana) };
+    if (pick) return p;
     const ch = params.get('char');
     const inf = ch ? kanaInfo(ch) : undefined;
     if (inf && inf.row) {
@@ -79,7 +83,9 @@ export default function Writing() {
     if (extra) return { ...p, script: extra.script, rows: p.rows.includes(extra.row) ? rowsFor(p.rows, extra.script) : [extra.row] };
     return p;
   });
-  const chars = useMemo(() => writingChars(prefs.rows, prefs.script), [prefs.rows, prefs.script]);
+  /** 畫面上的文字：自選一組字時照那組字 */
+  const script: Script = pick?.script ?? prefs.script;
+  const chars = useMemo(() => pick?.chars ?? writingChars(prefs.rows, prefs.script), [pick, prefs.rows, prefs.script]);
   const [current, setCurrent] = useState<string>(() => {
     const ch = params.get('char');
     return ch && getStrokePaths(ch) ? ch : chars[0] ?? 'あ';
@@ -90,7 +96,7 @@ export default function Writing() {
 
   useEffect(() => writeJSON('nk.write', prefs), [prefs]);
   useEffect(() => {
-    if (params.get('lesson') || params.get('char')) setParams({}, { replace: true });
+    if (params.get('lesson') || params.get('char') || params.get('chars')) setParams({}, { replace: true });
   }, [params, setParams]);
 
   // 範圍改變後，目前的字不在範圍內就換成第一個
@@ -116,13 +122,19 @@ export default function Writing() {
   const writtenInScope = chars.filter((c) => writing[c]).length;
 
   const toggleRow = (id: string) => {
+    if (pick) {
+      // 從「長得像的字」回到一般範圍：只選按下的這一行（文字照畫面上看到的）
+      setPick(null);
+      setPrefs((p) => ({ ...p, script, rows: [id] }));
+      return;
+    }
     const rows = rowsFor(prefs.rows, prefs.script);
     const has = rows.includes(id);
     if (has && rows.length === 1) return;
     setPrefs((p) => ({ ...p, rows: has ? rows.filter((r) => r !== id) : WRITE_ROW_IDS.filter((r) => r === id || rows.includes(r)) }));
   };
   // 這種文字有字的範圍才顯示（平假名沒有「拼外國音」那一組）
-  const rowChips = WRITE_ROWS.filter((r) => (prefs.script === 'k' ? r.k : r.h));
+  const rowChips = WRITE_ROWS.filter((r) => (script === 'k' ? r.k : r.h));
 
   const onComplete = (r: TraceResult) => {
     recordWriting(r.char, prefs.mode, r.mistakes);
@@ -143,14 +155,15 @@ export default function Writing() {
           <span className="set-l">文字</span>
           <Segmented
             label="文字"
-            value={prefs.script}
-            onChange={(v) =>
+            value={script}
+            onChange={(v) => {
+              setPick(null);
               setPrefs((p) => {
                 // 換成平假名時，「拼外國音」那一組沒有字：拿掉，都沒有了就從 あ行 開始
                 const rows = rowsFor(p.rows, v);
                 return { ...p, script: v, rows: rows.length ? rows : ['a'] };
-              })
-            }
+              });
+            }}
             options={[
               { value: 'h', label: '平假名' },
               { value: 'k', label: '片假名' },
@@ -172,8 +185,8 @@ export default function Writing() {
             {rowChips.map((r, i) => (
               <span key={r.id} className="rchip-wrap">
                 {i > 0 && r.group !== rowChips[i - 1].group ? <span className="rsep" aria-hidden="true" /> : null}
-                <button type="button" className="rchip" aria-pressed={prefs.rows.includes(r.id)} lang="ja" onClick={() => toggleRow(r.id)}>
-                  {prefs.script === 'k' ? r.k : r.h}
+                <button type="button" className="rchip" aria-pressed={!pick && prefs.rows.includes(r.id)} lang="ja" onClick={() => toggleRow(r.id)}>
+                  {script === 'k' ? r.k : r.h}
                 </button>
               </span>
             ))}
@@ -181,14 +194,39 @@ export default function Writing() {
         </div>
         <div className="quick">
           {lessonChoices.map((l) => (
-            <button key={l.id} type="button" className="linkbtn" onClick={() => setPrefs((p) => ({ ...p, script: l.quiz.script, rows: lessonWriteRows(l.newKana) }))}>
+            <button
+              key={l.id}
+              type="button"
+              className="linkbtn"
+              onClick={() => {
+                setPick(null);
+                setPrefs((p) => ({ ...p, script: l.quiz.script, rows: lessonWriteRows(l.newKana) }));
+              }}
+            >
               第 {l.id} 課
             </button>
           ))}
-          <button type="button" className="linkbtn" onClick={() => setPrefs((p) => ({ ...p, rows: SEI_ROW_IDS }))}>
+          <button
+            type="button"
+            className="linkbtn"
+            onClick={() => {
+              setPick(null);
+              setPrefs((p) => ({ ...p, script, rows: SEI_ROW_IDS }));
+            }}
+          >
             清音全部
           </button>
         </div>
+        {pick ? (
+          <p className="pick-note">
+            <span>
+              現在只練課文裡長得像的 {pick.chars.length} 個字：<span lang="ja">{pick.chars.join('、')}</span>
+            </span>
+            <button type="button" className="linkbtn" onClick={() => setPick(null)}>
+              回到原本的範圍
+            </button>
+          </p>
+        ) : null}
       </div>
 
       <div className="char-strip" role="group" aria-label={`選擇要寫的字（已寫過 ${writtenInScope}/${chars.length}）`}>

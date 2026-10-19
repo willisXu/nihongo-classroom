@@ -34,3 +34,10 @@ export function formatDateZh(ts: number): string {
   const d = new Date(ts);
   return `${d.getMonth() + 1} 月 ${d.getDate()} 日（週${WEEK[d.getDay()]}）`;
 }
+
+/** 10 月 12 日 21:30；不是今年就加上年份（2025 年 10 月 12 日 21:30） */
+export function formatDateTimeZh(ts: number, now = Date.now()): string {
+  const d = new Date(ts);
+  const year = d.getFullYear() === new Date(now).getFullYear() ? '' : `${d.getFullYear()} 年 `;
+  return `${year}${d.getMonth() + 1} 月 ${d.getDate()} 日 ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}

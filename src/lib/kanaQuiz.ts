@@ -99,11 +99,22 @@ function shuffle<T>(a: T[], rand: () => number): T[] {
   return arr;
 }
 
-/** 4 個選項：1 個正解 + 3 個干擾（長得像的字、同行同段的字優先） */
-export function makeOptions(item: QuizItem, pool: QuizItem[], mode: QuizMode, rand: () => number = Math.random): QuizOption[] {
+/**
+ * 4 個選項：1 個正解 + 3 個干擾（長得像的字、同行同段的字優先）。
+ * known：學習者看過的字（學過的課、測驗做過的字、目前的範圍）。有給的話，干擾選項只從這些字挑，
+ * 才不會在第 1 課就冒出還沒教的 は、ち；這些字湊不滿 3 個時才用其他清音補。
+ */
+export function makeOptions(
+  item: QuizItem,
+  pool: QuizItem[],
+  mode: QuizMode,
+  rand: () => number = Math.random,
+  known?: ReadonlySet<string>,
+): QuizOption[] {
   const s = item.script;
   const out: QuizOption[] = [];
-  const push = (ch: string) => {
+  const push = (ch: string, anyKana = false) => {
+    if (known && !anyKana && !known.has(ch)) return;
     const inf = kanaInfo(ch);
     if (!inf || inf.kind === 'yoon') return;
     const c = inf.cell;
@@ -115,8 +126,11 @@ export function makeOptions(item: QuizItem, pool: QuizItem[], mode: QuizMode, ra
     if (opt.r === item.r || out.some((o) => o.r === opt.r || o.ch === opt.ch)) return;
     out.push(opt);
   };
-  const look = shuffle(LOOKALIKE[item.ch] ?? [], rand);
-  if (look.length) push(look[0]);
+  // 長得像的字最多放一個（第一個沒學過就換下一個）
+  for (const ch of shuffle(LOOKALIKE[item.ch] ?? [], rand)) {
+    push(ch);
+    if (out.length) break;
+  }
   const near = shuffle(
     pool.filter((p) => p.script === s && p.key !== item.key && (p.col === item.col || p.row === item.row)),
     rand,
@@ -124,6 +138,8 @@ export function makeOptions(item: QuizItem, pool: QuizItem[], mode: QuizMode, ra
   for (const p of near.slice(0, 2)) if (out.length < 3) push(p.ch);
   for (const p of shuffle(pool.filter((p) => p.script === s), rand)) if (out.length < 3) push(p.ch);
   if (out.length < 3) for (const c of shuffle(SEION_CELLS, rand)) if (out.length < 3) push(s === 'h' ? c.h : c.k);
+  // 看過的字太少（例如只選了 わ行）：最後才用其他清音補滿
+  if (out.length < 3) for (const c of shuffle(SEION_CELLS, rand)) if (out.length < 3) push(s === 'h' ? c.h : c.k, true);
   return shuffle([...out.slice(0, 3), { ch: item.ch, r: item.r, ok: true }], rand);
 }
 

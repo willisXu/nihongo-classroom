@@ -40,7 +40,36 @@ export function isRelearning(c: CardState): boolean {
   return c.step >= 0 && c.lapses > 0 && c.ivl > 0;
 }
 
-export function review(c: CardState, grade: Grade, now: number): CardState {
+/**
+ * 分散的幅度（天），照 Anki 的算法：2.5 天以上才分散，每天加的幅度
+ * 7 天以內 15%、7～20 天 10%、20 天以上 5%，基本 1 天。
+ * 例：3 天 ±1、一週 ±2、一個月 ±3、一年約 ±20 天。
+ */
+export function fuzzRange(ivl: number): number {
+  if (ivl < 2.5) return 0;
+  const r = 1 + 0.15 * (Math.min(ivl, 7) - 2.5) + 0.1 * Math.max(0, Math.min(ivl, 20) - 7) + 0.05 * Math.max(0, ivl - 20);
+  return Math.round(r);
+}
+
+/**
+ * 間隔的小幅隨機分散：同一天學的卡，之後不會全部擠在同一天到期。
+ * 用卡片 id 和複習次數決定（不是真的亂數），按鈕上預告的天數和實際排的一樣。
+ */
+export function fuzzDays(ivl: number, seed: string): number {
+  const range = fuzzRange(ivl);
+  if (!range) return ivl;
+  // FNV-1a：同樣的 seed 一定得到同樣的結果
+  let h = 0x811c9dc5;
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  const offset = (h % (2 * range + 1)) - range;
+  return Math.max(1, ivl + offset);
+}
+
+/** seed：卡片 id。有給才分散間隔（見 fuzzDays） */
+export function review(c: CardState, grade: Grade, now: number, seed?: string): CardState {
   const n: CardState = { ...c, reps: c.reps + 1, last: now };
   const today = studyDayStart(now);
 
@@ -86,10 +115,12 @@ export function review(c: CardState, grade: Grade, now: number): CardState {
     n.due = now + RELEARN_STEPS[0];
     return n;
   }
-  // 「普通」至少比「困難」多 1 天、「簡單」至少比「普通」多 1 天（熟悉係數很低時，算出來的間隔可能一樣）
-  const hard = Math.max(c.ivl + 1, Math.round(c.ivl * 1.2));
-  const good = Math.max(hard + 1, Math.round((c.ivl + lateDays / 2) * c.ease));
-  const easy = Math.max(good + 1, Math.round((c.ivl + lateDays) * c.ease * 1.3));
+  // 先分散、再套下限：「困難」至少比現在多 1 天，「普通」至少比「困難」多 1 天、「簡單」至少比「普通」多 1 天
+  // （熟悉係數很低、或分散往下調時，算出來的間隔可能一樣或更短）
+  const fz = (d: number, g: Grade) => (seed ? fuzzDays(d, `${seed}:${c.reps}:${g}`) : d);
+  const hard = Math.max(c.ivl + 1, fz(Math.round(c.ivl * 1.2), 'hard'));
+  const good = Math.max(hard + 1, fz(Math.round((c.ivl + lateDays / 2) * c.ease), 'good'));
+  const easy = Math.max(good + 1, fz(Math.round((c.ivl + lateDays) * c.ease * 1.3), 'easy'));
   if (grade === 'hard') n.ease = Math.max(MIN_EASE, c.ease - 0.15);
   if (grade === 'easy') n.ease = c.ease + 0.15;
   n.ivl = Math.min(MAX_IVL, grade === 'hard' ? hard : grade === 'good' ? good : easy);
@@ -97,9 +128,9 @@ export function review(c: CardState, grade: Grade, now: number): CardState {
   return n;
 }
 
-/** 按鈕上顯示的「下次見面」時間 */
-export function previewLabel(c: CardState, grade: Grade, now: number): string {
-  const r = review(c, grade, now);
+/** 按鈕上顯示的「下次見面」時間（seed 和實際評分時一樣，天數才對得上） */
+export function previewLabel(c: CardState, grade: Grade, now: number, seed?: string): string {
+  const r = review(c, grade, now, seed);
   if (r.step >= 0) return formatMinutes(r.due - now);
   return formatDays(r.ivl);
 }

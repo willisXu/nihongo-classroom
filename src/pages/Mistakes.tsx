@@ -2,11 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { vocabById } from '../data/vocab';
 import { clearVocabMiss, kanaStore, logActivity, missStore, settingsStore, srsStore, writingStore } from '../state';
-import { readJSON, useStore } from '../state/store';
+import { useStore } from '../state/store';
 import { vocabMistakes, weakKanaKeys, writingMistakes } from '../lib/mistakes';
 import { romaji } from '../lib/romaji';
 import { speak } from '../lib/speech';
-import { POS_LABEL, VERB_GROUP_LABEL, speechText } from '../lib/vocab';
+import { POS_LABEL, VERB_GROUP_LABEL, speechText, exampleSpeech } from '../lib/vocab';
 import { usePageTitle } from '../lib/title';
 import { focusLost, revealAnswer } from '../lib/flashcard';
 import { PracticeTabs } from '../components/PracticeTabs';
@@ -194,7 +194,7 @@ function VocabDrill({ ids, onClose }: { ids: string[]; onClose: () => void }) {
   useEffect(() => {
     setFlipped(false);
     const it = id ? vocabById(id) : undefined;
-    if (it && readJSON('nk.autoplay') !== false) speak(speechText(it));
+    if (it && settingsStore.get().autoplay) speak(speechText(it));
   }, [id, turn]);
 
   // 開始練習時焦點放到「顯示答案」；翻面後把答案捲進畫面、焦點放到答案；練完放到「回錯題本」
@@ -292,7 +292,7 @@ function VocabDrill({ ids, onClose }: { ids: string[]; onClose: () => void }) {
           </p>
           {item.ex ? (
             <div className="v-ex">
-              <SpeakIcon text={item.ex.ja} label="播放例句" />
+              <SpeakIcon text={exampleSpeech(item.ex)} label="播放例句" />
               <div>
                 <p lang="ja" className="v-ex-ja">
                   {item.ex.ja}

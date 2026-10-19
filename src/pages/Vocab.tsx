@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { DECK_META, metaItemIds, unseenWords } from '../data/vocab/meta';
+import { DECK_META, learnedInOtherDeck, metaItemIds, unseenWords } from '../data/vocab/meta';
 import { NEW_PER_DAY_OPTIONS, lessonStore, settingsStore, srsStore, updateSettings } from '../state';
 import { useStore } from '../state/store';
 import { deckStats } from '../lib/srs';
@@ -82,6 +82,8 @@ export default function Vocab() {
       <div className="deck-grid">
         {DECK_META.map((d) => {
           const s = deckStats(srs.cards, metaItemIds(d), now);
+          // 在別的牌組學過的同一個字，這個牌組不會再當新卡出現：也算學過
+          const elsewhere = metaItemIds(d).filter((id) => learnedInOtherDeck(srs.cards, id)).length;
           return (
             <article key={d.id} className="card deck-card">
               <div className="deck-top">
@@ -92,11 +94,12 @@ export default function Vocab() {
               <p className="small">{DECK_NOTE[d.id]}</p>
               <div className="meter-row">
                 <span>學過</span>
-                <Meter value={s.seen} max={s.total} label={`${d.title} 學過`} />
+                <Meter value={s.seen + elsewhere} max={s.total} label={`${d.title} 學過`} />
                 <span className="num">
-                  {s.seen}/{s.total}
+                  {s.seen + elsewhere}/{s.total}
                 </span>
               </div>
+              {elsewhere ? <p className="small">其中 {elsewhere} 個字在別的牌組學過，這裡不會再當新卡出現。</p> : null}
               <div className="btn-row">
                 <Link className="btn btn-primary" to={`/review/${d.id}`}>
                   {s.due ? '開始複習' : '學新卡'}

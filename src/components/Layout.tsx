@@ -3,7 +3,7 @@ import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Icon, type IconName } from './Icon';
 import { Meter } from './Controls';
 import { ErrorBoundary } from './ErrorBoundary';
-import { useSpeech } from '../lib/speech';
+import { isRemoteVoice, useSpeech } from '../lib/speech';
 import { activityStore, kanaStore, settingsStore, updateSettings } from '../state';
 import { readJSON, storageHealth, useStore, writeJSON } from '../state/store';
 import { countMastered, HIRA_KEYS } from '../lib/progress';
@@ -59,6 +59,21 @@ function Loading() {
 function VoiceNote() {
   const sp = useSpeech();
   const [closed, setClosed] = useState(() => readJSON('nk.vnote') === true);
+  const [closedRemote, setClosedRemote] = useState(false);
+  // 線上語音念不出來（離線、連不到），又沒有內建的日文語音：這次開網頁提醒一次
+  if (sp.remoteFailed && !closedRemote && !sp.voices.some((v) => !isRemoteVoice(v))) {
+    return (
+      <div className="vnote" role="status">
+        <p>
+          線上的日文語音現在念不出來（可能沒有網路，或連不到語音服務），這台裝置也沒有內建的日文語音，所以聽不到發音。Windows
+          請到「設定 → 時間與語言 → 語音 → 新增語音」加入日文，之後沒有網路也能發音。
+        </p>
+        <button type="button" className="chip-btn" onClick={() => setClosedRemote(true)}>
+          知道了
+        </button>
+      </div>
+    );
+  }
   if (closed || !sp.ready || (sp.supported && sp.hasJapanese)) return null;
   return (
     <div className="vnote" role="status">

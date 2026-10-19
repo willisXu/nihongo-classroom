@@ -1,18 +1,26 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import {
-  NEW_PER_DAY_OPTIONS, settingsStore, updateSettings, usageStore, exportBackup, importBackup, resetAllProgress, lastExportStore, markExported,
-  type ThemePref,
+  NEW_PER_DAY_OPTIONS, settingsStore, updateSettings, usageStore, exportBackup, importBackup, peekBackup, preImportStore, undoImport,
+  resetAllProgress, lastExportStore, markExported, type BackupPreview, type BackupSummary, type ThemePref,
 } from '../state';
 import { useStore } from '../state/store';
-import { useSpeech, speak } from '../lib/speech';
+import { isRemoteVoice, refreshVoices, useSpeech, speak } from '../lib/speech';
 import { estimateCost, modelInfo } from '../lib/claude';
-import { daysBetween } from '../lib/date';
+import { daysBetween, formatDateTimeZh } from '../lib/date';
 import { usePageTitle } from '../lib/title';
 import { googleCalendarUrl, reminderIcs } from '../lib/reminder';
 import { ApiKeySetup } from '../components/ApiKeySetup';
 import { AppInstall } from '../components/AppInstall';
 import { Segmented, Switch } from '../components/Controls';
 import { Icon } from '../components/Icon';
+
+/** 匯入前比較備份和目前紀錄的項目 */
+const SUMMARY_ROWS: [keyof BackupSummary, string][] = [
+  ['lessons', '完成的課'],
+  ['kana', '熟悉的假名'],
+  ['words', '學過的單字'],
+  ['days', '學習天數'],
+];
 
 /** 讓瀏覽器下載一個檔案 */
 function saveFile(blob: Blob, name: string) {
@@ -32,13 +40,24 @@ export default function Settings() {
   const lastExport = useStore(lastExportStore);
   const usage = useStore(usageStore);
   const speech = useSpeech();
+  const localVoices = speech.voices.some((v) => !isRemoteVoice(v));
+  // 語音清單有時很晚才出來（又不觸發 voiceschanged）：打開設定頁時再讀一次
+  useEffect(() => {
+    if (!speech.voices.length) refreshVoices();
+  }, [speech.voices.length]);
   const fileRef = useRef<HTMLInputElement>(null);
   const [msg, setMsg] = useState<{ tone: 'ok' | 'mark'; text: string } | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
-  const [pendingImport, setPendingImport] = useState<File | null>(null);
+  const [pendingImport, setPendingImport] = useState<{ name: string; text: string; preview: BackupPreview } | null>(null);
+  const [confirmUndo, setConfirmUndo] = useState(false);
+  const preImport = useSyncExternalStore(preImportStore.subscribe, preImportStore.get, preImportStore.get);
+  const msgRef = useRef<HTMLParagraphElement>(null);
 
   const exportAgo = lastExport ? daysBetween(lastExport, Date.now()) : null;
-  const totalCost = Object.entries(usage.byModel).reduce((sum, [m, u]) => sum + estimateCost(m, u.input, u.output), 0);
+  const totalCost = Object.entries(usage.byModel).reduce(
+    (sum, [m, u]) => sum + estimateCost(m, u.input - u.cacheWrite - u.cacheRead, u.output, u.cacheWrite, u.cacheRead),
+    0,
+  );
 
   // 每天提醒：行事曆行程附上這個網站的網址（線上版或本機版都對）
   const reminder = { time: settings.remindAt, url: `${location.origin}${location.pathname}`, now: Date.now() };
@@ -56,18 +75,60 @@ export default function Settings() {
     setMsg({ tone: 'ok', text: '已下載備份檔。到另一台裝置打開這個網站，用「匯入備份」就能接著學。' });
   };
 
-  const onFile = async (f: File | null) => {
+  /** 按鈕不見後焦點放到結果訊息，螢幕閱讀器也會念出來 */
+  const report = (next: { tone: 'ok' | 'mark'; text: string }) => {
+    setMsg(next);
+    requestAnimationFrame(() => msgRef.current?.focus());
+  };
+
+  // 選好檔案：先檢查、列出備份的內容和目前的紀錄比較，確定了才匯入
+  const onPick = async (f: File | null) => {
     setPendingImport(null);
+    setConfirmUndo(false);
+    setMsg(null);
     if (!f) return;
     try {
-      const n = importBackup(await f.text());
-      setMsg({ tone: 'ok', text: `匯入完成，還原了 ${n} 類學習紀錄。` });
+      const text = await f.text();
+      setPendingImport({ name: f.name, text, preview: peekBackup(text) });
     } catch (e) {
-      setMsg({ tone: 'mark', text: e instanceof Error ? e.message : '匯入失敗。' });
-    } finally {
+      report({ tone: 'mark', text: e instanceof Error ? e.message : '讀不到這個檔案。' });
       if (fileRef.current) fileRef.current.value = '';
     }
   };
+
+  const doImport = () => {
+    if (!pendingImport) return;
+    try {
+      const n = importBackup(pendingImport.text);
+      report({ tone: 'ok', text: `匯入完成，還原了 ${n} 類學習紀錄。匯入前的紀錄先留著，匯入錯了可以按下面的「復原」。` });
+    } catch (e) {
+      report({ tone: 'mark', text: e instanceof Error ? e.message : '匯入失敗。' });
+    } finally {
+      setPendingImport(null);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  const cancelImport = () => {
+    setPendingImport(null);
+    if (fileRef.current) {
+      fileRef.current.value = '';
+      fileRef.current.focus();
+    }
+  };
+
+  const doUndo = () => {
+    try {
+      undoImport();
+      report({ tone: 'ok', text: '已經換回匯入前的紀錄。' });
+    } catch (e) {
+      report({ tone: 'mark', text: e instanceof Error ? e.message : '復原失敗。' });
+    } finally {
+      setConfirmUndo(false);
+    }
+  };
+
+  const fewer = pendingImport ? SUMMARY_ROWS.some(([k]) => pendingImport.preview.backup[k] < pendingImport.preview.current[k]) : false;
 
   return (
     <div className="wrap settings-page">
@@ -106,7 +167,7 @@ export default function Settings() {
             <option value="">自動挑選</option>
             {speech.voices.map((v) => (
               <option key={v.voiceURI} value={v.voiceURI}>
-                {v.name}
+                {isRemoteVoice(v) ? `${v.name}（需要網路）` : v.name}
               </option>
             ))}
           </select>
@@ -118,9 +179,16 @@ export default function Settings() {
           {!speech.supported
             ? '這個瀏覽器不支援語音合成。'
             : speech.hasJapanese
-              ? `找到 ${speech.voices.length} 個日文語音。Edge 的「Nanami」和 Chrome 的「Google 日本語」比較自然。`
+              ? `找到 ${speech.voices.length} 個日文語音。Edge 的「Nanami」和 Chrome 的「Google 日本語」比較自然，但要連網路；${
+                  localVoices
+                    ? '離線或連不到時，會自動改用電腦內建的日文語音。'
+                    : '這台裝置沒有內建的日文語音，離線時會聽不到。Windows 請到「設定 → 時間與語言 → 語音 → 新增語音」加入日文。'
+                }`
               : '還沒有找到日文語音。Windows 請到「設定 → 時間與語言 → 語音 → 新增語音」加入日文；Mac 請到「系統設定 → 輔助使用 → 朗讀內容 → 系統語音 → 管理語音」加入日文。也可以改用 Edge 瀏覽器，它內建日文語音。'}
         </p>
+        {speech.remoteFailed && localVoices ? (
+          <p className="small">線上語音剛剛念不出來（可能沒有網路，或連不到語音服務），這次先用電腦內建的日文語音。</p>
+        ) : null}
       </section>
 
       <section className="block" aria-labelledby="h-cards">
@@ -213,34 +281,75 @@ export default function Settings() {
             type="file"
             accept="application/json,.json"
             className="sr-only file-input"
-            onChange={(e) => setPendingImport(e.target.files?.[0] ?? null)}
+            onChange={(e) => void onPick(e.target.files?.[0] ?? null)}
           />
           <label className="btn" htmlFor="import-file">
             匯入備份
           </label>
         </div>
         {pendingImport ? (
-          <div className="reset-row confirm-row" role="alert">
-            <span>匯入「{pendingImport.name}」會覆蓋這個瀏覽器目前的學習紀錄，確定嗎？</span>
-            <button type="button" className="btn btn-sm btn-primary" onClick={() => void onFile(pendingImport)}>
-              匯入
-            </button>
-            <button
-              type="button"
-              className="linkbtn"
-              onClick={() => {
-                setPendingImport(null);
-                if (fileRef.current) fileRef.current.value = '';
-              }}
-            >
-              取消
-            </button>
+          <div className="confirm-row import-confirm" role="alert">
+            <p>
+              要匯入「{pendingImport.name}」嗎？備份裡的紀錄會取代這個瀏覽器目前的紀錄。
+              {pendingImport.preview.exportedAt
+                ? `這個備份是 ${formatDateTimeZh(pendingImport.preview.exportedAt)} 匯出的。`
+                : '這個備份沒有記錄匯出的時間。'}
+            </p>
+            <table className="import-cmp">
+              <thead>
+                <tr>
+                  <td />
+                  <th scope="col">備份檔</th>
+                  <th scope="col">這個瀏覽器</th>
+                </tr>
+              </thead>
+              <tbody>
+                {SUMMARY_ROWS.map(([k, label]) => (
+                  <tr key={k}>
+                    <th scope="row">{label}</th>
+                    <td className={pendingImport.preview.backup[k] < pendingImport.preview.current[k] ? 'is-less' : undefined}>
+                      {pendingImport.preview.backup[k]}
+                    </td>
+                    <td>{pendingImport.preview.current[k]}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {fewer ? <p className="import-warn">備份裡有些紀錄比這個瀏覽器少：匯入後，少掉的部分會不見。</p> : null}
+            <p className="small">匯入前會先把目前的紀錄留一份，匯入錯了可以復原。</p>
+            <div className="btn-row">
+              <button type="button" className="btn btn-sm btn-primary" onClick={doImport}>
+                匯入
+              </button>
+              <button type="button" className="linkbtn" onClick={cancelImport}>
+                取消
+              </button>
+            </div>
           </div>
         ) : null}
         {msg ? (
-          <p className={`key-status tone-${msg.tone}`} role="status">
+          <p ref={msgRef} tabIndex={-1} className={`key-status tone-${msg.tone}`} role="status">
             {msg.text}
           </p>
+        ) : null}
+        {preImport && !pendingImport ? (
+          <div className="reset-row">
+            {confirmUndo ? (
+              <>
+                <span>換回 {formatDateTimeZh(preImport.at)} 匯入前的紀錄嗎？匯入之後新學的會不見。</span>
+                <button type="button" className="btn btn-sm btn-primary" onClick={doUndo}>
+                  復原
+                </button>
+                <button type="button" className="linkbtn" onClick={() => setConfirmUndo(false)}>
+                  取消
+                </button>
+              </>
+            ) : (
+              <button type="button" className="linkbtn" onClick={() => setConfirmUndo(true)}>
+                復原 {formatDateTimeZh(preImport.at)} 匯入前的紀錄
+              </button>
+            )}
+          </div>
         ) : null}
         <div className="reset-row">
           {confirmReset ? (
@@ -252,7 +361,7 @@ export default function Settings() {
                 onClick={() => {
                   resetAllProgress();
                   setConfirmReset(false);
-                  setMsg({ tone: 'ok', text: '已清除所有學習紀錄。' });
+                  report({ tone: 'ok', text: '已清除所有學習紀錄。' });
                 }}
               >
                 全部清除

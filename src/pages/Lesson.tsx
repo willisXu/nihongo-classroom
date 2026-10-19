@@ -14,6 +14,9 @@ import { SpeakButton, usePlayFlash } from '../components/Speak';
 import { Icon } from '../components/Icon';
 import { usePageTitle } from '../lib/title';
 
+/** 課名裡有假名才標成日文（第 5～8 課的課名「濁音・半濁音」「片假名（一）」是中文也看得懂的漢字） */
+const hasKana = (t: string) => /[\u3041-\u3096\u30a1-\u30fa]/u.test(t);
+
 const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /** 捲到課文的某一段，並把焦點放在段落標題（鍵盤和讀屏軟體才會從那裡接著讀） */
@@ -207,14 +210,14 @@ export default function LessonPage() {
       <nav className="pager" aria-label="上一課與下一課">
         {prev ? (
           <Link className="btn" to={`/lessons/${prev.id}`}>
-            <Icon name="arrow-left" size={17} /> 第 {prev.id} 課 <span lang="ja">{prev.title}</span>
+            <Icon name="arrow-left" size={17} /> 第 {prev.id} 課 <span className="ja" lang={hasKana(prev.title) ? 'ja' : undefined}>{prev.title}</span>
           </Link>
         ) : (
           <span />
         )}
         {next ? (
           <Link className="btn" to={`/lessons/${next.id}`}>
-            第 {next.id} 課 <span lang="ja">{next.title}</span> <Icon name="arrow-right" size={17} />
+            第 {next.id} 課 <span className="ja" lang={hasKana(next.title) ? 'ja' : undefined}>{next.title}</span> <Icon name="arrow-right" size={17} />
           </Link>
         ) : (
           <Link className="btn" to="/vocab">
@@ -354,13 +357,13 @@ function Block({ block }: { block: LessonBlock }) {
               <div className="fc-k hand" lang="ja">
                 {block.chars}
               </div>
-              <p className="fc-cap">手寫（教科書體）：筆畫分開</p>
+              <p className="fc-cap">{block.labels?.[0] ?? '手寫（教科書體）：筆畫分開'}</p>
             </div>
             <div>
               <div className="fc-k print" lang="ja">
                 {block.chars}
               </div>
-              <p className="fc-cap">電腦字型（黑體）：常連成一筆</p>
+              <p className="fc-cap">{block.labels?.[1] ?? '電腦字型（黑體）：常連成一筆'}</p>
             </div>
           </div>
           {block.caption ? (
@@ -371,33 +374,55 @@ function Block({ block }: { block: LessonBlock }) {
         </figure>
       );
     case 'table':
-      return (
-        <div className="table-scroll" tabIndex={0} role="region" aria-label="表格（可左右捲動）">
-          <table className="ltable">
-            <thead>
-              <tr>
-                {block.head.map((h, i) => (
-                  <th key={i} scope="col">
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {block.rows.map((r, i) => (
-                <tr key={i}>
-                  {r.map((c, j) => (
-                    <td key={j}>
-                      <Rich text={c} />
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      );
+      return <LessonTable head={block.head} rows={block.rows} />;
   }
+}
+
+/**
+ * 課文表格：手機上跟著畫面寬度折行，平常不必左右捲動，也就不多佔一次 Tab。
+ * 真的比畫面寬時（例如把字放得很大），才變成可以用鍵盤捲動、有名稱的區塊。
+ */
+function LessonTable({ head, rows }: { head: string[]; rows: string[][] }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [overflow, setOverflow] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const check = () => setOverflow(el.scrollWidth > el.clientWidth + 1);
+    check();
+    if (typeof ResizeObserver !== 'function') return;
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    if (el.firstElementChild) ro.observe(el.firstElementChild);
+    return () => ro.disconnect();
+  }, []);
+  const scroll = overflow ? { tabIndex: 0, role: 'region', 'aria-label': `表格：${head.join('、')}（可左右捲動）` } : {};
+  return (
+    <div ref={ref} className="table-scroll" {...scroll}>
+      <table className="ltable">
+        <thead>
+          <tr>
+            {head.map((h, i) => (
+              <th key={i} scope="col">
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i}>
+              {r.map((c, j) => (
+                <td key={j}>
+                  <Rich text={c} />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 function KanaBlock({ rows, script, title }: { rows: string[]; script: Script; title?: string }) {
@@ -462,7 +487,7 @@ function KanaRowView({ row, script, showLabel }: { row: KanaRow; script: Script;
                       （{example[1]}）
                     </>
                   ) : (
-                    c.tip
+                    c.tipK ?? c.tip
                   )}
                 </span>
                 <span className="kn-o">

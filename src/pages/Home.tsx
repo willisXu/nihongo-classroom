@@ -10,7 +10,7 @@ import { countMastered, HIRA_KEYS, KATA_KEYS, lessonsDone, nextLesson, streak } 
 import { todayTasks } from '../lib/today';
 import { mistakeCount, weakKanaKeys } from '../lib/mistakes';
 import { deckStats } from '../lib/srs';
-import { daysBetween, formatDateZh, studyDayKey } from '../lib/date';
+import { daysBetween, formatDateZh, studyDayKey, studyDayStart } from '../lib/date';
 import { Icon } from '../components/Icon';
 import { Meter } from '../components/Controls';
 import { Hanamaru } from '../components/Hanamaru';
@@ -95,7 +95,8 @@ export default function Home() {
   return (
     <div className="wrap">
       <header className="ph">
-        <p className="eyebrow">{formatDateZh(now)}</p>
+        {/* 凌晨 4 點前還算前一天（今天的任務也還是前一天的）：日期跟著學習日 */}
+        <p className="eyebrow">{formatDateZh(studyDayStart(now))}</p>
         <h1>今天的學習</h1>
         <p className="today-line">
           <span className="streak">

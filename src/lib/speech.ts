@@ -2,6 +2,10 @@
  * 日文發音：使用瀏覽器內建的語音合成（Web Speech API）。
  * Windows 的 Edge／Chrome、macOS 與 iOS 的 Safari 通常都有日文語音；
  * 沒有時頁面會顯示提示，請使用者在系統設定加入日文語音。
+ *
+ * Chrome 的「Google 日本語」、Edge 的「Online (Natural)」語音是在網路上合成的：
+ * 離線或連不到（例如在中國大陸連不到 Google）時念不出來。這時改用電腦內建的日文語音再念一次，
+ * 這次開網頁之後都先用內建的（重新連上網路時再試線上語音）。
  */
 import { useSyncExternalStore } from 'react';
 import { settingsStore } from '../state';
@@ -13,10 +17,12 @@ export interface SpeechState {
   voices: SpeechSynthesisVoice[];
   /** 找到日文語音 */
   hasJapanese: boolean;
+  /** 線上語音這次念不出來（離線、連不到），之後先用內建語音 */
+  remoteFailed: boolean;
 }
 
 const supported = typeof window !== 'undefined' && 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
-let state: SpeechState = { supported, ready: !supported, voices: [], hasJapanese: false };
+let state: SpeechState = { supported, ready: !supported, voices: [], hasJapanese: false, remoteFailed: false };
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
 
@@ -31,7 +37,13 @@ export function voiceRank(name: string): number {
   return i === -1 ? VOICE_RANK.length : i;
 }
 
-function refresh() {
+/** 在網路上合成的語音（localService 是 false）：離線、連不到時念不出來 */
+export function isRemoteVoice(v: Pick<SpeechSynthesisVoice, 'localService'>): boolean {
+  return v.localService === false;
+}
+
+/** 重新讀一次語音清單（有些瀏覽器清單晚到，又不觸發 voiceschanged） */
+export function refreshVoices() {
   if (!supported) return;
   let all: SpeechSynthesisVoice[] = [];
   try {
@@ -40,28 +52,62 @@ function refresh() {
     all = [];
   }
   const ja = all.filter((v) => /^ja([-_]|$)/i.test(v.lang || ''));
-  state = { supported, ready: all.length > 0 || state.ready, voices: ja, hasJapanese: ja.length > 0 };
+  state = { ...state, ready: all.length > 0 || state.ready, voices: ja, hasJapanese: ja.length > 0 };
   emit();
+}
+
+/** 線上語音念不出來之後，多久再試一次（網路只是一時太慢的話，不會整次都只能用內建語音） */
+export const REMOTE_RETRY_MS = 10 * 60_000;
+let remoteFailedAt = 0;
+
+function setRemoteFailed(failed: boolean) {
+  if (failed) remoteFailedAt = Date.now();
+  if (state.remoteFailed === failed) return;
+  state = { ...state, remoteFailed: failed };
+  emit();
+}
+
+/** 現在要不要避開線上語音：剛剛念不出來（過一陣子再試），或沒有網路 */
+function avoidRemote(): boolean {
+  if (state.remoteFailed && Date.now() - remoteFailedAt > REMOTE_RETRY_MS) setRemoteFailed(false);
+  return state.remoteFailed || offline();
 }
 
 let started = false;
 export function initSpeech() {
   if (started || !supported) return;
   started = true;
-  refresh();
+  refreshVoices();
   try {
-    window.speechSynthesis.addEventListener('voiceschanged', refresh);
+    window.speechSynthesis.addEventListener('voiceschanged', refreshVoices);
   } catch {
     /* 舊瀏覽器 */
   }
-  // 有些瀏覽器不會觸發 voiceschanged，稍後再查一次
+  // 重新連上網路、在設定頁換了語音：線上語音再給一次機會
+  window.addEventListener('online', () => setRemoteFailed(false));
+  let voiceURI = settingsStore.get().voiceURI;
+  settingsStore.subscribe(() => {
+    const next = settingsStore.get().voiceURI;
+    if (next === voiceURI) return;
+    voiceURI = next;
+    setRemoteFailed(false);
+  });
+  // 有些瀏覽器不會觸發 voiceschanged，稍後再查（清單有時要好幾秒才出來）
   window.setTimeout(() => {
-    refresh();
+    refreshVoices();
     if (!state.ready) {
       state = { ...state, ready: true };
       emit();
     }
   }, 2500);
+  window.setTimeout(() => {
+    if (!state.voices.length) refreshVoices();
+  }, 8000);
+}
+
+/** 目前的語音狀態（測試用；元件請用 useSpeech） */
+export function speechState(): SpeechState {
+  return state;
 }
 
 export function useSpeech(): SpeechState {
@@ -75,28 +121,94 @@ export function useSpeech(): SpeechState {
   );
 }
 
-function pickVoice(): SpeechSynthesisVoice | undefined {
-  const { voiceURI } = settingsStore.get();
+/**
+ * 挑語音：使用者在設定頁指定的優先，其次照 VOICE_RANK。
+ * 離線、線上語音剛剛念不出來（avoidRemote）時，有內建的日文語音就只從內建的挑。
+ */
+export function pickVoice(
+  voices: SpeechSynthesisVoice[],
+  voiceURI: string,
+  avoidRemote: boolean,
+): SpeechSynthesisVoice | undefined {
+  const local = voices.filter((v) => !isRemoteVoice(v));
+  const pool = avoidRemote && local.length ? local : voices;
   if (voiceURI) {
-    const chosen = state.voices.find((v) => v.voiceURI === voiceURI);
+    const chosen = pool.find((v) => v.voiceURI === voiceURI);
     if (chosen) return chosen;
   }
-  return [...state.voices].sort((a, b) => voiceRank(a.name) - voiceRank(b.name))[0];
+  return [...pool].sort((a, b) => voiceRank(a.name) - voiceRank(b.name))[0];
+}
+
+/**
+ * 實際念的字：單獨一個 は、へ 有些語音會當成助詞念成 wa、e，改念片假名 ハ、ヘ（一定念 ha、he）。
+ * を 不換：片假名 ヲ 有些語音念 wo，網站教的是和 お 一樣念 o。
+ */
+export function speechFor(text: string): string {
+  if (text === 'は') return 'ハ';
+  if (text === 'へ') return 'ヘ';
+  return text;
+}
+
+/** 線上語音多久沒開始念，就當成念不出來 */
+const REMOTE_START_MS = 3000;
+/** 這些錯誤是連不到合成服務；取消、被打斷、還沒互動過不能出聲，都不算 */
+const REMOTE_ERRORS = new Set(['network', 'synthesis-unavailable', 'synthesis-failed', 'language-unavailable', 'voice-unavailable']);
+
+let current: SpeechSynthesisUtterance | null = null;
+
+function offline(): boolean {
+  return typeof navigator !== 'undefined' && navigator.onLine === false;
+}
+
+/** 使用者還沒和網頁互動過時，瀏覽器不讓網頁出聲：這時沒有開始念不是語音的問題 */
+function canAutoplay(): boolean {
+  const ua = (navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation;
+  return ua ? ua.hasBeenActive : true;
+}
+
+function utter(text: string, rate: number): boolean {
+  const ss = window.speechSynthesis;
+  // 先放掉上一句：被取消的那一句之後觸發的 end、error 都不算念不出來
+  current = null;
+  if (ss.speaking || ss.pending) ss.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'ja-JP';
+  const v = pickVoice(state.voices, settingsStore.get().voiceURI, avoidRemote());
+  if (v) u.voice = v;
+  u.rate = rate;
+  current = u;
+  if (v && isRemoteVoice(v)) {
+    let begun = false;
+    const fallback = () => {
+      window.clearTimeout(watchdog);
+      if (begun || current !== u || !canAutoplay()) return;
+      setRemoteFailed(true);
+      // 有內建的日文語音才重念；沒有的話頁面會提示加裝
+      if (state.voices.some((x) => !isRemoteVoice(x))) utter(text, rate);
+    };
+    const watchdog = window.setTimeout(fallback, REMOTE_START_MS);
+    u.onstart = () => {
+      begun = true;
+      window.clearTimeout(watchdog);
+    };
+    // 沒開始念就結束了（有些瀏覽器連不到時是這樣）：也算念不出來
+    u.onend = () => (begun ? window.clearTimeout(watchdog) : fallback());
+    u.onerror = (e) => {
+      if (REMOTE_ERRORS.has(e.error)) fallback();
+      else window.clearTimeout(watchdog);
+    };
+  }
+  ss.speak(u);
+  return true;
 }
 
 /** 念出日文。回傳 false 表示這台裝置不能發音。 */
 export function speak(text: string, opts: { rate?: number } = {}): boolean {
   if (!text || !supported) return false;
+  // 語音清單晚到、又沒觸發 voiceschanged：念之前再讀一次
+  if (!state.voices.length) refreshVoices();
   try {
-    const ss = window.speechSynthesis;
-    if (ss.speaking || ss.pending) ss.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'ja-JP';
-    const v = pickVoice();
-    if (v) u.voice = v;
-    u.rate = opts.rate ?? (settingsStore.get().slow ? 0.6 : 0.9);
-    ss.speak(u);
-    return true;
+    return utter(speechFor(text), opts.rate ?? (settingsStore.get().slow ? 0.6 : 0.9));
   } catch {
     return false;
   }
@@ -104,6 +216,7 @@ export function speak(text: string, opts: { rate?: number } = {}): boolean {
 
 export function stopSpeaking() {
   if (!supported) return;
+  current = null;
   try {
     window.speechSynthesis.cancel();
   } catch {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { LESSONS } from '../src/data/lessons';
 import { SEION_ROWS, DAKUON_ROWS, rowById } from '../src/data/kana';
 import type { Inline, LessonBlock, LessonWord } from '../src/data/types';
+import { getStrokePaths } from '../src/lib/strokes';
 
 /** 課文裡刻意提早出現的詞（發音說明的例子，不是要學的單字） */
 const TEXT_PREVIEW: Record<number, string[]> = {
@@ -110,6 +111,29 @@ describe('lessons', () => {
         for (const s of lesson.sections) for (const b of s.blocks) {
           if (b.type !== 'kana' || b.script !== 'k') continue;
           for (const r of b.rows) for (const c of rowById(r)?.cells ?? []) if (c?.kx) check(`${c.k} 的例字`, c.kx[0]);
+        }
+        expect(bad, `第 ${lesson.id} 課`).toEqual([]);
+      });
+
+      it('practice and writing links open the scope of this lesson', () => {
+        const texts: Inline[] = [lesson.summary, ...lesson.homework, ...(lesson.next ? [lesson.next] : [])];
+        for (const s of lesson.sections) for (const b of s.blocks) texts.push(...blockTexts(b));
+        const bad: string[] = [];
+        for (const t of texts) {
+          for (const m of t.matchAll(/\]\((\/(?:practice|writing)[^)]*)\)/g)) {
+            const url = new URL(m[1], 'https://x.test');
+            const lessonParam = url.searchParams.get('lesson');
+            const chars = url.searchParams.get('chars') ?? url.searchParams.get('char');
+            if (lessonParam === String(lesson.id)) continue;
+            // 手寫可以帶一組字（長得像的字）：都要是到這一課為止教過、有筆順資料的字
+            if (url.pathname === '/writing' && chars) {
+              const miss = Array.from(chars).filter((c) => !allowed.has(c) || !getStrokePaths(c));
+              if (!miss.length) continue;
+              bad.push(`${m[1]}：${miss.join(' ')} 還沒教或沒有筆順`);
+              continue;
+            }
+            bad.push(`${m[1]} 沒有帶第 ${lesson.id} 課的範圍（?lesson=${lesson.id}）`);
+          }
         }
         expect(bad, `第 ${lesson.id} 課`).toEqual([]);
       });

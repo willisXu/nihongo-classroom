@@ -56,6 +56,18 @@ export function writingChars(rows: string[], script: Script): string[] {
 }
 
 /**
+ * 課文「長得像的字」連過來的一組字（網址 ?chars=シツソ）：去掉重複和沒有筆順資料的字；
+ * 平假名還是片假名看第一個字。沒有可以寫的字時回傳 null。
+ */
+export function pickedChars(raw: string | null): { chars: string[]; script: Script } | null {
+  if (!raw) return null;
+  const chars = [...new Set(Array.from(raw))].filter((c) => getStrokePaths(c));
+  if (!chars.length) return null;
+  const script = kanaInfo(chars[0])?.script ?? extraOf(chars[0])?.script ?? 'h';
+  return { chars, script };
+}
+
+/**
  * 一課的手寫範圍：這一課新教的字所在的行（小字、長音放在最後那兩組）。
  * 不用測驗的範圍：第 6 課的測驗是全部平假名複習，新教的卻是 ゃ ゅ ょ っ。
  */
