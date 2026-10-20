@@ -78,7 +78,7 @@ export const lesson: CourseLesson = {
           type: 'vocab',
           title: '健身房、郵票',
           items: [
-            { ja: 'ジム', zh: '健身房' },
+            { ja: 'ジム', zh: '健身房', id: 'course-0024' },
             { ja: 'スポーツ', zh: '運動', id: 'n5-0464' },
             { ja: '走《はし》ります', zh: '跑', id: 'n5-0619', note: '不是「走路」，走路是 [[歩《ある》きます]]' },
             { ja: '散歩《さんぽ》します', zh: '散步', id: 'n5-0645' },

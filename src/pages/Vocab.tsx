@@ -15,6 +15,7 @@ const DECK_NOTE: Record<string, string> = {
   travel: '出發去日本前一個月開始背。',
   business: '和日本同事、客戶往來用。',
   anime: '看劇、看動畫、聽歌時最常聽到。',
+  course: '上 N5 課程時，用每一課的單字卡一起練就好。',
 };
 
 export default function Vocab() {

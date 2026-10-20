@@ -343,9 +343,12 @@ function Review({ deck, restarted, onRestart }: { deck: string; restarted: boole
                     <p lang="ja" className="v-ex-ja">
                       {item.ex.ja}
                     </p>
-                    <p lang="ja" className="v-ex-kana">
-                      {item.ex.kana}
-                    </p>
+                    {/* 例句全是假名時，讀音和原句一樣，不重複顯示 */}
+                    {item.ex.kana !== item.ex.ja ? (
+                      <p lang="ja" className="v-ex-kana">
+                        {item.ex.kana}
+                      </p>
+                    ) : null}
                     <p className="v-ex-zh">{item.ex.zh}</p>
                   </div>
                 </div>

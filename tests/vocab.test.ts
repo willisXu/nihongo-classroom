@@ -4,11 +4,11 @@ import type { Pos } from '../src/data/types';
 
 const POS: Pos[] = ['noun', 'verb', 'i-adj', 'na-adj', 'adverb', 'expression', 'number', 'pronoun', 'counter', 'particle', 'conjunction', 'interjection', 'prefix', 'suffix'];
 const KANA_WORD = /^[ぁ-ゖァ-ヺー〜・、。？！]+$/;
-const KANA_SENTENCE = /^[ぁ-ゖァ-ヺー〜・、。？！「」　 ]+$/;
+const KANA_SENTENCE = /^[ぁ-ゖァ-ヺー〜・、。？！「」―　 ]+$/;
 const HAS_KANJI = /[一-鿿々〆]/;
 /** 常見的簡體字（繁體不用的寫法），中文欄位不該出現（日文的 kanji 欄位不檢查） */
 const SIMPLIFIED = Array.from('们这个说时间车东门对过还进么吗习学会语话见电视书买卖钱饭馆开关问题长页热级岁乐发经现实动认识让应该从样处图国园远运边连医药业专务员户无为欢请谢给读写听讲课师网络机场铁线号码钥单厕闹惯价币银债贷费订顾');
-const MIN_SIZE: Record<string, number> = { n5: 500, travel: 120, business: 100, anime: 80 };
+const MIN_SIZE: Record<string, number> = { n5: 500, travel: 120, business: 100, anime: 80, course: 60 };
 
 describe('vocab decks', () => {
   it('have globally unique ids with the deck prefix', () => {

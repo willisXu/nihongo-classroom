@@ -9,6 +9,7 @@ export const DECK_META: DeckMeta[] = [
   { id: 'travel', title: '旅遊與日常', description: '點餐、購物、交通、住宿、問路，到日本自助旅行最常用到的詞和句子。', count: 226 },
   { id: 'business', title: '職場與商務', description: '自我介紹、公司用語、電話和會議的基本說法，以及職場最常聽到的客套話。', count: 127 },
   { id: 'anime', title: '日劇・動畫・音樂', description: '追劇和看動畫最常聽到的詞和口頭禪，附上語氣和使用場合。', count: 128 },
+  { id: 'course', title: 'N5 課程補充單字', description: 'N5 課程（第 9–32 課）課文裡用到、其他牌組沒有的詞：生活用語、外來語、口語，和一些 N4 程度的常用詞，照課次排。', count: 70 },
 ];
 
 /** 牌組檔案用：牌組的代號、名稱和說明（不重複寫在兩個地方） */

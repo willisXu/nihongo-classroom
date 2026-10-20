@@ -3,8 +3,9 @@ import { n5 } from './n5';
 import { travel } from './travel';
 import { business } from './business';
 import { anime } from './anime';
+import { course } from './course';
 
-export const DECKS: Deck[] = [n5, travel, business, anime];
+export const DECKS: Deck[] = [n5, travel, business, anime, course];
 
 export function deckById(id: string): Deck | undefined {
   return DECKS.find((d) => d.id === id);
