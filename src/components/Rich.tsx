@@ -2,9 +2,12 @@ import { Fragment, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import type { Inline } from '../data/types';
 import { SayInline } from './Speak';
+import { JaParts } from './Ja';
+import { inlineSay } from '../lib/ja';
 
 /**
  * 課程內文的迷你標記：**粗體**、[[かな]]、[[表記|よみ]]、{{かな}}、[文字](/路徑)
+ * [[ ]]、{{ }} 裡的日文可以用《》標讀音（見 lib/ja.ts），例如 [[学生《がくせい》]]。
  */
 const TOKEN = /(\[\[[^\]]+\]\])|(\{\{[^}]+\}\})|(\[[^[\]]+\]\([^)\s]+\))/g;
 
@@ -37,7 +40,7 @@ function markKana(text: string, keyBase: string): ReactNode[] {
   return out;
 }
 
-function renderTokens(text: string, keyBase: string): ReactNode[] {
+function renderTokens(text: string, keyBase: string, inert: boolean): ReactNode[] {
   const out: ReactNode[] = [];
   let last = 0;
   let i = 0;
@@ -46,14 +49,23 @@ function renderTokens(text: string, keyBase: string): ReactNode[] {
     if (at > last) out.push(...markKana(text.slice(last, at), `${keyBase}-p${i}`));
     const tok = m[0];
     const key = `${keyBase}-${i++}`;
-    if (tok.startsWith('[[')) {
+    if (tok.startsWith('[[') && !inert) {
       const inner = tok.slice(2, -2);
       const [shown, say] = inner.split('|');
-      out.push(<SayInline key={key} text={shown} say={say ?? shown} />);
+      // 〜、空格不念，句型開頭的助詞照助詞念（[[〜は]] 念 wa）；只有一個詞的念讀音（[[十《とお》]]）
+      out.push(<SayInline key={key} text={shown} say={say ?? inlineSay(shown)} />);
+    } else if (tok.startsWith('[[')) {
+      out.push(
+        <span key={key} lang="ja" className="ja">
+          <JaParts text={tok.slice(2, -2).split('|')[0]} />
+        </span>,
+      );
+    } else if (inert && !tok.startsWith('{{')) {
+      out.push(...markKana(tok.slice(1, tok.indexOf('](')), key));
     } else if (tok.startsWith('{{')) {
       out.push(
         <span key={key} lang="ja" className="ja">
-          {tok.slice(2, -2)}
+          <JaParts text={tok.slice(2, -2)} />
         </span>,
       );
     } else {
@@ -77,12 +89,20 @@ function renderTokens(text: string, keyBase: string): ReactNode[] {
   return out;
 }
 
-export function Rich({ text }: { text: Inline }) {
+/**
+ * inert：放在按鈕裡面（例如整張可以點來發音的單字卡）時用。[[ ]] 不做成發音鍵、連結只顯示文字：
+ * 按鈕裡不能再放按鈕和連結（點了只會觸發外面那顆）。
+ */
+export function Rich({ text, inert = false }: { text: Inline; inert?: boolean }) {
   const parts = text.split('**');
   return (
     <>
       {parts.map((part, i) =>
-        i % 2 === 1 ? <b key={i}>{renderTokens(part, `b${i}`)}</b> : <Fragment key={i}>{renderTokens(part, `t${i}`)}</Fragment>,
+        i % 2 === 1 ? (
+          <b key={i}>{renderTokens(part, `b${i}`, inert)}</b>
+        ) : (
+          <Fragment key={i}>{renderTokens(part, `t${i}`, inert)}</Fragment>
+        ),
       )}
     </>
   );

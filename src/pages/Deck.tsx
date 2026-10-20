@@ -7,7 +7,7 @@ import { useStore } from '../state/store';
 import type { CardState } from '../lib/srs';
 import { romaji } from '../lib/romaji';
 import { daysBetween } from '../lib/date';
-import { POS_LABEL, VERB_GROUP_LABEL, groupByTopic, speechText, exampleSpeech } from '../lib/vocab';
+import { POS_LABEL, VERB_GROUP_LABEL, masuForm, groupByTopic, speechText, exampleSpeech } from '../lib/vocab';
 import { SpeakIcon } from '../components/Speak';
 import { Switch } from '../components/Controls';
 import { Icon } from '../components/Icon';
@@ -173,6 +173,12 @@ const VocabRow = memo(function VocabRow({
           <span className="v-pos">
             {POS_LABEL[item.pos]}
             {item.verbGroup ? ` · ${VERB_GROUP_LABEL[item.verbGroup]}` : ''}
+            {masuForm(item) ? (
+              <>
+                {' · ます形 '}
+                <span lang="ja">{masuForm(item)}</span>
+              </>
+            ) : null}
           </span>
         </p>
         {open && hasMore ? (

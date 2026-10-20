@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LESSONS } from '../src/data/lessons';
+import { LESSONS, KANA_LESSON_DATA } from './lessonData';
 import { SEION_ROWS, DAKUON_ROWS, rowById } from '../src/data/kana';
 import type { Inline, LessonBlock, LessonWord } from '../src/data/types';
 import { getStrokePaths } from '../src/lib/strokes';
@@ -48,9 +48,16 @@ describe('lessons', () => {
     LESSONS.forEach((l, i) => expect(l.id).toBe(i + 1));
   });
 
+  it('五十音的課在前面，N5 的課接在後面', () => {
+    const kinds = LESSONS.map((l) => l.kind).join(',');
+    expect(kinds).toMatch(/^(kana,)*kana(,n5)*$/);
+  });
+});
+
+describe('五十音課程', () => {
   it('introduce every kana exactly once', () => {
     const seen = new Map<string, number>();
-    for (const l of LESSONS) {
+    for (const l of KANA_LESSON_DATA) {
       for (const ch of l.newKana) {
         expect(seen.has(ch), `「${ch}」在第 ${seen.get(ch)} 課和第 ${l.id} 課重複介紹`).toBe(false);
         seen.set(ch, l.id);
@@ -58,10 +65,10 @@ describe('lessons', () => {
     }
   });
 
-  for (const lesson of LESSONS) {
+  for (const lesson of KANA_LESSON_DATA) {
     describe(`第 ${lesson.id} 課 ${lesson.title}`, () => {
       const allowed = new Set<string>(ALLOWED_MARKS);
-      for (const l of LESSONS) if (l.id <= lesson.id) l.newKana.forEach((c) => allowed.add(c));
+      for (const l of KANA_LESSON_DATA) if (l.id <= lesson.id) l.newKana.forEach((c) => allowed.add(c));
 
       it('has the required fields', () => {
         expect(lesson.title).toBeTruthy();
@@ -147,8 +154,7 @@ describe('lessons', () => {
   }
 
   it('cover the whole kana system once all lessons exist', () => {
-    if (LESSONS.length < 8) return; // 課程寫完前先略過
-    const introduced = new Set(LESSONS.flatMap((l) => l.newKana));
+    const introduced = new Set(KANA_LESSON_DATA.flatMap((l) => l.newKana));
     const required: string[] = [];
     for (const row of [...SEION_ROWS, ...DAKUON_ROWS]) for (const c of row.cells) if (c) required.push(c.h, c.k);
     required.push(...'ゃゅょっャュョッー');

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { vocabById } from '../data/vocab';
-import { recordVocabMiss, saveCard, settingsStore, srsStore, updateSettings } from '../state';
+import { lessonStore, recordVocabMiss, saveCard, settingsStore, srsStore, updateSettings } from '../state';
+import { courseWords } from '../lib/progress';
 import { useStore } from '../state/store';
 import {
   LEARN_AHEAD_MS, buildSession, formatMinutes, newCard, pickNext, previewLabel, review, GRADES, type CardState, type Grade, type Pending,
@@ -9,7 +10,7 @@ import {
 import { studyDayKey, studyDayStart, addDays } from '../lib/date';
 import { romaji } from '../lib/romaji';
 import { speak } from '../lib/speech';
-import { POS_LABEL, VERB_GROUP_LABEL, deckItemIds, deckTitle, speechText, exampleSpeech } from '../lib/vocab';
+import { POS_LABEL, VERB_GROUP_LABEL, masuForm, deckItemIds, deckTitle, speechText, exampleSpeech } from '../lib/vocab';
 import { SpeakIcon } from '../components/Speak';
 import { Switch } from '../components/Controls';
 import { Icon } from '../components/Icon';
@@ -58,7 +59,8 @@ function Review({ deck, restarted, onRestart }: { deck: string; restarted: boole
   // 其他分頁改了單字卡紀錄也會更新（見下面「另一個分頁已經複習過」）
   const srs = useStore(srsStore);
   // 開場時決定牌組內容（全部牌組要看哪些重複的字已經學過）
-  const ids = useMemo(() => deckItemIds(deck, srsStore.get().cards), [deck]);
+  // 新卡先出課程教過的字（N5 課程上到哪裡，單字卡就先教那幾課的字）
+  const ids = useMemo(() => deckItemIds(deck, srsStore.get().cards, courseWords(lessonStore.get())), [deck]);
   const autoplay = settings.autoplay;
 
   // 開場時決定這一輪的卡片（之後才到期的卡片，在結束畫面按「繼續複習」開下一輪）
@@ -327,6 +329,12 @@ function Review({ deck, restarted, onRestart }: { deck: string; restarted: boole
               <p className="f-pos">
                 {POS_LABEL[item.pos]}
                 {item.verbGroup ? ` · ${VERB_GROUP_LABEL[item.verbGroup]}` : ''}
+                {masuForm(item) ? (
+                  <>
+                    {' · ます形 '}
+                    <span lang="ja">{masuForm(item)}</span>
+                  </>
+                ) : null}
               </p>
               {item.ex ? (
                 <div className="v-ex">

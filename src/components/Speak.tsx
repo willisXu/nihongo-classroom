@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { speak } from '../lib/speech';
 import { Icon } from './Icon';
+import { JaParts } from './Ja';
 
 /** 點了會亮一下，提示「正在念」 */
 export function usePlayFlash(): [boolean, () => void] {
@@ -51,7 +52,7 @@ export function SpeakIcon({ text, label }: { text: string; label?: string }) {
   );
 }
 
-/** 句子裡可以點來發音的日文 */
+/** 句子裡可以點來發音的日文（text 可以用《》標讀音） */
 export function SayInline({ text, say }: { text: string; say?: string }) {
   const [on, flash] = usePlayFlash();
   return (
@@ -64,7 +65,7 @@ export function SayInline({ text, say }: { text: string; say?: string }) {
         flash();
       }}
     >
-      {text}
+      <JaParts text={text} />
     </button>
   );
 }

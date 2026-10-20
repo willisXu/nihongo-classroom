@@ -381,8 +381,158 @@ table.jlpt { min-width: 560px; }
 .hw input:checked + span { color: var(--ink-3); text-decoration: line-through; text-decoration-color: var(--mark); }
 .finish-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
 .done-note { display: inline-flex; align-items: center; gap: 6px; color: var(--ok); font-weight: 500; }
+.companion { display: grid; gap: 4px; max-width: 46em; font-size: 14.5px; color: var(--ink-2); }
+.companion-h { font-weight: 600; font-size: 14px; }
+.companion ul { margin: 0; padding-left: 1.2em; display: grid; gap: 2px; }
 .nextup { border: 1.5px dashed var(--grid); border-radius: var(--r); padding: 14px 18px; display: grid; gap: 4px; max-width: 46em; }
 .pager { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding-block: 8px 24px; }
+/* 課名很長（例如第 28 課）時，手機上換行，不撐出畫面 */
+.pager .btn { white-space: normal; max-width: 100%; border-radius: 22px; text-align: start; }
+.pager .btn .ja { word-break: auto-phrase; }
+
+/* ============ N5 課程（第 9 課起） ============ */
+/* 振假名：一般大小的句子裡讀音約字的一半大；「漢字標讀音」關掉時讀音隱藏但保留位置，版面不跳動 */
+.ex-ja rt, .dlg-ja rt, .dlg-who rt, .w-ja rt, .gram-form rt, .kj-word rt, .dq rt, .tile rt, .ltable rt, .prose rt, .callout rt, .gram-points rt, .say-inline rt, .lede rt, .goals rt, .hw rt, .nextup rt {
+  font-size: 0.52em; color: var(--ink-2); font-weight: 400; letter-spacing: 0;
+}
+.dlg-who rt { font-size: 0.66em; }
+.furi-off rt { visibility: hidden; }
+/* 日文句子在詞和詞之間換行（Chrome 支援；其他瀏覽器照一般的規則，在任何字之間換行） */
+.ex-ja, .dlg-ja, .dq-ja, .dv-sent, .gram-form { word-break: auto-phrase; }
+ruby { ruby-align: center; }
+.slot {
+  display: inline-block; font-family: var(--font-body); font-size: 0.62em; font-weight: 500; color: var(--ink-2); letter-spacing: 0.02em;
+  border: 1.5px dashed var(--grid); border-radius: 6px; padding: 0 8px; margin-inline: 3px; line-height: 1.7; vertical-align: 0.2em; background: var(--sheet);
+}
+.goals { display: grid; gap: 4px; max-width: 44em; }
+.goals-h { font-size: 14px; font-weight: 600; color: var(--ink-2); }
+.goals ul { margin: 0; padding-left: 1.2em; display: grid; gap: 2px; font-size: 15.5px; }
+.goals li::marker { color: var(--ok); }
+
+/* 例句 */
+.ex-block { display: grid; gap: 8px; }
+.ex-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-width: 46em; }
+.ex { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start; padding: 8px 2px; border-bottom: 1px dashed var(--guide); }
+.ex:last-child { border-bottom: 0; }
+.ex .iconbtn { margin-top: 6px; }
+.ex-body { display: grid; gap: 1px; min-width: 0; }
+.ex-ja { font-family: var(--font-kana); font-weight: 600; font-size: 20px; line-height: 2.05; overflow-wrap: anywhere; }
+.ex-zh { font-size: 14.5px; color: var(--ink-2); }
+.ex-note { font-size: 13.5px; color: var(--ink-3); }
+
+/* 文法 */
+.gram { display: grid; gap: 10px; max-width: 48em; border-left: 3px solid var(--grid); padding: 2px 0 2px 16px; }
+.gram-title { font-size: 18px; }
+.gram-form {
+  font-family: var(--font-kana); font-weight: 600; font-size: clamp(20px, 3.6vw, 26px); line-height: 2;
+  background: var(--sheet); border: 1.5px solid var(--grid); border-radius: var(--r); padding: 4px 16px; justify-self: start; max-width: 100%; overflow-wrap: anywhere;
+}
+.gram-points { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; font-size: 15.5px; }
+
+/* 會話 */
+.dialog { display: grid; gap: 12px; max-width: 760px; }
+.dlg-scene { font-size: 14.5px; color: var(--ink-2); }
+.dlg-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; }
+.dlg-tools .btn.is-on { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.dlg-lines { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.dlg-line { display: grid; grid-template-columns: 5.2em minmax(0, 1fr); gap: 12px; align-items: start; padding: 6px 8px; border-radius: 8px; }
+.dlg-line.is-playing { background: var(--accent-soft); }
+.dlg-who { font-family: var(--font-kana); font-weight: 600; font-size: 15px; color: var(--ink-2); padding-top: 9px; line-height: 1.9; overflow-wrap: anywhere; }
+.dlg-body { display: grid; gap: 0; min-width: 0; }
+.dlg-ja {
+  appearance: none; border: 0; background: none; padding: 0; text-align: left; color: var(--ink); cursor: pointer;
+  font-family: var(--font-kana); font-weight: 600; font-size: 20px; line-height: 2.05; overflow-wrap: anywhere;
+}
+.dlg-ja:hover { color: var(--accent); }
+.dlg-zh { font-size: 14.5px; color: var(--ink-2); }
+
+/* 單字（有振假名，卡片的字小一點） */
+.vocab-words .w-ja { font-family: var(--font-kana); font-size: 21px; line-height: 1.9; }
+
+/* 漢字 */
+.kanji-block { display: grid; gap: 10px; }
+.kanji-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 12px; }
+.kj { display: grid; gap: 10px; align-content: start; }
+.kj-head { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px; align-items: center; }
+.kj-ch {
+  display: inline-grid; place-items: center; width: 72px; height: 72px; font-family: var(--font-kana); font-weight: 600; font-size: 52px; line-height: 1;
+  border: 1.5px solid var(--grid); border-radius: 6px; background-color: var(--sheet);
+  background-image: linear-gradient(var(--guide), var(--guide)), linear-gradient(var(--guide), var(--guide));
+  background-size: 100% 1px, 1px 100%; background-position: center; background-repeat: no-repeat;
+}
+.kj-meta { display: grid; gap: 2px; min-width: 0; }
+.kj-zh { font-size: 16px; font-weight: 600; }
+.kj-tc { font-size: 15px; color: var(--ink); }
+.kj-read { margin: 0; display: grid; gap: 4px; font-size: 14.5px; }
+.kj-read > div { display: grid; grid-template-columns: 3em minmax(0, 1fr); gap: 8px; }
+.kj-read dt { color: var(--ink-3); font-size: 13px; padding-top: 2px; }
+.kj-read dd { margin: 0; font-family: var(--font-kana); font-weight: 600; font-size: 16px; }
+.okuri { color: var(--ink-3); }
+.okuri::before { content: '・'; color: var(--ink-3); }
+.kj-words { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.kj-word {
+  appearance: none; display: inline-flex; align-items: baseline; gap: 6px; border: 1px solid var(--line); background: var(--sheet); color: var(--ink);
+  border-radius: 8px; padding: 0 10px 2px; cursor: pointer; font-family: var(--font-kana); font-weight: 600; font-size: 18px; line-height: 1.95;
+}
+.kj-word:hover, .kj-word.is-playing { border-color: var(--accent); }
+.kj-word.is-playing { background: var(--accent-soft); }
+.kj-wzh { font-family: var(--font-body); font-weight: 400; font-size: 13px; color: var(--ink-2); }
+.kj-note { font-size: 13.5px; color: var(--ink-2); }
+
+/* 練習題 */
+.drill { display: grid; gap: 12px; }
+.drill-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; max-width: 760px; }
+.drill-item { padding: 14px 16px; }
+.dq { display: grid; gap: 10px; }
+.dq-q { display: grid; gap: 2px; }
+.dq-n { font-size: 12.5px; color: var(--ink-3); letter-spacing: 0.06em; }
+.dq-ask { font-size: 15.5px; }
+.dq-ja { font-family: var(--font-kana); font-weight: 600; font-size: 21px; line-height: 2.05; overflow-wrap: anywhere; }
+.dq-zh { font-size: 14px; color: var(--ink-2); }
+.dq-opts { display: flex; flex-wrap: wrap; gap: 8px; }
+.dq-opt {
+  appearance: none; border: 1.5px solid var(--line); background: var(--sheet); color: var(--ink); border-radius: 8px; cursor: pointer;
+  font-family: var(--font-kana); font-weight: 600; font-size: 19px; line-height: 1.9; padding: 1px 14px 3px; min-width: 3em;
+}
+.dq-opts-zh .dq-opt { font-family: var(--font-body); font-weight: 500; font-size: 15px; line-height: 1.5; padding: 7px 14px; text-align: left; }
+.dq-opt:hover:not([aria-disabled='true']) { border-color: var(--accent); }
+.dq-opt[aria-disabled='true'] { cursor: default; }
+.dq-opt.is-right { border-color: var(--ok); background: var(--ok-soft); }
+.dq-opt.is-wrong { border-color: var(--mark); text-decoration: line-through; text-decoration-color: var(--mark); text-decoration-thickness: 2px; }
+.dq-line {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-height: 52px; padding: 6px 8px;
+  border: 1.5px dashed var(--grid); border-radius: 8px; background: var(--paper);
+}
+.dq-hint { font-size: 13.5px; color: var(--ink-3); }
+.dq-bank { display: flex; flex-wrap: wrap; gap: 6px; }
+.tile {
+  appearance: none; border: 1px solid var(--field-line); background: var(--sheet); color: var(--ink); border-radius: 8px; cursor: pointer;
+  font-family: var(--font-kana); font-weight: 600; font-size: 19px; line-height: 1.9; padding: 0 12px 2px;
+}
+.tile:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.tile.is-placed { background: var(--accent-soft); border-color: var(--accent); }
+.tile:disabled { cursor: default; color: var(--ink); }
+.drill-verdict { border-radius: 8px; padding: 10px 14px; display: grid; gap: 6px; font-size: 15px; }
+.drill-verdict.is-ok { background: var(--ok-soft); }
+.drill-verdict.is-ng { background: var(--mark-soft); }
+.dv-title { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+.is-ok .dv-title { color: var(--ok-ink); }
+.is-ng .dv-title { color: var(--mark); }
+.dv-sent { display: flex; align-items: center; gap: 10px; font-family: var(--font-kana); font-weight: 600; font-size: 19px; line-height: 2; }
+.dv-also .ja { font-family: var(--font-kana); font-weight: 600; font-size: 17px; }
+.drill-foot { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px; }
+.drill-score { font-weight: 600; }
+.drill-score.is-perfect { color: var(--ok); }
+
+/* 課程列表：五十音、N5 分兩段，N5 照單元分組 */
+.lesson-group { display: grid; gap: 4px; margin-bottom: 18px; }
+.lg-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
+.lg-head h2 { font-size: clamp(21px, 3vw, 26px); }
+.unit { display: grid; gap: 2px; margin-top: 10px; }
+.unit-h { font-size: 18px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.unit-n { font-family: var(--font-body); font-weight: 500; font-size: 13px; color: var(--mark); letter-spacing: 0.06em; }
+.unit-topic { font-size: 14px; color: var(--ink-2); }
+.lesson-gram { letter-spacing: 0; }
 
 /* ============ 五十音表 ============ */
 .chart-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 28px; align-items: start; margin-top: 18px; }
@@ -521,6 +671,8 @@ table.jlpt { min-width: 560px; }
 .ws-result.is-perfect { background: var(--ok-soft); }
 .ws-result-title { font-family: var(--font-display); font-weight: 700; font-size: 18px; }
 .ws-count { border-top: 1px dashed var(--guide); padding-top: 8px; }
+
+.ws-kanji { display: flex; flex-wrap: wrap; gap: 2px 12px; }
 
 /* ============ 單字 ============ */
 .today-card { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px 24px; margin-block: 8px 18px; }
@@ -817,6 +969,9 @@ table.jlpt { min-width: 560px; }
   .mg-wrap { gap: 10px; }
   .pairs li { grid-template-columns: minmax(0, 1fr); }
   .pair-vs { display: none; }
+  .dlg-line { grid-template-columns: minmax(0, 1fr); gap: 0; padding-inline: 4px; }
+  .dlg-who { padding-top: 0; font-size: 13.5px; line-height: 1.6; }
+  .gram { padding-left: 12px; }
   .chat-head { flex-direction: column; }
   .usage-line { margin-left: 0; }
 }

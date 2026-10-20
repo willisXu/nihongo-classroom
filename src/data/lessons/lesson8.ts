@@ -1,8 +1,8 @@
-import type { Lesson } from '../types';
-import { lessonMeta } from './meta';
+import type { KanaLesson } from '../types';
+import { kanaMeta } from './meta';
 
-export const lesson8: Lesson = {
-  ...lessonMeta(8),
+export const lesson: KanaLesson = {
+  ...kanaMeta(8),
   summary:
     '學完這一課，你就學完了全部的假名。你會讀ハ行到ン的片假名和バ行、パ行，分得出 ン 和 ソ，也看得懂 [[パーティー]]、[[カフェ]] 這種用小字拼出的外國音。',
   sections: [
@@ -153,5 +153,5 @@ export const lesson8: Lesson = {
     '打開[五十音表](/chart)，平假名和片假名對照，從 あ 念到 ん。',
     '把 20 個單字遮住拼音念一遍，念完說出中文意思。',
   ],
-  next: '**恭喜你學完全部的假名！**接下來到[單字卡](/vocab)開始背 N5 單字，再到[AI 家教](/tutor)練習簡單的對話。',
+  next: '**恭喜你學完全部的假名！**下一課開始 N5 初級課程，第一堂文法課學自我介紹：[[はじめまして]]。[單字卡](/vocab)也可以開始背了。',
 };

@@ -53,7 +53,7 @@ export const business: Deck = {
     { id: 'business-0042', kana: 'プリンター', zh: '印表機', pos: 'noun', topic: '辦公室與用品' },
     { id: 'business-0043', kana: 'いんさつ', kanji: '印刷', zh: '列印；印刷', pos: 'noun', topic: '辦公室與用品', ex: { ja: '資料を印刷しておきます。', kana: 'しりょうをいんさつしておきます。', zh: '我先把資料印出來。' } },
     { id: 'business-0044', kana: 'コピー', zh: '影印；複製', pos: 'noun', topic: '辦公室與用品', ex: { ja: 'この資料を十部コピーしてください。', kana: 'このしりょうをじゅうぶコピーしてください。', zh: '這份資料請影印十份。' } },
-    { id: 'business-0045', kana: 'ファイル', zh: '文件夾；檔案', pos: 'noun', topic: '辦公室與用品' },
+    { id: 'business-0045', kana: 'ファイル', zh: '檔案；資料夾', pos: 'noun', topic: '辦公室與用品' },
     { id: 'business-0046', kana: 'ボールペン', zh: '原子筆', pos: 'noun', topic: '辦公室與用品' },
     { id: 'business-0047', kana: 'ホチキス', zh: '釘書機', pos: 'noun', topic: '辦公室與用品' },
     { id: 'business-0048', kana: 'でんたく', kanji: '電卓', zh: '計算機', pos: 'noun', topic: '辦公室與用品' },

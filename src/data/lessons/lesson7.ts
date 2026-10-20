@@ -1,8 +1,8 @@
-import type { Lesson } from '../types';
-import { lessonMeta } from './meta';
+import type { KanaLesson } from '../types';
+import { kanaMeta } from './meta';
 
-export const lesson7: Lesson = {
-  ...lessonMeta(7),
+export const lesson: KanaLesson = {
+  ...kanaMeta(7),
   summary:
     '學完這一課，你會讀ア行到ナ行的片假名和它們的濁音，認得長音符號 ー，分得出 シ 和 ツ，也念得出 [[ケーキ]]、[[タクシー]]、[[サッカー]] 這些外來語。',
   sections: [

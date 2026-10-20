@@ -217,7 +217,7 @@ export default function Stats() {
               <li key={lesson!.id}>
                 <span className="lesson-log-date">{mdw(at)}</span>
                 <Link to={`/lessons/${lesson!.id}`}>
-                  第 {lesson!.id} 課 <span lang="ja">{lesson!.title}</span>
+                  第 {lesson!.id} 課 <span lang={/[\u3041-\u3096\u30a1-\u30fa]/u.test(lesson!.title) ? 'ja' : undefined}>{lesson!.title}</span>
                 </Link>
               </li>
             ))}
@@ -229,11 +229,11 @@ export default function Stats() {
           <p>
             下一課：
             <Link to={`/lessons/${next.id}`}>
-              第 {next.id} 課 <span lang="ja">{next.title}</span>
+              第 {next.id} 課 <span lang={/[\u3041-\u3096\u30a1-\u30fa]/u.test(next.title) ? 'ja' : undefined}>{next.title}</span>
             </Link>
           </p>
         ) : (
-          <p>五十音課程全部完成了！</p>
+          <p>課程全部完成了！</p>
         )}
       </section>
     </div>

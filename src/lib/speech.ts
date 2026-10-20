@@ -166,7 +166,11 @@ function canAutoplay(): boolean {
   return ua ? ua.hasBeenActive : true;
 }
 
-function utter(text: string, rate: number): boolean {
+/**
+ * onEnd：這一句念完（或念不出來、放棄）時呼叫，用來一句接一句念整段會話。
+ * 被下一句、stopSpeaking() 取消的不呼叫（整段播放就停在那裡）。
+ */
+function utter(text: string, rate: number, onEnd?: () => void): boolean {
   const ss = window.speechSynthesis;
   // 先放掉上一句：被取消的那一句之後觸發的 end、error 都不算念不出來
   current = null;
@@ -177,14 +181,25 @@ function utter(text: string, rate: number): boolean {
   if (v) u.voice = v;
   u.rate = rate;
   current = u;
+  let ended = false;
+  const finish = () => {
+    if (ended || current !== u) return;
+    ended = true;
+    current = null;
+    onEnd?.();
+  };
   if (v && isRemoteVoice(v)) {
     let begun = false;
     const fallback = () => {
       window.clearTimeout(watchdog);
-      if (begun || current !== u || !canAutoplay()) return;
+      if (begun || current !== u) return;
+      if (!canAutoplay()) return finish();
       setRemoteFailed(true);
       // 有內建的日文語音才重念；沒有的話頁面會提示加裝
-      if (state.voices.some((x) => !isRemoteVoice(x))) utter(text, rate);
+      if (state.voices.some((x) => !isRemoteVoice(x))) {
+        ended = true;
+        utter(text, rate, onEnd);
+      } else finish();
     };
     const watchdog = window.setTimeout(fallback, REMOTE_START_MS);
     u.onstart = () => {
@@ -192,23 +207,31 @@ function utter(text: string, rate: number): boolean {
       window.clearTimeout(watchdog);
     };
     // 沒開始念就結束了（有些瀏覽器連不到時是這樣）：也算念不出來
-    u.onend = () => (begun ? window.clearTimeout(watchdog) : fallback());
-    u.onerror = (e) => {
-      if (REMOTE_ERRORS.has(e.error)) fallback();
-      else window.clearTimeout(watchdog);
+    u.onend = () => {
+      if (!begun) return fallback();
+      window.clearTimeout(watchdog);
+      finish();
     };
+    u.onerror = (e) => {
+      if (REMOTE_ERRORS.has(e.error)) return fallback();
+      window.clearTimeout(watchdog);
+      finish();
+    };
+  } else {
+    u.onend = finish;
+    u.onerror = finish;
   }
   ss.speak(u);
   return true;
 }
 
-/** 念出日文。回傳 false 表示這台裝置不能發音。 */
-export function speak(text: string, opts: { rate?: number } = {}): boolean {
+/** 念出日文。回傳 false 表示這台裝置不能發音（這時 onEnd 不會被呼叫）。 */
+export function speak(text: string, opts: { rate?: number; onEnd?: () => void } = {}): boolean {
   if (!text || !supported) return false;
   // 語音清單晚到、又沒觸發 voiceschanged：念之前再讀一次
   if (!state.voices.length) refreshVoices();
   try {
-    return utter(speechFor(text), opts.rate ?? (settingsStore.get().slow ? 0.6 : 0.9));
+    return utter(speechFor(text), opts.rate ?? (settingsStore.get().slow ? 0.6 : 0.9), opts.onEnd);
   } catch {
     return false;
   }

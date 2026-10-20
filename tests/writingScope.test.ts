@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LESSONS } from '../src/data/lessons';
+import { KANA_LESSON_DATA } from './lessonData';
 import { getStrokePaths } from '../src/lib/strokes';
 import { EXTRA_CHARS, extraOf, lessonWriteRows, pickedChars, rowsFor, writingChars } from '../src/lib/writingScope';
 
@@ -14,7 +14,7 @@ describe('手寫描字的範圍', () => {
   });
 
   it('每一課「去寫字」的範圍剛好是這一課新教的字（不會混進後面幾課的字）', () => {
-    for (const l of LESSONS) {
+    for (const l of KANA_LESSON_DATA) {
       const chars = writingChars(lessonWriteRows(l.newKana), l.quiz.script);
       expect([...chars].sort(), `第 ${l.id} 課`).toEqual([...l.newKana].sort());
     }

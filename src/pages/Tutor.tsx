@@ -8,13 +8,13 @@ import {
   type ConversationTurn, type Correction, type Purpose, type QuizQuestion, type Scenario,
 } from '../data/tutor';
 import { DECKS } from '../data/vocab';
-import { LESSON_META as LESSONS } from '../data/lessons/meta';
+import { KANA_LESSONS } from '../data/lessons/meta';
 import {
   addUsage, apiKeyStore, kanaStore, lessonStore, settingsStore, srsStore, updateSettings, type TutorLevel,
 } from '../state';
 import { isObj, num, oneOf, str, useStore } from '../state/store';
 import { TutorError, callJSON, estimateCost, preloadClaudeApi, toTutorError } from '../lib/claude';
-import { learnedKana, lessonsDone, nextLesson, suggestedLevel } from '../lib/progress';
+import { kanaCourseDone, learnedGrammar, learnedKana, nextKanaLesson, suggestedLevel } from '../lib/progress';
 import { phraseRomaji } from '../lib/romaji';
 import { speak } from '../lib/speech';
 import { usePageTitle } from '../lib/title';
@@ -174,7 +174,9 @@ export default function Tutor() {
   const online = useOnline();
   // 還在學五十音：告訴 AI 學過哪些假名（加上正在學的這一課），畫面上附羅馬拼音
   const knownKana =
-    lessonsDone(lessons) >= LESSONS.length ? '' : learnedKana(lessons) + (nextLesson(lessons)?.newKana.join('') ?? '');
+    kanaCourseDone(lessons) ? '' : learnedKana(lessons) + (nextKanaLesson(lessons)?.newKana.join('') ?? '');
+  // 在上 N5 課程：告訴 AI 學過哪些文法（完成的課和正在上的那一課）
+  const grammar = useMemo(() => learnedGrammar(lessons), [lessons]);
 
   // 在這一頁設定好金鑰時，設定的區塊會整個換成家教畫面（「連線成功」來不及看到、焦點也會掉）：
   // 另外顯示一行成功訊息，焦點放在那裡
@@ -262,10 +264,10 @@ export default function Tutor() {
           </div>
           {/* 三個模式都保持掛載，切換時不會丟掉對話或重新呼叫 API；離開這頁再回來時從分頁紀錄還原 */}
           <div hidden={mode !== 'chat'}>
-            <Conversation level={level} knownKana={knownKana} scenarioParam={scenarioParam} isShown={shown('chat')} />
+            <Conversation level={level} knownKana={knownKana} grammar={grammar} scenarioParam={scenarioParam} isShown={shown('chat')} />
           </div>
           <div hidden={mode !== 'correct'}>
-            <Corrector level={level} knownKana={knownKana} isShown={shown('correct')} />
+            <Corrector level={level} knownKana={knownKana} grammar={grammar} isShown={shown('correct')} />
           </div>
           <div hidden={mode !== 'quiz'}>
             <AiQuiz level={level} />
@@ -363,11 +365,13 @@ function restoredError(s: ChatSession): string | null {
 function Conversation({
   level,
   knownKana,
+  grammar,
   scenarioParam,
   isShown,
 }: {
   level: TutorLevel;
   knownKana: string;
+  grammar: string[];
   scenarioParam: RefObject<string | null>;
   isShown: () => boolean;
 }) {
@@ -424,7 +428,7 @@ function Conversation({
     setError(null);
     try {
       const res = await ask<unknown>({
-        system: conversationSystem(sc, level, knownKana, romajiOn),
+        system: conversationSystem(sc, level, knownKana, romajiOn, grammar),
         messages: msgs,
         schema: CONVERSATION_SCHEMA,
         maxTokens: 4000,
@@ -892,7 +896,7 @@ function loadCorrector(): { ja: string; meaning: string; results: CorrectionItem
   return { ja: str(r.ja), meaning: str(r.meaning), results: results.slice(0, 10) };
 }
 
-function Corrector({ level, knownKana, isShown }: { level: TutorLevel; knownKana: string; isShown: () => boolean }) {
+function Corrector({ level, knownKana, grammar, isShown }: { level: TutorLevel; knownKana: string; grammar: string[]; isShown: () => boolean }) {
   const settings = useStore(settingsStore);
   const romajiOn = level === 'kana' && settings.showRomaji;
   const [saved] = useState(loadCorrector);
@@ -922,7 +926,7 @@ function Corrector({ level, knownKana, isShown }: { level: TutorLevel; knownKana
     setError(null);
     try {
       const res = await ask<unknown>({
-        system: correctionSystem(level, knownKana, romajiOn),
+        system: correctionSystem(level, knownKana, romajiOn, grammar),
         messages: [{ role: 'user', content: intended ? `${text}\n（我想表達：${intended}）` : text }],
         schema: CORRECTION_SCHEMA,
         maxTokens: 6000,
@@ -1097,7 +1101,7 @@ function AiQuiz({ level }: { level: TutorLevel }) {
     writeSession('quiz', { focus, questions, idx, picked, score });
   }, [focus, questions, idx, picked, score]);
 
-  const learned = learnedKana(lessons) || LESSONS[0].newKana.join('');
+  const learned = learnedKana(lessons) || KANA_LESSONS[0].newKana.join('');
   const weakKana = useMemo(
     () =>
       Object.entries(kana)

@@ -1,12 +1,12 @@
 import { Link } from 'react-router-dom';
 import { useMemo } from 'react';
-import { LESSON_META as LESSONS } from '../data/lessons/meta';
+import { COURSE_LESSONS, KANA_LESSONS, unitOf } from '../data/lessons/meta';
 import { DECK_META, metaItemIds, unseenWords } from '../data/vocab/meta';
 import {
   activityStore, apiKeyStore, kanaLevel, kanaStore, lastExportStore, lessonStore, missStore, settingsStore, srsStore, writingStore,
 } from '../state';
 import { useStore } from '../state/store';
-import { countMastered, HIRA_KEYS, KATA_KEYS, lessonsDone, nextLesson, streak } from '../lib/progress';
+import { countMastered, courseLessonsDone, HIRA_KEYS, kanaLessonsDone, KATA_KEYS, lessonsDone, nextKanaLesson, nextLesson, streak } from '../lib/progress';
 import { todayTasks } from '../lib/today';
 import { mistakeCount, weakKanaKeys } from '../lib/mistakes';
 import { deckStats } from '../lib/srs';
@@ -54,6 +54,8 @@ export default function Home() {
 
   const next = nextLesson(lessons);
   const done = lessonsDone(lessons);
+  const kanaDone = kanaLessonsDone(lessons);
+  const courseDone = courseLessonsDone(lessons);
   const hira = countMastered(kana, HIRA_KEYS);
   const kata = countMastered(kana, KATA_KEYS);
   const days = streak(activity, now);
@@ -78,10 +80,22 @@ export default function Home() {
 
   const weak = useMemo(() => weakKanaKeys(kana).slice(0, 8).map((k) => k.slice(2)), [kana]);
 
-  // 手寫建議：目前這一課新教、還沒寫過的字（第 6 課是 ゃ ゅ ょ っ，不是測驗複習的全部平假名）
-  const writeLesson = next ?? LESSONS[LESSONS.length - 1];
-  const writeChars = writeLesson.newKana.filter((ch) => !writing[ch]);
-  const writeDone = writeLesson.newKana.length - writeChars.length;
+  // 手寫建議：目前這一課新教、還沒寫過的字（第 6 課是 ゃ ゅ ょ っ，不是測驗複習的全部平假名）。
+  // 五十音學完之後：N5 這一課的漢字（都有筆順資料，測試會檢查；首頁不載入筆順資料）；
+  // 這一課沒有新漢字（第 30 課起）或全部學完時，複習學過的漢字
+  const kanaWrite = nextKanaLesson(lessons);
+  const learnedKanji = COURSE_LESSONS.filter((l) => lessons.done[l.id]).map((l) => l.kanji).join('');
+  const courseWrite = next?.kind === 'n5' && next.kanji ? next : undefined;
+  const kanaShown = kanaWrite ?? (courseWrite || learnedKanji ? undefined : KANA_LESSONS[KANA_LESSONS.length - 1]);
+  const toWrite = kanaShown ? kanaShown.newKana : [...(courseWrite?.kanji ?? learnedKanji)];
+  const writeWhat = kanaShown ? `第 ${kanaShown.id} 課的字` : courseWrite ? `第 ${courseWrite.id} 課的漢字` : '學過的漢字';
+  const writeChars = toWrite.filter((ch) => !writing[ch]);
+  const writeDone = toWrite.length - writeChars.length;
+  const writeLink = (ch?: string) =>
+    (kanaShown ? `/writing?lesson=${kanaShown.id}` : `/writing?chars=${encodeURIComponent(toWrite.join(''))}`) +
+    (ch ? `&char=${encodeURIComponent(ch)}` : '');
+  const unit = next?.kind === 'n5' ? unitOf(next.unit) : undefined;
+  const unitLessons = unit ? COURSE_LESSONS.filter((l) => l.unit === unit.n) : KANA_LESSONS;
 
   const suggested = SCENARIOS.filter((_, i) => i % 3 === new Date(now).getDate() % 3).slice(0, 3);
   const jlpt = nextJlpt(now);
@@ -157,7 +171,13 @@ export default function Home() {
           </section>
 
           <section className="card home-card home-lesson" aria-labelledby="h-next">
-            <p className="eyebrow">五十音課程 · 已完成 {done}/{LESSONS.length}</p>
+            <p className="eyebrow">
+              {next?.kind === 'n5'
+                ? `N5 課程 · 已完成 ${courseDone}/${COURSE_LESSONS.length}${unit ? ` · 第 ${unit.n} 單元「${unit.title}」` : ''}`
+                : next
+                  ? `五十音課程 · 已完成 ${kanaDone}/${KANA_LESSONS.length}`
+                  : `課程 · 已完成 ${done} 課`}
+            </p>
             {next ? (
               <>
                 <h2 id="h-next">
@@ -165,7 +185,7 @@ export default function Home() {
                 </h2>
                 <p className="muted">{next.headline}</p>
                 <div className="lesson-dots" aria-hidden="true">
-                  {LESSONS.map((l) => (
+                  {unitLessons.map((l) => (
                     <span key={l.id} className={`ldot ${lessons.done[l.id] ? 'done' : ''} ${l.id === next.id ? 'now' : ''}`}>
                       {l.id}
                     </span>
@@ -176,15 +196,21 @@ export default function Home() {
                     {done === 0 && next.id === 1 ? '開始第 1 課' : `繼續第 ${next.id} 課`}
                     <Icon name="arrow-right" size={17} />
                   </Link>
-                  <Link className="btn" to={`/practice?lesson=${next.id}`}>
-                    練這一課的假名
-                  </Link>
+                  {next.kind === 'kana' ? (
+                    <Link className="btn" to={`/practice?lesson=${next.id}`}>
+                      練這一課的假名
+                    </Link>
+                  ) : next.words.length ? (
+                    <Link className="btn" to={`/review/lesson-${next.id}`}>
+                      練這一課的單字
+                    </Link>
+                  ) : null}
                 </div>
               </>
             ) : (
               <>
-                <h2 id="h-next">五十音全部學完了</h2>
-                <p className="muted">接下來每天複習 N5 單字，再用 AI 家教練習會話。</p>
+                <h2 id="h-next">課程全部學完了</h2>
+                <p className="muted">接下來每天複習單字卡，用 AI 家教練習會話，準備 N5 檢定。</p>
                 <div className="btn-row">
                   <Link className="btn btn-primary" to="/vocab">
                     去背單字 <Icon name="arrow-right" size={17} />
@@ -228,7 +254,7 @@ export default function Home() {
                 </li>
               ))}
             </ul>
-            {done < 6 ? <p className="small">建議先學完平假名（第 1–6 課）再開始背單字，看得懂假名會輕鬆很多。</p> : null}
+            {kanaDone < 6 && !courseDone ? <p className="small">建議先學完平假名（第 1–6 課）再開始背單字，看得懂假名會輕鬆很多。</p> : null}
           </section>
         </div>
 
@@ -284,27 +310,29 @@ export default function Home() {
             )}
           </section>
 
-          <section className="card home-card" aria-labelledby="h-write">
-            <div className="card-head">
-              <h2 id="h-write">手寫描字</h2>
-              <Link to={`/writing?lesson=${writeLesson.id}`} className="more">
-                去寫字
-              </Link>
-            </div>
-            <p className="muted">
-              第 {writeLesson.id} 課的字寫過 {writeDone} 個
-              {writeChars.length ? `，還有 ${writeChars.length} 個沒寫：` : '，全部寫過了。'}
-            </p>
-            {writeChars.length ? (
-              <div className="weak">
-                {writeChars.slice(0, 10).map((ch) => (
-                  <Link key={ch} to={`/writing?lesson=${writeLesson.id}&char=${encodeURIComponent(ch)}`} className="wchip" lang="ja">
-                    {ch}
-                  </Link>
-                ))}
+          {toWrite.length ? (
+            <section className="card home-card" aria-labelledby="h-write">
+              <div className="card-head">
+                <h2 id="h-write">手寫描字</h2>
+                <Link to={writeLink()} className="more">
+                  去寫字
+                </Link>
               </div>
-            ) : null}
-          </section>
+              <p className="muted">
+                {writeWhat}寫過 {writeDone} 個
+                {writeChars.length ? `，還有 ${writeChars.length} 個沒寫：` : '，全部寫過了。'}
+              </p>
+              {writeChars.length ? (
+                <div className="weak">
+                  {writeChars.slice(0, 10).map((ch) => (
+                    <Link key={ch} to={writeLink(ch)} className="wchip" lang="ja">
+                      {ch}
+                    </Link>
+                  ))}
+                </div>
+              ) : null}
+            </section>
+          ) : null}
 
           <section className="card home-card" aria-labelledby="h-tutor">
             <div className="card-head">

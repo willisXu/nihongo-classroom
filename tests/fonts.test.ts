@@ -50,6 +50,27 @@ describe('字型瘦身', () => {
     expect(objectTops("{ a: '{x}', b: [1, { c: 2 }], d: 'e' }")).toEqual([' c: 2 ', " a: '{x}', b: , d: 'e' "]);
   });
 
+  it('N5 課程：《》前面的漢字、會話人名、漢字欄位收進假名字型；說明裡的中文不收', () => {
+    const text = `{ type: 'dialog', lines: [{ who: '田中《たなか》', ja: '私《わたし》は学生《がくせい》です。', zh: '我是學生。' }] },
+      { type: 'kanji', items: [{ ch: '日', zh: '太陽' }] },
+      { type: 'drill', items: [{ kind: 'choice', options: ['先生《せんせい》', '学校《がっこう》'] }] },
+      { type: 'grammar', title: '說明', form: '〔名詞〕は〔名詞〕です', points: ['「先生」在中文是'] }`;
+    const { ja } = collectChars([{ file: 'data/lessons/lesson9.ts', text }]);
+    for (const ch of '田中私学生日先校') expect(ja.has(ch), ch).toBe(true);
+    for (const ch of '太陽在文是我') expect(ja.has(ch), ch).toBe(false);
+    // 日文欄位裡的符號（會話的「―」、表格裡的「→」）也收
+    const marks = collectChars([{ file: 'data/lessons/lesson20.ts', text: "{ ja: '元気《げんき》ですか。―はい。', note: '{{楽《たの》しい → 楽《たの》しかった}}' }" }]);
+    for (const ch of '―→') expect(marks.ja.has(ch), ch).toBe(true);
+    // 課程摘要的文法名稱：只有漢字的也收（課程列表用假名字型）
+    const meta = collectChars([{ file: 'data/lessons/meta.ts', text: "{ kind: 'n5', grammar: ['〜歳', '数字'], headline: '說明' }" }]);
+    for (const ch of '歳数字') expect(meta.ja.has(ch), ch).toBe(true);
+    expect(meta.ja.has('說')).toBe(false);
+    // 課名是日文時（有假名），裡面單獨的漢字也收；中文課名不收
+    const titles = collectChars([{ file: 'data/lessons/meta.ts', text: "{ title: '今、何時ですか' }, { title: '片假名（一）' }" }]);
+    expect(titles.ja.has('今')).toBe(true);
+    expect(titles.ja.has('片')).toBe(false);
+  });
+
   it('從 CSS 找出用標題字型的元素', () => {
     const css = `
       /* 註解裡的 { 不算 */

@@ -4,7 +4,7 @@ import { NEW_PER_DAY_OPTIONS, lessonStore, settingsStore, srsStore, updateSettin
 import { useStore } from '../state/store';
 import { deckStats } from '../lib/srs';
 import { studyDayKey } from '../lib/date';
-import { lessonsDone } from '../lib/progress';
+import { courseLessonsDone, courseWords, kanaCourseDone, kanaLessonsDone, nextCourseLesson } from '../lib/progress';
 import { Meter } from '../components/Controls';
 import { Icon } from '../components/Icon';
 import { usePageTitle } from '../lib/title';
@@ -27,6 +27,9 @@ export default function Vocab() {
   const freshToday = srs.days[studyDayKey(now)]?.fresh ?? 0;
   const newLeft = Math.min(unseenWords(srs.cards), Math.max(0, settings.newPerDay - freshToday));
   const all = deckStats(srs.cards, DECK_META.flatMap(metaItemIds), now);
+  // 在上 N5 課程：新卡先出上到的那幾課的字（見 lib/vocab.ts 的 courseFirst）
+  const courseNow = kanaCourseDone(lessons) ? nextCourseLesson(lessons) : undefined;
+  const courseLeft = courseWords(lessons).filter((id) => !(srs.cards[id]?.reps ?? 0)).length;
 
   return (
     <div className="wrap">
@@ -38,7 +41,7 @@ export default function Vocab() {
         </p>
       </header>
 
-      {lessonsDone(lessons) < 6 ? (
+      {kanaLessonsDone(lessons) < 6 && !courseLessonsDone(lessons) ? (
         <p className="callout callout-soft">
           還沒學完平假名也可以先看看，不過建議完成第 1–6 課再開始背，看得懂假名會輕鬆很多。
         </p>
@@ -77,6 +80,12 @@ export default function Vocab() {
             </select>
           </label>
         </div>
+        {courseNow ? (
+          <p className="small">
+            新卡會先出 N5 課程上到的字{courseLeft ? `（還有 ${courseLeft} 個沒學）` : ''}。只練一課：
+            <Link to={`/review/lesson-${courseNow.id}`}>第 {courseNow.id} 課的單字</Link>
+          </p>
+        ) : null}
       </section>
 
       <div className="deck-grid">

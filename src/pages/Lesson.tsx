@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, type MouseEvent } from 'react';
+import { use, useEffect, useRef, useState, type MouseEvent } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { LESSONS, lessonById } from '../data/lessons';
+import { loadLesson, preloadLesson } from '../data/lessons';
+import { LESSON_META, lessonMetaById, unitOf } from '../data/lessons/meta';
 import { rowById, originText } from '../data/kana';
-import type { KanaRow, LessonBlock, LessonWord, Script } from '../data/types';
+import type { KanaRow, Lesson, LessonBlock, LessonWord, Script } from '../data/types';
 import { lessonStore, setHomework, setLessonDone } from '../state';
 import { useStore } from '../state/store';
 import { romaji } from '../lib/romaji';
@@ -12,6 +13,9 @@ import { Rich } from '../components/Rich';
 import { Masu, Stamp, Switch } from '../components/Controls';
 import { SpeakButton, usePlayFlash } from '../components/Speak';
 import { Icon } from '../components/Icon';
+import { DialogBlock, ExamplesBlock, GrammarBlock, KanjiBlock, VocabBlock } from '../components/CourseBlocks';
+import { DrillBlock } from '../components/Drill';
+import { readJSON, writeJSON } from '../state/store';
 import { usePageTitle } from '../lib/title';
 
 /** 課名裡有假名才標成日文（第 5～8 課的課名「濁音・半濁音」「片假名（一）」是中文也看得懂的漢字） */
@@ -27,10 +31,27 @@ function goToSection(id: string, smooth: boolean) {
   el.querySelector<HTMLElement>('h2')?.focus({ preventScroll: true });
 }
 
+/** 振假名（漢字上面的讀音）顯示或隱藏：整個 N5 課程一起記住 */
+const FURI_KEY = 'nk.furigana';
+
 export default function LessonPage() {
   const { id } = useParams();
-  const lesson = lessonById(Number(id));
+  // 課文一課一個檔，打開才下載（下載時顯示版面的「載入中」）
+  const lesson = use(loadLesson(Number(id)));
+  return <LessonView key={lesson?.id ?? 'none'} lesson={lesson} />;
+}
+
+function LessonView({ lesson }: { lesson: Lesson | undefined }) {
   const progress = useStore(lessonStore);
+  const [furi, setFuriState] = useState(() => readJSON(FURI_KEY) !== false);
+  const setFuri = (v: boolean) => {
+    setFuriState(v);
+    writeJSON(FURI_KEY, v);
+  };
+  // 先下載下一課，按「下一課」不用等
+  useEffect(() => {
+    if (lesson) preloadLesson(lesson.id + 1);
+  }, [lesson]);
   const location = useLocation();
   const navigate = useNavigate();
   usePageTitle(lesson ? `第 ${lesson.id} 課 ${lesson.title}` : '找不到這一課');
@@ -76,7 +97,7 @@ export default function LessonPage() {
         <header className="ph">
           <h1>找不到這一課</h1>
           <p className="lede">
-            課程只有第 1 到第 {LESSONS.length} 課。<Link to="/lessons">回課程列表</Link>
+            課程只有第 1 到第 {LESSON_META.length} 課。<Link to="/lessons">回課程列表</Link>
           </p>
         </header>
       </div>
@@ -86,19 +107,35 @@ export default function LessonPage() {
   const isDone = !!progress.done[lesson.id];
   const hwKeys = lesson.homework.map((_, i) => `${lesson.id}:${i}`);
   const hwDone = hwKeys.filter((k) => progress.hw[k]).length;
-  const prev = lessonById(lesson.id - 1);
-  const next = lessonById(lesson.id + 1);
+  const prev = lessonMetaById(lesson.id - 1);
+  const next = lessonMetaById(lesson.id + 1);
+  const course = lesson.kind === 'n5' ? lesson : null;
+  // 「用單字卡練這些字」只放在最後一組單字下面
+  const lastVocab = lesson.sections.flatMap((s) => s.blocks).filter((b) => b.type === 'vocab').pop();
+  const unit = course ? unitOf(course.unit) : undefined;
 
   return (
-    <div className="wrap">
+    <div className={`wrap${course && !furi ? ' furi-off' : ''}`}>
       <header className="ph">
         <p className="eyebrow">
-          第 {lesson.id} 課 · 約 {lesson.minutes} 分鐘{isDone ? ' · 已完成' : ''}
+          第 {lesson.id} 課{unit ? ` · 第 ${unit.n} 單元「${unit.title}」` : ''} · 約 {lesson.minutes} 分鐘{isDone ? ' · 已完成' : ''}
         </p>
         <h1>{lesson.headline}</h1>
         <p className="lede">
           <Rich text={lesson.summary} />
         </p>
+        {course ? (
+          <div className="goals">
+            <p className="goals-h">學完這一課，你可以：</p>
+            <ul>
+              {course.goals.map((g, i) => (
+                <li key={i}>
+                  <Rich text={g} />
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         <ol className="toc">
           {lesson.sections.map((s) => (
             <li key={s.id}>
@@ -113,14 +150,37 @@ export default function LessonPage() {
             </a>
           </li>
         </ol>
-        <div className="btn-row">
-          <Link className="btn" to={`/practice?lesson=${lesson.id}`}>
-            <Icon name="target" size={17} /> 練這一課的假名
-          </Link>
-          <Link className="btn" to={`/writing?lesson=${lesson.id}`}>
-            <Icon name="pencil" size={17} /> 手寫這一課的字
-          </Link>
-        </div>
+        {course ? (
+          <div className="btn-row">
+            {course.words.length ? (
+              <Link className="btn" to={`/review/lesson-${lesson.id}`}>
+                <Icon name="cards" size={17} /> 單字卡練這一課的單字
+              </Link>
+            ) : null}
+            {course.kanji ? (
+              <Link className="btn" to={`/writing?chars=${encodeURIComponent(course.kanji)}`}>
+                <Icon name="pencil" size={17} /> 手寫這一課的漢字
+              </Link>
+            ) : null}
+            {course.tutor ? (
+              <Link className="btn" to={`/tutor?scenario=${course.tutor}`}>
+                <Icon name="chat" size={17} /> 和 AI 家教練習
+              </Link>
+            ) : null}
+            <Switch id="furi" checked={furi} onChange={setFuri}>
+              漢字標讀音
+            </Switch>
+          </div>
+        ) : (
+          <div className="btn-row">
+            <Link className="btn" to={`/practice?lesson=${lesson.id}`}>
+              <Icon name="target" size={17} /> 練這一課的假名
+            </Link>
+            <Link className="btn" to={`/writing?lesson=${lesson.id}`}>
+              <Icon name="pencil" size={17} /> 手寫這一課的字
+            </Link>
+          </div>
+        )}
       </header>
 
       {lesson.sections.map((s, i) => (
@@ -132,7 +192,7 @@ export default function LessonPage() {
             {s.title}
           </h2>
           {s.blocks.map((b, j) => (
-            <Block key={j} block={b} />
+            <Block key={j} block={b} lessonId={lesson.id} deckLink={b === lastVocab} />
           ))}
         </section>
       ))}
@@ -197,6 +257,18 @@ export default function LessonPage() {
             </>
           )}
         </div>
+        {course?.companion?.length ? (
+          <div className="companion">
+            <p className="companion-h">想多練習：可以搭配的教材</p>
+            <ul>
+              {course.companion.map((c, i) => (
+                <li key={i}>
+                  <Rich text={c} />
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         {lesson.next ? (
           <div className="nextup">
             <p className="eyebrow">{next ? '下一課' : '接下來'}</p>
@@ -220,8 +292,8 @@ export default function LessonPage() {
             第 {next.id} 課 <span className="ja" lang={hasKana(next.title) ? 'ja' : undefined}>{next.title}</span> <Icon name="arrow-right" size={17} />
           </Link>
         ) : (
-          <Link className="btn" to="/vocab">
-            去背 N5 單字 <Icon name="arrow-right" size={17} />
+          <Link className="btn" to="/lessons">
+            回課程列表 <Icon name="arrow-right" size={17} />
           </Link>
         )}
       </nav>
@@ -231,7 +303,7 @@ export default function LessonPage() {
 
 /* ---------------- 區塊 ---------------- */
 
-function Block({ block }: { block: LessonBlock }) {
+function Block({ block, lessonId, deckLink }: { block: LessonBlock; lessonId: number; deckLink: boolean }) {
   switch (block.type) {
     case 'p':
       return (
@@ -375,6 +447,18 @@ function Block({ block }: { block: LessonBlock }) {
       );
     case 'table':
       return <LessonTable head={block.head} rows={block.rows} />;
+    case 'dialog':
+      return <DialogBlock title={block.title} scene={block.scene} lines={block.lines} />;
+    case 'grammar':
+      return <GrammarBlock title={block.title} form={block.form} points={block.points} examples={block.examples} />;
+    case 'examples':
+      return <ExamplesBlock title={block.title} items={block.items} />;
+    case 'vocab':
+      return <VocabBlock title={block.title} items={block.items} note={block.note} lessonId={deckLink ? lessonId : undefined} />;
+    case 'kanji':
+      return <KanjiBlock items={block.items} />;
+    case 'drill':
+      return <DrillBlock title={block.title} intro={block.intro} items={block.items} />;
   }
 }
 
@@ -396,17 +480,22 @@ function LessonTable({ head, rows }: { head: string[]; rows: string[][] }) {
     if (el.firstElementChild) ro.observe(el.firstElementChild);
     return () => ro.disconnect();
   }, []);
-  const scroll = overflow ? { tabIndex: 0, role: 'region', 'aria-label': `表格：${head.join('、')}（可左右捲動）` } : {};
+  const scroll = overflow ? { tabIndex: 0, role: 'region', 'aria-label': `表格：${head.filter(Boolean).join('、')}（可左右捲動）` } : {};
   return (
     <div ref={ref} className="table-scroll" {...scroll}>
       <table className="ltable">
         <thead>
           <tr>
-            {head.map((h, i) => (
-              <th key={i} scope="col">
-                {h}
-              </th>
-            ))}
+            {/* 左上角空白的格子（例如變化表）用 td：空的欄標題念不出東西 */}
+            {head.map((h, i) =>
+              h ? (
+                <th key={i} scope="col">
+                  {h}
+                </th>
+              ) : (
+                <td key={i} />
+              ),
+            )}
           </tr>
         </thead>
         <tbody>

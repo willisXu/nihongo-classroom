@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom';
 import { lessonStore } from '../state';
 import { useStore } from '../state/store';
-import { lessonsDone } from '../lib/progress';
-import { LESSON_META as LESSONS } from '../data/lessons/meta';
+import { courseLessonsDone, kanaLessonsDone } from '../lib/progress';
+import { COURSE_LESSONS, KANA_LESSONS } from '../data/lessons/meta';
 import { usePageTitle } from '../lib/title';
 
 const PHASES = [
@@ -15,7 +15,7 @@ const PHASES = [
   {
     when: '第 3 週～第 4 個月',
     title: '初級前半（約 N5）',
-    body: '主教材第 1–25 課，每週約 2 課。單字每天用單字卡複習，文法看影片解說，課文音檔跟著念。',
+    body: '這裡的第 9–32 課（N5 初級），每週約 2 課：會話、文法、單字、漢字和練習題。單字每天用單字卡複習，會話跟著念。想多讀多聽，可以搭配《いろどり》入門、初級 1 或《大家的日本語》第 1–20 課。',
     goal: '能自我介紹、買東西、問路，說明時間和日程。',
   },
   {
@@ -69,8 +69,9 @@ const TIPS = [
 export default function Roadmap() {
   usePageTitle('學習地圖');
   const progress = useStore(lessonStore);
-  const done = lessonsDone(progress);
-  const phaseNow = done < LESSONS.length ? 0 : 1;
+  const kanaDone = kanaLessonsDone(progress);
+  const courseDone = courseLessonsDone(progress);
+  const phaseNow = kanaDone < KANA_LESSONS.length ? 0 : courseDone < COURSE_LESSONS.length ? 1 : 2;
 
   return (
     <div className="wrap">
@@ -102,7 +103,12 @@ export default function Roadmap() {
                 </p>
                 {i === 0 ? (
                   <p className="small">
-                    五十音課程已完成 {done}/{LESSONS.length} 課。<Link to="/lessons">看課程</Link>
+                    五十音課程已完成 {kanaDone}/{KANA_LESSONS.length} 課。<Link to="/lessons">看課程</Link>
+                  </p>
+                ) : null}
+                {i === 1 && COURSE_LESSONS.length ? (
+                  <p className="small">
+                    N5 課程已完成 {courseDone}/{COURSE_LESSONS.length} 課。<Link to="/lessons">看課程</Link>
                   </p>
                 ) : null}
               </div>

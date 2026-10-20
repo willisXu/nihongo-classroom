@@ -20,6 +20,7 @@
   --mark-soft: #fbe6e2;
   --ok: #2f7d4f;          /* 答對、熟悉（語意色） */
   --ok-soft: #dcefe2;
+  --ok-ink: #286e44;      /* 淺綠底上的綠字（練習題「答對了」）：4.5:1 以上 */
   --hl-kanji: #fbe6a0;    /* 螢光筆 */
   --hl-hira: #cbead7;
   --hl-kata: #d2e1f8;
@@ -64,6 +65,7 @@
     --mark-soft: rgba(243, 153, 139, 0.14);
     --ok: #8fd6a8;
     --ok-soft: rgba(143, 214, 168, 0.16);
+    --ok-ink: #8fd6a8;
     --hl-kanji: rgba(240, 208, 106, 0.22);
     --hl-hira: rgba(126, 210, 163, 0.2);
     --hl-kata: rgba(140, 180, 240, 0.24);
@@ -99,6 +101,7 @@
   --mark-soft: rgba(243, 153, 139, 0.14);
   --ok: #8fd6a8;
   --ok-soft: rgba(143, 214, 168, 0.16);
+  --ok-ink: #8fd6a8;
   --hl-kanji: rgba(240, 208, 106, 0.22);
   --hl-hira: rgba(126, 210, 163, 0.2);
   --hl-kata: rgba(140, 180, 240, 0.24);

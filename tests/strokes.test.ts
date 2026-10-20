@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import data from '../src/data/strokes.json';
+import { KANJI } from '../src/data/kanji';
 import {
   GLYPH_CENTER,
   GLYPH_SIZE,
@@ -84,14 +85,17 @@ function acceptedAs(target: string, src: string): boolean {
 /* ───────── 資料 ───────── */
 
 describe('stroke data', () => {
-  it('has all 169 kana in the 109×109 KanjiVG space', () => {
+  it('has all 169 kana and the N5 kanji in the 109×109 KanjiVG space', () => {
     expect(data._viewBox).toBe('0 0 109 109');
-    expect(CHARS).toHaveLength(169);
+    const kana = CHARS.filter((c) => /[\u3040-\u30ff]/u.test(c));
+    expect(kana).toHaveLength(169);
     for (const ch of ['あ', 'ぁ', 'が', 'ぱ', 'ゔ', 'ア', 'ァ', 'ガ', 'パ', 'ヴ', 'ン', 'ー']) expect(hasStrokes(ch)).toBe(true);
+    // 漢字：剛好是 data/kanji.ts 的字（npm run strokes 照那份清單下載）
+    expect(CHARS.filter((c) => !kana.includes(c))).toEqual(KANJI.map((k) => k.ch));
   });
 
   it('returns stroke paths in drawing order', () => {
-    const counts: Record<string, number> = { あ: 3, き: 4, さ: 3, シ: 3, ツ: 3, ソ: 2, ン: 2, が: 5, ぱ: 4, ー: 1 };
+    const counts: Record<string, number> = { あ: 3, き: 4, さ: 3, シ: 3, ツ: 3, ソ: 2, ン: 2, が: 5, ぱ: 4, ー: 1, 日: 4, 本: 5, 駅: 14, 書: 10, 九: 2 };
     for (const [ch, n] of Object.entries(counts)) expect(getStrokePaths(ch)).toHaveLength(n);
     for (const ch of CHARS) {
       const paths = getStrokePaths(ch);

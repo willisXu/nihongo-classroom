@@ -1,8 +1,8 @@
-import type { Lesson } from '../types';
-import { lessonMeta } from './meta';
+import type { KanaLesson } from '../types';
+import { kanaMeta } from './meta';
 
-export const lesson5: Lesson = {
-  ...lessonMeta(5),
+export const lesson: KanaLesson = {
+  ...kanaMeta(5),
   summary:
     '學完這一課，你看到 {{゛}} 和 {{゜}} 就知道怎麼念，並且能靠「聲帶有沒有振動」分出 か 和 が、た 和 だ。這是中文母語者最需要花時間的一課。',
   sections: [

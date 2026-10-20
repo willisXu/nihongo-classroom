@@ -46,7 +46,7 @@ export const n5: Deck = {
     { id: 'n5-0040', kana: 'ご', kanji: '五', zh: '五', pos: 'number', topic: '數字' },
     { id: 'n5-0041', kana: 'ろく', kanji: '六', zh: '六', pos: 'number', topic: '數字', note: '接量詞時常變成促音：六個 ろっこ、六本 ろっぽん' },
     { id: 'n5-0042', kana: 'なな', kanji: '七', zh: '七', pos: 'number', topic: '數字', note: '也念「しち」；七點＝しちじ、七月＝しちがつ' },
-    { id: 'n5-0043', kana: 'しち', kanji: '七', zh: '七（另一種念法）', pos: 'number', topic: '數字', note: '用於七點（しちじ）、七月（しちがつ）；容易和「いち」聽錯，所以數數時常念なな' },
+    { id: 'n5-0043', kana: 'しち', kanji: '七', zh: '七（另一種念法）', pos: 'number', topic: '數字', note: '用於七點（しちじ）、七月（しちがつ）；しち 和 いち 容易聽錯，所以電話號碼、價錢常念なな' },
     { id: 'n5-0044', kana: 'はち', kanji: '八', say: '八', zh: '八', pos: 'number', topic: '數字', note: '接量詞時常變成促音：八個 はっこ、八本 はっぽん' },
     { id: 'n5-0045', kana: 'きゅう', kanji: '九', zh: '九', pos: 'number', topic: '數字', note: '也念「く」；九點＝くじ、九月＝くがつ' },
     { id: 'n5-0046', kana: 'く', kanji: '九', zh: '九（另一種念法）', pos: 'number', topic: '數字', note: '用於九點（くじ）、九月（くがつ）；「く」和「苦」同音，平常多念きゅう' },

@@ -1,4 +1,4 @@
-import type { LessonMeta } from '../types';
+import type { CourseLessonMeta, KanaLessonMeta, LessonMeta } from '../types';
 
 /**
  * 每一課的摘要（課名、標題、時間、新學的字、練習範圍）。
@@ -6,6 +6,7 @@ import type { LessonMeta } from '../types';
  */
 export const LESSON_META: LessonMeta[] = [
   {
+    kind: 'kana',
     id: 1,
     title: 'あ・か・さ行',
     headline: '三套文字，和最先學的 15 個假名',
@@ -14,6 +15,7 @@ export const LESSON_META: LessonMeta[] = [
     quiz: { script: 'h', rows: ['a', 'k', 's'] },
   },
   {
+    kind: 'kana',
     id: 2,
     title: 'た行・な行',
     headline: '10 個新假名，和中文裡沒有的 つ',
@@ -22,6 +24,7 @@ export const LESSON_META: LessonMeta[] = [
     quiz: { script: 'h', rows: ['t', 'n'] },
   },
   {
+    kind: 'kana',
     id: 3,
     title: 'は行・ま行',
     headline: 'ふ 不是ㄈ：は行和ま行',
@@ -30,6 +33,7 @@ export const LESSON_META: LessonMeta[] = [
     quiz: { script: 'h', rows: ['h', 'm'] },
   },
   {
+    kind: 'kana',
     id: 4,
     title: 'や・ら・わ行・ん',
     headline: '最後 11 個清音，平假名的基本字全部到齊',
@@ -38,6 +42,7 @@ export const LESSON_META: LessonMeta[] = [
     quiz: { script: 'h', rows: ['y', 'r', 'w', 'nn'] },
   },
   {
+    kind: 'kana',
     id: 5,
     title: '濁音・半濁音',
     headline: '加兩點、加一個圈：再多 25 個音',
@@ -46,6 +51,7 @@ export const LESSON_META: LessonMeta[] = [
     quiz: { script: 'h', rows: ['g', 'z', 'd', 'b', 'p'] },
   },
   {
+    kind: 'kana',
     id: 6,
     title: '拗音・促音・長音',
     headline: '小字和長音：一拍一拍數清楚',
@@ -54,6 +60,7 @@ export const LESSON_META: LessonMeta[] = [
     quiz: { script: 'h', rows: ['a', 'k', 's', 't', 'n', 'h', 'm', 'y', 'r', 'w', 'nn', 'g', 'z', 'd', 'b', 'p'] },
   },
   {
+    kind: 'kana',
     id: 7,
     title: '片假名（一）',
     headline: '第二套假名：寫外來語的片假名',
@@ -62,6 +69,7 @@ export const LESSON_META: LessonMeta[] = [
     quiz: { script: 'k', rows: ['a', 'k', 's', 't', 'n', 'g', 'z', 'd'] },
   },
   {
+    kind: 'kana',
     id: 8,
     title: '片假名（二）',
     headline: '最後一課：片假名全部到齊',
@@ -69,15 +77,338 @@ export const LESSON_META: LessonMeta[] = [
     newKana: [...'ハヒフヘホマミムメモヤユヨラリルレロワヲンバビブベボパピプペポァィゥェォヴ'],
     quiz: { script: 'k', rows: ['h', 'm', 'y', 'r', 'w', 'nn', 'b', 'p'] },
   },
+  /* ---------- N5 課程（第 9 課起）：words 是課文單字區塊裡對應的單字卡 id（照順序，測試會檢查） ---------- */
+  {
+    kind: 'n5',
+    id: 9,
+    unit: 1,
+    title: 'はじめまして',
+    headline: '自我介紹：〜は〜です',
+    minutes: 50,
+    grammar: ['〜は〜です', '〜じゃありません', '〜ですか', '〜も', '〜の〜'],
+    kanji: '日本人名会社',
+    words: ['n5-0207', 'n5-0203', 'n5-0191', 'n5-0193', 'n5-0190', 'n5-0197', 'n5-0194', 'n5-0342', 'n5-0213', 'n5-0212', 'n5-0189', 'n5-0337', 'n5-0338', 'n5-0182', 'n5-0001', 'n5-0002', 'n5-0011', 'n5-0012', 'n5-0022', 'n5-0023', 'n5-0025'],
+    tutor: 'intro-work',
+  },
+  {
+    kind: 'n5',
+    id: 10,
+    unit: 1,
+    title: 'これは何ですか',
+    headline: '這是什麼？這個、那個、哪個',
+    minutes: 50,
+    grammar: ['これ・それ・あれ', 'この・その・あの', '〜の（もの）', '何・だれ'],
+    kanji: '何先生',
+    words: ['n5-0513', 'n5-0514', 'n5-0515', 'n5-0496', 'n5-0516', 'n5-0517', 'n5-0518', 'n5-0497', 'n5-0490', 'n5-0491', 'n5-0492', 'n5-0201', 'n5-0329', 'n5-0324', 'n5-0458', 'n5-0439', 'n5-0438', 'n5-0332', 'n5-0448', 'business-0009', 'n5-0468', 'travel-0123', 'n5-0245', 'n5-0262', 'n5-0020', 'n5-0006', 'n5-0007', 'n5-0764'],
+    tutor: 'office-gift',
+  },
+  {
+    kind: 'n5',
+    id: 11,
+    unit: 1,
+    title: '家族は四人です',
+    headline: '介紹家人：數字、年齡、住在哪裡',
+    minutes: 50,
+    grammar: ['数字', '〜歳', '〜人', '家族の言い方'],
+    kanji: '一二三四五六七八九十',
+    words: ['n5-0035', 'n5-0036', 'n5-0037', 'n5-0038', 'n5-0040', 'n5-0041', 'n5-0042', 'n5-0044', 'n5-0045', 'n5-0047', 'n5-0161', 'n5-0163', 'n5-0164', 'n5-0165', 'n5-0168', 'n5-0169', 'n5-0172', 'n5-0173', 'n5-0166', 'n5-0167', 'n5-0170', 'n5-0171', 'n5-0174', 'n5-0074', 'n5-0509', 'n5-0504', 'n5-0064', 'n5-0065', 'n5-0066', 'n5-0508'],
+    tutor: 'new-friend',
+  },
+  {
+    kind: 'n5',
+    id: 12,
+    unit: 1,
+    title: '今、何時ですか',
+    headline: '時間和營業時間：〜時〜分、〜から〜まで',
+    minutes: 50,
+    grammar: ['〜時〜分', '〜から〜まで', '午前・午後'],
+    kanji: '時分半午前後今',
+    words: ['n5-0092', 'n5-0078', 'n5-0077', 'n5-0112', 'n5-0506', 'n5-0043', 'n5-0046', 'n5-0440', 'n5-0094', 'n5-0095', 'n5-0096', 'n5-0097', 'n5-0100', 'n5-0113', 'n5-0107', 'n5-0108', 'business-0050', 'n5-0343', 'n5-0345', 'n5-0376', 'travel-0152', 'travel-0155'],
+    tutor: 'opening-hours',
+  },
+  {
+    kind: 'n5',
+    id: 13,
+    unit: 2,
+    title: '毎朝何時に起きますか',
+    headline: '動詞ます形：每天做的事',
+    minutes: 55,
+    grammar: ['〜ます・〜ません', '〜ました・〜ませんでした', '〜に（時間）', '〜を'],
+    kanji: '月火水木金土毎',
+    words: ['n5-0550', 'n5-0612', 'n5-0590', 'n5-0614', 'n5-0632', 'n5-0644', 'n5-0620', 'n5-0635', 'n5-0585', 'n5-0647', 'n5-0104', 'n5-0106', 'n5-0105', 'n5-0133', 'n5-0110', 'n5-0124', 'n5-0125', 'n5-0126', 'n5-0127', 'n5-0128', 'n5-0129', 'n5-0123', 'n5-0507', 'n5-0736', 'n5-0756', 'n5-0746', 'n5-0232', 'anime-0116'],
+    tutor: 'new-friend',
+  },
+  {
+    kind: 'n5',
+    id: 14,
+    unit: 2,
+    title: '電車で会社へ行きます',
+    headline: '去哪裡、怎麼去、和誰去',
+    minutes: 55,
+    grammar: ['〜へ行きます', '〜で（乗り物）', '〜と（人）', '〜に乗ります', 'どのぐらいかかりますか'],
+    kanji: '行来電車駅',
+    words: ['n5-0543', 'n5-0571', 'n5-0560', 'n5-0615', 'n5-0556', 'n5-0541', 'n5-0561', 'n5-0604', 'n5-0366', 'n5-0367', 'n5-0368', 'n5-0369', 'n5-0365', 'n5-0363', 'n5-0370', 'n5-0371', 'n5-0279', 'n5-0280', 'n5-0457', 'n5-0503', 'n5-0767', 'n5-0131', 'n5-0132'],
+    tutor: 'directions',
+  },
+  {
+    kind: 'n5',
+    id: 15,
+    unit: 2,
+    title: 'いっしょに行きませんか',
+    headline: '在哪裡做什麼、邀請別人',
+    minutes: 55,
+    grammar: ['〜で（場所）', '〜で（道具・言語）', '〜ませんか', '〜ましょう'],
+    kanji: '見聞読書',
+    words: ['n5-0533', 'n5-0568', 'n5-0638', 'n5-0562', 'n5-0621', 'n5-0346', 'n5-0348', 'n5-0350', 'n5-0349', 'n5-0379', 'n5-0460', 'n5-0450', 'n5-0449', 'n5-0273', 'n5-0735', 'n5-0744', 'n5-0024', 'n5-0762', 'n5-0233', 'n5-0234', 'n5-0115', 'n5-0749'],
+    tutor: 'weekend',
+  },
+  {
+    kind: 'n5',
+    id: 16,
+    unit: 2,
+    title: 'どんな音楽が好きですか',
+    headline: '喜歡、擅長、懂：〜が好きです',
+    minutes: 55,
+    grammar: ['〜が好きです', '〜が上手です', '〜がわかります', 'どんな', 'あまり・ぜんぜん', '〜から（理由）'],
+    kanji: '語話少',
+    words: ['n5-0717', 'n5-0719', 'n5-0718', 'n5-0715', 'n5-0716', 'n5-0639', 'n5-0461', 'n5-0462', 'n5-0547', 'anime-0100', 'anime-0117', 'n5-0236', 'n5-0595', 'n5-0745', 'n5-0733', 'n5-0739', 'n5-0738', 'n5-0498', 'n5-0501', 'n5-0774'],
+    tutor: 'anime-talk',
+  },
+  {
+    kind: 'n5',
+    id: 17,
+    unit: 3,
+    title: 'これをお願いします',
+    headline: '點餐：數量和「我要這個」',
+    minutes: 50,
+    grammar: ['〜をください', '〜にします', 'ひとつ・ふたつ', '〜と〜'],
+    kanji: '食飲魚店',
+    words: ['n5-0375', 'travel-0086', 'travel-0073', 'n5-0032', 'travel-0071', 'business-0071', 'business-0104', 'n5-0383', 'n5-0013', 'n5-0540', 'n5-0405', 'n5-0248', 'n5-0260', 'n5-0264', 'n5-0258', 'n5-0051', 'n5-0052', 'n5-0053', 'n5-0054', 'n5-0055', 'n5-0056', 'n5-0057', 'n5-0058', 'n5-0059', 'n5-0060'],
+    tutor: 'ramen',
+  },
+  {
+    kind: 'n5',
+    id: 18,
+    unit: 3,
+    title: 'これはいくらですか',
+    headline: '問價錢、找東西、說想要的東西',
+    minutes: 55,
+    grammar: ['いくら・〜円', 'ここ・そこ・あそこ', '〜がほしいです'],
+    kanji: '百千万円買',
+    words: ['n5-0505', 'n5-0076', 'n5-0048', 'n5-0049', 'n5-0050', 'n5-0062', 'n5-0373', 'n5-0382', 'n5-0519', 'n5-0520', 'n5-0521', 'n5-0493', 'n5-0522', 'n5-0558', 'n5-0696', 'travel-0186', 'n5-0229', 'n5-0228', 'n5-0447', 'travel-0112', 'n5-0545', 'n5-0721'],
+    tutor: 'shopping',
+  },
+  {
+    kind: 'n5',
+    id: 19,
+    unit: 3,
+    title: 'おいしいですね',
+    headline: '形容詞：好吃、熱鬧、方便',
+    minutes: 55,
+    grammar: ['い形容詞・な形容詞', '〜くないです', '形容詞＋名詞', '形容詞＋の', '〜ね・〜よ'],
+    kanji: '大小高安新古',
+    words: ['n5-0665', 'n5-0667', 'n5-0682', 'n5-0680', 'n5-0704', 'n5-0654', 'n5-0695', 'n5-0671', 'n5-0659', 'n5-0656', 'n5-0685', 'n5-0683', 'n5-0701', 'n5-0670', 'n5-0660', 'n5-0432', 'n5-0708', 'n5-0709', 'n5-0710', 'n5-0714', 'n5-0713', 'n5-0729', 'n5-0381', 'n5-0333', 'n5-0499', 'n5-0753', 'n5-0757', 'n5-0759'],
+    tutor: 'new-friend',
+  },
+  {
+    kind: 'n5',
+    id: 20,
+    unit: 3,
+    title: '週末はどうでしたか',
+    headline: '過去的事和感想：〜でした、〜かったです',
+    minutes: 55,
+    grammar: ['〜でした', '〜かったです', 'どうでしたか', 'あげます・もらいます・くれます'],
+    kanji: '休友山川',
+    words: ['n5-0158', 'n5-0157', 'n5-0467', 'n5-0391', 'n5-0392', 'n5-0537', 'n5-0593', 'n5-0681', 'n5-0684', 'n5-0676', 'n5-0655', 'n5-0673', 'n5-0712', 'n5-0727', 'n5-0384', 'n5-0387', 'n5-0309', 'n5-0536', 'n5-0634', 'n5-0572', 'n5-0442', 'n5-0029', 'n5-0009'],
+    tutor: 'meeting',
+  },
+  {
+    kind: 'n5',
+    id: 21,
+    unit: 4,
+    title: '部屋に何がありますか',
+    headline: '哪裡有什麼：あります・います',
+    minutes: 55,
+    grammar: ['〜に〜があります', '〜に〜がいます', '〜は〜にあります', '上・下・中・前・後ろ', '〜で〜があります', '〜や〜'],
+    kanji: '上下中外右左',
+    words: ['n5-0471', 'n5-0472', 'n5-0475', 'n5-0476', 'n5-0473', 'n5-0474', 'n5-0477', 'n5-0478', 'n5-0488', 'n5-0479', 'n5-0480', 'n5-0281', 'n5-0287', 'n5-0296', 'n5-0776', 'n5-0270', 'n5-0679', 'n5-0544', 'n5-0395', 'travel-0161', 'n5-0403', 'n5-0402', 'n5-0380', 'n5-0347', 'travel-0158', 'n5-0770'],
+    tutor: 'room-search',
+  },
+  {
+    kind: 'n5',
+    id: 22,
+    unit: 4,
+    title: '一週間に何回ですか',
+    headline: '量詞和次數：〜枚、〜回、〜時間',
+    minutes: 55,
+    grammar: ['〜枚・〜台・〜本', '〜に〜回', '〜時間・〜週間', '〜だけ'],
+    kanji: '年週間多',
+    words: ['n5-0068', 'n5-0071', 'n5-0067', 'n5-0070', 'n5-0081', 'n5-0082', 'n5-0069', 'n5-0073', 'n5-0740', 'n5-0085', 'n5-0080', 'n5-0086', 'n5-0087', 'n5-0088', 'n5-0769', 'n5-0464', 'n5-0619', 'n5-0645', 'n5-0090', 'travel-0065', 'n5-0747', 'n5-0451', 'n5-0453'],
+    tutor: 'konbini',
+  },
+  {
+    kind: 'n5',
+    id: 23,
+    unit: 4,
+    title: '台湾と日本とどちらが暑いですか',
+    headline: '比較、天氣和季節',
+    minutes: 55,
+    grammar: ['〜より', '〜のほうが', '〜がいちばん', '〜くなります・〜になります', '〜でしょう'],
+    kanji: '天気雨花',
+    words: ['n5-0385', 'n5-0386', 'n5-0388', 'n5-0627', 'travel-0201', 'n5-0409', 'n5-0397', 'n5-0398', 'n5-0399', 'n5-0400', 'n5-0678', 'n5-0653', 'n5-0084', 'n5-0494', 'n5-0734', 'n5-0741', 'n5-0742', 'n5-0610'],
+    tutor: 'meeting',
+  },
+  {
+    kind: 'n5',
+    id: 24,
+    unit: 4,
+    title: '京都へ行きたいです',
+    headline: '想做的事、旅行計畫：〜たいです',
+    minutes: 55,
+    grammar: ['〜たいです', '〜に行きます（目的）', 'どこか・何か', '何も〜ません'],
+    kanji: '空国長白',
+    words: ['travel-0149', 'travel-0150', 'travel-0162', 'travel-0018', 'travel-0001', 'n5-0648', 'travel-0054', 'n5-0352', 'n5-0454', 'n5-0551', 'n5-0374', 'n5-0755', 'n5-0512', 'n5-0758'],
+    tutor: 'hotel',
+  },
+  {
+    kind: 'n5',
+    id: 25,
+    unit: 5,
+    title: 'ちょっと待ってください',
+    headline: '動詞分類和て形：〜てください',
+    minutes: 60,
+    grammar: ['動詞のグループ', 'て形', '〜てください', '〜ましょうか'],
+    kanji: '言立入出',
+    words: ['n5-0629', 'n5-0542', 'n5-0552', 'n5-0631', 'n5-0633', 'n5-0637', 'n5-0535', 'n5-0580', 'n5-0611', 'n5-0588', 'n5-0586', 'n5-0616', 'n5-0587', 'n5-0600', 'n5-0651', 'business-0054', 'business-0051', 'business-0045', 'business-0084'],
+    tutor: 'phone',
+  },
+  {
+    kind: 'n5',
+    id: 26,
+    unit: 5,
+    title: '今、何をしていますか',
+    headline: '〜ています：正在做、現在的狀態',
+    minutes: 55,
+    grammar: ['〜ています（進行）', '〜ています（状態）', 'もう・まだ', '〜てから'],
+    kanji: '父母子男女',
+    words: ['n5-0584', 'n5-0582', 'n5-0607', 'n5-0650', 'n5-0539', 'n5-0557', 'n5-0538', 'n5-0188', 'n5-0183', 'n5-0184', 'n5-0185', 'n5-0186', 'travel-0154', 'n5-0752', 'n5-0750'],
+    tutor: 'new-friend',
+  },
+  {
+    kind: 'n5',
+    id: 27,
+    unit: 5,
+    title: '写真を撮ってもいいですか',
+    headline: '許可和禁止：〜てもいいです、〜てはいけません',
+    minutes: 55,
+    grammar: ['〜てもいいです', '〜てはいけません', '〜て、〜て'],
+    kanji: '学校',
+    words: ['n5-0583', 'n5-0592', 'n5-0566', 'n5-0564', 'n5-0603', 'n5-0455', 'n5-0732', 'n5-0463', 'travel-0181'],
+    tutor: 'house-rules',
+  },
+  {
+    kind: 'n5',
+    id: 28,
+    unit: 5,
+    title: 'まっすぐ行って、右に曲がってください',
+    headline: '問路、動作的順序、形容詞的て形',
+    minutes: 55,
+    grammar: ['〜て（順序）', '〜くて・〜で', '道の言い方'],
+    kanji: '東西南北道',
+    words: ['n5-0628', 'n5-0642', 'n5-0594', 'travel-0026', 'n5-0751', 'n5-0358', 'n5-0360', 'travel-0139', 'n5-0361', 'n5-0359', 'n5-0483', 'n5-0687', 'n5-0693', 'n5-0652', 'n5-0711'],
+    tutor: 'directions',
+  },
+  {
+    kind: 'n5',
+    id: 29,
+    unit: 6,
+    title: '無理をしないでください',
+    headline: 'ない形：〜ないでください、〜なければなりません',
+    minutes: 60,
+    grammar: ['ない形', '〜ないでください', '〜なければなりません', '〜なくてもいいです', '〜までに'],
+    kanji: '口目耳手足',
+    words: ['n5-0214', 'n5-0215', 'n5-0217', 'n5-0218', 'n5-0220', 'n5-0224', 'n5-0222', 'n5-0223', 'n5-0227', 'travel-0188', 'n5-0662', 'n5-0344', 'n5-0291', 'n5-0101', 'n5-0640', 'anime-0035', 'business-0067', 'business-0057', 'n5-0416', 'n5-0267'],
+    tutor: 'clinic',
+  },
+  {
+    kind: 'n5',
+    id: 30,
+    unit: 6,
+    title: '趣味は写真を撮ることです',
+    headline: '辭書形：〜ことができます、〜まえに',
+    minutes: 60,
+    grammar: ['辞書形', '〜ことができます', '趣味は〜ことです', '〜のが好きです', '〜まえに', '〜つもりです'],
+    kanji: '',
+    words: ['n5-0459', 'n5-0466', 'n5-0465', 'n5-0625', 'n5-0555', 'n5-0723', 'n5-0339', 'n5-0599', 'n5-0649', 'n5-0554', 'n5-0317', 'n5-0314', 'n5-0140', 'n5-0159', 'n5-0139', 'n5-0221', 'n5-0630', 'anime-0002'],
+    tutor: 'anime-talk',
+  },
+  {
+    kind: 'n5',
+    id: 31,
+    unit: 6,
+    title: '富士山に登ったことがありますか',
+    headline: 'た形：〜たことがあります、〜たり〜たり',
+    minutes: 55,
+    grammar: ['た形', '〜たことがあります', '〜たり〜たりします', '〜たあとで', '〜たほうがいいです'],
+    kanji: '',
+    words: ['n5-0613', 'travel-0163', 'travel-0165', 'n5-0570', 'n5-0187', 'n5-0136', 'n5-0657', 'n5-0410', 'n5-0690', 'business-0110', 'n5-0646', 'n5-0226', 'n5-0563'],
+    tutor: 'new-friend',
+  },
+  {
+    kind: 'n5',
+    id: 32,
+    unit: 6,
+    title: 'また明日ね',
+    headline: '常體：和朋友輕鬆聊天',
+    minutes: 60,
+    grammar: ['普通形', '普通形の質問', '〜と思います', '普通形＋名詞'],
+    kanji: '',
+    words: ['anime-0007', 'anime-0008', 'n5-0754', 'anime-0014', 'anime-0050', 'anime-0039', 'anime-0040', 'anime-0041', 'n5-0030', 'anime-0049', 'n5-0031', 'n5-0130', 'n5-0661', 'anime-0099'],
+    tutor: 'karaoke',
+  },
 ];
+
+/** 五十音課程（第 1–8 課） */
+export const KANA_LESSONS = LESSON_META.filter((l): l is KanaLessonMeta => l.kind === 'kana');
+/** N5 課程（第 9 課起） */
+export const COURSE_LESSONS = LESSON_META.filter((l): l is CourseLessonMeta => l.kind === 'n5');
 
 export function lessonMetaById(id: number): LessonMeta | undefined {
   return LESSON_META.find((l) => l.id === id);
 }
 
+/** 五十音課程的一課（練習頁、手寫頁的「第 N 課」範圍只有這幾課） */
+export function kanaLessonById(id: number): KanaLessonMeta | undefined {
+  return KANA_LESSONS.find((l) => l.id === id);
+}
+
+export function courseLessonById(id: number): CourseLessonMeta | undefined {
+  return COURSE_LESSONS.find((l) => l.id === id);
+}
+
 /** 課文檔案用：取得這一課的摘要（找不到代表資料寫錯，直接報錯） */
-export function lessonMeta(id: number): LessonMeta {
-  const m = lessonMetaById(id);
-  if (!m) throw new Error(`找不到第 ${id} 課的摘要`);
+export function kanaMeta(id: number): KanaLessonMeta {
+  const m = kanaLessonById(id);
+  if (!m) throw new Error(`找不到第 ${id} 課（五十音）的摘要`);
   return m;
+}
+
+export function courseMeta(id: number): CourseLessonMeta {
+  const m = courseLessonById(id);
+  if (!m) throw new Error(`找不到第 ${id} 課（N5）的摘要`);
+  return m;
+}
+
+/** N5 課程的單元：課程列表照單元分組 */
+export const UNITS: { n: number; title: string; topic: string }[] = [
+  { n: 1, title: 'はじめまして', topic: '自我介紹、身邊的東西、家人、時間' },
+  { n: 2, title: '毎日の生活', topic: '每天的作息、交通、邀約、興趣' },
+  { n: 3, title: '食べ物と買い物', topic: '點餐、購物、形容詞、過去的事' },
+  { n: 4, title: '家と町', topic: '房間與位置、數量、比較、旅行計畫' },
+  { n: 5, title: 'て形', topic: '拜託別人、正在做的事、規則、問路' },
+  { n: 6, title: 'いろいろな形', topic: 'ない形、辭書形、た形、常體' },
+];
+
+export function unitOf(n: number) {
+  return UNITS.find((u) => u.n === n);
 }

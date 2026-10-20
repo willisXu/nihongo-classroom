@@ -1,8 +1,8 @@
-import type { Lesson } from '../types';
-import { lessonMeta } from './meta';
+import type { KanaLesson } from '../types';
+import { kanaMeta } from './meta';
 
-export const lesson1: Lesson = {
-  ...lessonMeta(1),
+export const lesson: KanaLesson = {
+  ...kanaMeta(1),
   summary:
     '今天要做到兩件事：分得出平假名、片假名和漢字；看到あ行、か行、さ行的 15 個字，能直接念出來。頁面上的假名都可以點，會念給你聽。',
   sections: [

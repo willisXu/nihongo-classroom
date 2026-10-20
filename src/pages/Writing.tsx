@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { LESSON_META as LESSONS, lessonMetaById as lessonById } from '../data/lessons/meta';
+import { COURSE_LESSONS, KANA_LESSONS, kanaLessonById } from '../data/lessons/meta';
 import { kanaInfo, originText } from '../data/kana';
+import { kanjiInfo } from '../data/kanji';
 import type { Script } from '../data/types';
 import { lessonStore, recordWriting, writingStore } from '../state';
 import { readJSON, useStore, writeJSON } from '../state/store';
 import { ROW_CHOICES, SEI_ROW_IDS } from '../lib/kanaQuiz';
 import { EXTRA_ROWS, extraOf, lessonWriteRows, normalizeWriteRows, pickedChars, rowsFor, writingChars } from '../lib/writingScope';
-import { nextLesson } from '../lib/progress';
+import { kanaCourseDone, nextCourseLesson, nextKanaLesson } from '../lib/progress';
+import { isKanji } from '../lib/ja';
 import { getStrokePaths } from '../lib/strokes';
 import { speak } from '../lib/speech';
 import { usePageTitle } from '../lib/title';
@@ -38,9 +40,18 @@ const SMALL_INFO: Record<string, { r: string; note: string; say: string }> = {
   ヴ: { r: 'vu', note: '拼外國音的 v，多數人念成 ブ；例 ヴァイオリン，一般寫成 バイオリン', say: 'ヴァイオリン' },
 };
 
-/** 聽發音：小字單獨念不出來，改念例子 */
+/** 聽發音：小字單獨念不出來，改念例子；漢字念音讀和訓讀（單獨一個漢字，語音不知道要念哪一種） */
 function sayFor(ch: string): string {
+  const kj = kanjiInfo(ch);
+  if (kj) return [...kj.on, ...kj.kun.map((r) => r.replace('・', ''))].join('、');
   return SMALL_INFO[ch]?.say ?? ch;
+}
+
+/** 單獨打開一個漢字（錯題本、首頁的連結 ?char=日）：練教這個字的那一課的漢字 */
+function kanjiPick(ch: string | null) {
+  if (!ch || !isKanji(ch)) return null;
+  const l = COURSE_LESSONS.find((x) => x.kanji.includes(ch));
+  return pickedChars(l?.kanji ?? ch);
 }
 
 interface WritePrefs {
@@ -67,10 +78,10 @@ export default function Writing() {
   const lessons = useStore(lessonStore);
   // 課文「長得像的字」帶一組字過來（?chars=）：這次只練這幾個字，按範圍、換文字就回到一般的行。
   // 只是暫時的：存起來的範圍（prefs）不動，下次打開還是原本的
-  const [pick, setPick] = useState(() => (params.get('lesson') ? null : pickedChars(params.get('chars'))));
+  const [pick, setPick] = useState(() => (params.get('lesson') ? null : pickedChars(params.get('chars')) ?? kanjiPick(params.get('char'))));
   const [prefs, setPrefs] = useState<WritePrefs>(() => {
     const p = loadPrefs();
-    const l = lessonById(Number(params.get('lesson')));
+    const l = kanaLessonById(Number(params.get('lesson')));
     if (l) return { ...p, script: l.quiz.script, rows: lessonWriteRows(l.newKana) };
     if (pick) return p;
     const ch = params.get('char');
@@ -115,10 +126,14 @@ export default function Writing() {
 
   const inf = kanaInfo(current);
   const small = SMALL_INFO[current];
+  const kj = kanjiInfo(current);
+  const kanjiMode = !!pick && pick.chars.some(isKanji);
+  const courseNow = kanaCourseDone(lessons) ? nextCourseLesson(lessons) : undefined;
+  const learnedKanji = COURSE_LESSONS.filter((l) => lessons.done[l.id]).map((l) => l.kanji).join('');
   const stat = writing[current];
   const strokes = getStrokePaths(current)?.length ?? 0;
-  const upcoming = nextLesson(lessons);
-  const lessonChoices = LESSONS.filter((l) => l.id <= (upcoming?.id ?? LESSONS.length));
+  const upcoming = nextKanaLesson(lessons);
+  const lessonChoices = KANA_LESSONS.filter((l) => l.id <= (upcoming?.id ?? Infinity));
   const writtenInScope = chars.filter((c) => writing[c]).length;
 
   const toggleRow = (id: string) => {
@@ -216,11 +231,22 @@ export default function Writing() {
           >
             清音全部
           </button>
+          {courseNow?.kanji ? (
+            <button type="button" className="linkbtn" onClick={() => setPick(pickedChars(courseNow.kanji))}>
+              第 {courseNow.id} 課的漢字
+            </button>
+          ) : null}
+          {learnedKanji ? (
+            <button type="button" className="linkbtn" onClick={() => setPick(pickedChars(learnedKanji))}>
+              學過的漢字
+            </button>
+          ) : null}
         </div>
         {pick ? (
           <p className="pick-note">
             <span>
-              現在只練課文裡長得像的 {pick.chars.length} 個字：<span lang="ja">{pick.chars.join('、')}</span>
+              {kanjiMode ? `現在練 ${pick.chars.length} 個漢字：` : `現在只練課文裡長得像的 ${pick.chars.length} 個字：`}
+              <span lang="ja">{pick.chars.join('、')}</span>
             </span>
             <button type="button" className="linkbtn" onClick={() => setPick(null)}>
               回到原本的範圍
@@ -270,10 +296,24 @@ export default function Writing() {
               {current}
             </span>
             <div>
-              <p className="ws-r">{inf?.cell.r ?? small?.r}</p>
+              <p className="ws-r">{inf?.cell.r ?? small?.r ?? kj?.zh}</p>
               <p className="small">
                 {strokes} 畫{inf && inf.kind === 'sei' ? ` · ${originText(inf.cell, inf.script)}` : small ? ` · ${small.note}` : ''}
               </p>
+              {kj ? (
+                <p className="small ws-kanji">
+                  {kj.on.length ? (
+                    <span>
+                      音讀 <span lang="ja">{kj.on.join('、')}</span>
+                    </span>
+                  ) : null}
+                  {kj.kun.length ? (
+                    <span>
+                      訓讀 <span lang="ja">{kj.kun.map((r) => r.replace('・', '')).join('、')}</span>
+                    </span>
+                  ) : null}
+                </p>
+              ) : null}
             </div>
           </div>
           {result ? (

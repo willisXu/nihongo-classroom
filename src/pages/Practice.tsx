@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { LESSON_META as LESSONS, lessonMetaById as lessonById } from '../data/lessons/meta';
+import { KANA_LESSONS, kanaLessonById } from '../data/lessons/meta';
 import { SEION_ROWS } from '../data/kana';
 import { kanaLevel, kanaStore, lessonStore, recordKana, resetKanaProgress, type KanaStats } from '../state';
 import { readJSON, useStore, writeJSON } from '../state/store';
@@ -8,7 +8,7 @@ import {
   ALL_ROW_IDS, ROW_CHOICES, SEI_ROW_IDS, buildPool, hintFor, makeOptions, normalizeRows, pickItem,
   type QuizItem, type QuizMode, type QuizOption, type QuizScript,
 } from '../lib/kanaQuiz';
-import { countMastered, HIRA_KEYS, KATA_KEYS, nextLesson, quizKnownChars } from '../lib/progress';
+import { countMastered, HIRA_KEYS, KATA_KEYS, nextKanaLesson, quizKnownChars } from '../lib/progress';
 import { weakKanaKeys } from '../lib/mistakes';
 import { speak } from '../lib/speech';
 import { Masu, Segmented } from '../components/Controls';
@@ -48,7 +48,7 @@ export default function Practice() {
   const lessons = useStore(lessonStore);
   const [prefs, setPrefs] = useState<QuizPrefs>(() => {
     const p = loadPrefs();
-    const l = lessonById(Number(params.get('lesson')));
+    const l = kanaLessonById(Number(params.get('lesson')));
     return l ? { ...p, script: l.quiz.script, rows: normalizeRows(l.quiz.rows) } : p;
   });
   // 錯題練習（從錯題本進來）：只出答錯過、還沒連對 3 次的字；進來時決定是哪些字，練熟的會陸續跳過
@@ -178,8 +178,8 @@ export default function Practice() {
   const item = q.item;
   const answered = q.picked !== null;
   const correct = answered && item ? !!q.options[q.picked!]?.ok : false;
-  const upcoming = nextLesson(lessons);
-  const lessonChoices = LESSONS.filter((l) => l.id <= (upcoming?.id ?? LESSONS.length));
+  const upcoming = nextKanaLesson(lessons);
+  const lessonChoices = KANA_LESSONS.filter((l) => l.id <= (upcoming?.id ?? Infinity));
 
   return (
     <div className="wrap">

@@ -4,7 +4,7 @@
  */
 import { DECK_META, metaItemIds, unseenWords } from '../data/vocab/meta';
 import type { Activity, KanaStats, LessonProgress, SrsData } from '../state';
-import { countMastered, HIRA_KEYS, KATA_KEYS, lessonsDone, nextLesson } from './progress';
+import { countMastered, courseLessonsDone, HIRA_KEYS, kanaLessonsDone, KATA_KEYS, nextCourseLesson, nextKanaLesson } from './progress';
 import { deckStats } from './srs';
 import { studyDayKey } from './date';
 
@@ -43,7 +43,7 @@ export interface TodayInput {
 export function todayTasks({ activity, kana, lessons, srs, newPerDay, now }: TodayInput): Task[] {
   const key = studyDayKey(now);
   const today = activity[key] ?? {};
-  const next = nextLesson(lessons);
+  const next = nextKanaLesson(lessons);
   const tasks: Task[] = [];
 
   // 單字卡：學完平假名、或已經開始背單字之後才列入
@@ -56,7 +56,7 @@ export function todayTasks({ activity, kana, lessons, srs, newPerDay, now }: Tod
   }
   // 同一個字在好幾個牌組只算一次（「全部牌組」也只會出一張）
   const unseen = unseenWords(srs.cards);
-  if (seen > 0 || lessonsDone(lessons) >= VOCAB_AFTER_LESSONS) {
+  if (seen > 0 || kanaLessonsDone(lessons) >= VOCAB_AFTER_LESSONS || courseLessonsDone(lessons) > 0) {
     const day = srs.days[key] ?? { reviews: 0, fresh: 0, rev: 0, forgot: 0 };
     const newLeft = Math.min(unseen, Math.max(0, newPerDay - day.fresh));
     const practiced = today.review ?? 0;
@@ -88,15 +88,17 @@ export function todayTasks({ activity, kana, lessons, srs, newPerDay, now }: Tod
     });
   }
 
-  // 手寫：五十音課程還沒學完時，每天寫幾個這一課的字
-  if (next) {
+  // 手寫：五十音課程還沒學完時，每天寫幾個這一課的字；學完五十音之後，寫 N5 這一課的漢字（第 30 課起沒有新漢字就不列）
+  const course = next ? undefined : nextCourseLesson(lessons);
+  const writeTo = next ? `/writing?lesson=${next.id}` : course?.kanji ? `/writing?chars=${encodeURIComponent(course.kanji)}` : null;
+  if (writeTo) {
     const n = today.writing ?? 0;
     tasks.push({
       id: 'writing',
       title: `手寫 ${WRITING_GOAL} 個字`,
       detail: `今天寫了 ${n} 個字`,
       done: n >= WRITING_GOAL,
-      to: `/writing?lesson=${next.id}`,
+      to: writeTo,
       action: '去寫字',
       value: n,
       goal: WRITING_GOAL,

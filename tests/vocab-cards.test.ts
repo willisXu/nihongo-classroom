@@ -169,11 +169,12 @@ describe('牌組與課程摘要', () => {
 
   it('課程摘要和課文一致', async () => {
     const { LESSON_META } = await import('../src/data/lessons/meta');
-    const { LESSONS } = await import('../src/data/lessons');
+    const { LESSONS } = await import('./lessonData');
     expect(LESSON_META.map((l) => l.id)).toEqual(LESSONS.map((l) => l.id));
     for (const l of LESSONS) {
       const m = LESSON_META.find((x) => x.id === l.id)!;
-      expect({ title: l.title, headline: l.headline, quiz: l.quiz, newKana: l.newKana }).toEqual({ title: m.title, headline: m.headline, quiz: m.quiz, newKana: m.newKana });
+      // 課文檔案把摘要整個展開（...kanaMeta(1)），摘要的每個欄位都要一樣
+      for (const [k, v] of Object.entries(m)) expect((l as unknown as Record<string, unknown>)[k], `第 ${l.id} 課的 ${k}`).toEqual(v);
     }
   });
 });

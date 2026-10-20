@@ -118,6 +118,16 @@ describe('程度規則', () => {
     expect(conversationSystem(SCENARIOS[0], 'n5', known)).not.toContain(known);
   });
 
+  it('在上 N5 課程：告訴 AI 學過哪些文法；沒上課、或選了 N4 時照原本的說明', async () => {
+    const { conversationSystem, correctionSystem, SCENARIOS } = await import('../src/data/tutor');
+    const grammar = ['〜は〜です', '〜ます／〜ません'];
+    for (const sys of [conversationSystem(SCENARIOS[0], 'n5', '', false, grammar), correctionSystem('n5', '', false, grammar)]) {
+      expect(sys).toContain('has learned these patterns so far: 〜は〜です, 〜ます／〜ません');
+    }
+    expect(conversationSystem(SCENARIOS[0], 'n5')).toMatch(/around JLPT N5/);
+    expect(conversationSystem(SCENARIOS[0], 'n4', '', false, grammar)).not.toContain('〜は〜です');
+  });
+
   it('接電話的情境由學習者先開口：AI 不先說話，系統提示說明第一句是學習者的', async () => {
     const { conversationSystem, SCENARIOS } = await import('../src/data/tutor');
     const phone = SCENARIOS.find((s) => s.id === 'phone')!;

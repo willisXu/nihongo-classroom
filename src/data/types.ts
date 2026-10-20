@@ -67,6 +67,92 @@ export interface SentenceSegment {
   kind: 'kanji' | 'hira' | 'kata' | 'plain';
 }
 
+/* ---------------- N5 課程（第 9 課起）的區塊 ---------------- */
+
+/**
+ * 日文句子：漢字後面用《》標讀音，例如「私《わたし》は台湾人《たいわんじん》です。」（格式見 lib/ja.ts）。
+ * 課文裡的漢字一律標讀音，測試會檢查。
+ */
+export type JaText = string;
+
+/** 例句 */
+export interface Example {
+  ja: JaText;
+  zh: string;
+  /** 語音要念的文字：漢字容易念錯時才填（沒填時見 lib/ja.ts 的 jaSpeech） */
+  say?: string;
+  /** 補充說明 */
+  note?: Inline;
+}
+
+/** 會話的一句 */
+export interface DialogLine {
+  /** 說話的人（中文或日文名字） */
+  who: string;
+  ja: JaText;
+  zh: string;
+  say?: string;
+}
+
+/** 這一課的單字 */
+export interface VocabEntry {
+  /** 寫法和讀音，例如 '学生《がくせい》'、'コーヒー' */
+  ja: JaText;
+  zh: string;
+  /**
+   * 對應的單字卡（例如 n5-0123）：課程頁的「用單字卡練這一課的單字」會出這些卡。
+   * 測試檢查卡片的讀音、寫法和這裡一樣。
+   */
+  id?: string;
+  /** 用法提醒，例如「接在別人的姓後面」（可以用 [[ ]]、{{ }} 寫日文） */
+  note?: Inline;
+  /** 要念的文字（很少用；沒填時見 components/CourseBlocks.tsx 的 wordSay） */
+  say?: string;
+}
+
+/**
+ * N5 的一個漢字（data/kanji.ts）：課文的漢字區塊、手寫描字頁都從這裡取讀音和意思。
+ * 讀音只列 N5 用得到的（不是字典上全部的念法）。
+ */
+export interface KanjiInfo {
+  /** 日本的寫法 */
+  ch: string;
+  /** 台灣的寫法（和日本不同時才填），例如 学 → 學 */
+  tc?: string;
+  /** 中文意思 */
+  zh: string;
+  /** 音讀（片假名） */
+  on: string[];
+  /** 訓讀（平假名；送假名用「・」分開，例如 た・べる） */
+  kun: string[];
+}
+
+/** 這一課的漢字（讀音和意思在 data/kanji.ts） */
+export interface KanjiEntry {
+  ch: string;
+  /** 用到這個字的詞 */
+  words: { ja: JaText; zh: string }[];
+  /** 提醒（字形和中文不同、意思不同等） */
+  note?: Inline;
+}
+
+/** 練習題 */
+export type DrillItem =
+  /**
+   * 選擇題：ja 是題目句（要填的地方寫成 ＿＿），options 是選項；q 是中文的題目說明（沒有 ja 時必填）。
+   * zh：題目句的中文意思。why：答完之後顯示的說明。
+   */
+  | { kind: 'choice'; q?: Inline; ja?: JaText; zh?: string; options: JaText[]; answer: number; why?: Inline }
+  /**
+   * 排列句子：tiles 照正確的順序寫，畫面上會打亂；zh 是句子的中文意思。
+   * also：別的也自然的順序（同樣的詞塊換個順序，例如時間和地點對調），排成這些也算對。
+   */
+  | { kind: 'order'; zh: string; tiles: JaText[]; also?: JaText[][]; why?: Inline }
+  /** 聽力：念 ja（不顯示），選出中文意思；答完才顯示句子 */
+  | { kind: 'listen'; ja: JaText; say?: string; options: string[]; answer: number; why?: Inline };
+
+export type DrillKind = DrillItem['kind'];
+
 export type LessonBlock =
   /** 一段說明文字 */
   | { type: 'p'; text: Inline }
@@ -90,8 +176,21 @@ export type LessonBlock =
   /** 手寫與電腦字型對照 */
   /** labels：兩欄的說明（沒填時是「筆畫分開／常連成一筆」，只適合 き さ そ り 這種會連筆的字） */
   | { type: 'fontcompare'; chars: string; caption?: Inline; labels?: [string, string] }
-  /** 小表格 */
-  | { type: 'table'; head: string[]; rows: Inline[][] };
+  /** 小表格（格子裡的日文用 [[ ]] 或 {{ }} 包起來，可以標讀音） */
+  | { type: 'table'; head: string[]; rows: Inline[][] }
+  /* ----- 以下是 N5 課程用的區塊 ----- */
+  /** 會話：scene 是情境說明 */
+  | { type: 'dialog'; title?: string; scene?: Inline; lines: DialogLine[] }
+  /** 文法：form 是句型（〔名詞〕是空格），points 是說明，examples 是例句 */
+  | { type: 'grammar'; title: string; form: JaText; points: Inline[]; examples: Example[] }
+  /** 例句 */
+  | { type: 'examples'; title?: string; items: Example[] }
+  /** 這一課的單字 */
+  | { type: 'vocab'; title?: string; items: VocabEntry[]; note?: Inline }
+  /** 這一課的漢字 */
+  | { type: 'kanji'; items: KanjiEntry[] }
+  /** 練習題 */
+  | { type: 'drill'; title?: string; intro?: Inline; items: DrillItem[] };
 
 export interface LessonSection {
   id: string;
@@ -99,15 +198,24 @@ export interface LessonSection {
   blocks: LessonBlock[];
 }
 
-export interface Lesson {
+interface LessonBase {
   id: number;
-  /** 短標題，例如「た行・な行」 */
+  /** 短標題，例如「た行・な行」「はじめまして」 */
   title: string;
   /** 頁面大標 */
   headline: string;
   /** 導言 */
   summary: string;
   minutes: number;
+  sections: LessonSection[];
+  homework: Inline[];
+  /** 下一課預告 */
+  next?: Inline;
+}
+
+/** 五十音課程（第 1–8 課） */
+export interface KanaLesson extends LessonBase {
+  kind: 'kana';
   /**
    * 這一課新學的字元（含小字、長音符號）。
    * 課程裡 words / pairs 的 ja 只能用「到這一課為止學過的字元」，測試會檢查。
@@ -115,14 +223,33 @@ export interface Lesson {
   newKana: string[];
   /** 這一課練習頁的出題範圍 */
   quiz: { script: Script; rows: string[] };
-  sections: LessonSection[];
-  homework: Inline[];
-  /** 下一課預告 */
-  next?: Inline;
 }
 
+/** N5 課程（第 9 課起） */
+export interface CourseLesson extends LessonBase {
+  kind: 'n5';
+  /** 第幾單元（課程列表照單元分組，見 lessons/meta.ts 的 UNITS） */
+  unit: number;
+  /** 學完能做到的事（Can-do） */
+  goals: Inline[];
+  /** 這一課的文法重點（短的句型名稱，例如「〜は〜です」）：課程列表、AI 家教用 */
+  grammar: string[];
+  /** 這一課新教的漢字（測試檢查和課文的漢字區塊一樣） */
+  kanji: string;
+  /** 這一課的單字卡 id（測試檢查和課文的單字區塊一樣） */
+  words: string[];
+  /** 搭配的 AI 家教情境（data/scenarios.ts 的 id） */
+  tutor?: string;
+  /** 可以搭配的教材（例如「《いろどり》入門 第 3 課」），列在作業後面 */
+  companion?: Inline[];
+}
+
+export type Lesson = KanaLesson | CourseLesson;
+
 /** 一課的摘要：列表頁、首頁和練習頁只需要這些欄位 */
-export type LessonMeta = Pick<Lesson, 'id' | 'title' | 'headline' | 'minutes' | 'newKana' | 'quiz'>;
+export type KanaLessonMeta = Pick<KanaLesson, 'kind' | 'id' | 'title' | 'headline' | 'minutes' | 'newKana' | 'quiz'>;
+export type CourseLessonMeta = Pick<CourseLesson, 'kind' | 'id' | 'title' | 'headline' | 'minutes' | 'unit' | 'grammar' | 'kanji' | 'words' | 'tutor'>;
+export type LessonMeta = KanaLessonMeta | CourseLessonMeta;
 
 /* ---------------- 單字 ---------------- */
 

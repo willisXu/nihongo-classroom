@@ -8,7 +8,7 @@
 
 | 檔案 | 內容 |
 | --- | --- |
-| `src/data/strokes.json` | 假名筆順資料，由 `scripts/fetch-kanjivg.mjs` 從 KanjiVG 下載後擷取而成 |
+| `src/data/strokes.json` | 假名和 N5 課程 103 個漢字的筆順資料，由 `scripts/fetch-kanjivg.mjs` 從 KanjiVG 下載後擷取而成 |
 | `public/favicon.svg` | 網站圖示，裡面的三個筆畫是 KanjiVG「あ」（`03042.svg`）的筆畫路徑 |
 | `public/icons/*.png` | 加到主畫面、安裝成 App 用的圖示，由 `public/favicon.svg` 的「あ」筆畫繪製而成 |
 

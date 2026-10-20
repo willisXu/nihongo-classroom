@@ -134,13 +134,29 @@ export function collectChars(sources) {
     }
     for (const ch of displayFieldText(file, text)) display.add(ch);
     for (const top of lessonBlocks(file, text)) {
-      if (/\btype: '(?:words|pairs)'/.test(top)) for (const ch of fieldOf(top, 'title')) ja.add(ch);
+      if (/\btype: '(?:words|pairs|vocab|examples|drill|dialog)'/.test(top)) for (const ch of fieldOf(top, 'title')) ja.add(ch);
     }
     if (/(^|[\\/])data[\\/]vocab[\\/]/.test(file)) for (const m of text.matchAll(/\bzh: '([^']+)'/g)) for (const ch of m[1]) meaning.add(ch);
-    // 明確是日文的地方：kanji／ja／say 欄位、[[漢字|かな]] 和 {{かな}} 標記、標了讀音的課文片段
-    const jaFields = [/\b(?:kanji|ja|say): '([^']+)'/g, /\[\[([^\]]+)\]\]/g, /\{\{([^}]+)\}\}/g, /text: '([^']+)', ruby: /g];
+    // 明確是日文的地方：kanji／ja／say 欄位、[[漢字|かな]] 和 {{かな}} 標記、標了讀音的課文片段；
+    // N5 課程的會話人名（who）、漢字（ch）、句型（form），和後面接《讀音》的漢字（見 src/lib/ja.ts）
+    const jaFields = [
+      /\b(?:kanji|ja|say|who|ch|form): '([^']+)'/g,
+      /\[\[([^\]]+)\]\]/g,
+      /\{\{([^}]+)\}\}/g,
+      /text: '([^']+)', ruby: /g,
+      /([\u3400-\u9fff\uf900-\ufaff々〆ヶ]+)《/g,
+      // N5 課程摘要的文法名稱（課程列表用假名字型顯示），例如 grammar: ['〜歳', '〜に住んでいます']
+      /\bgrammar: \[([^\]]*)\]/g,
+    ];
+    // 日文欄位裡的符號也收（會話的「―」、說明表格的「→」…），不然那幾個字會掉到系統字型
     for (const re of jaFields) {
-      for (const m of text.matchAll(re)) for (const ch of m[1]) if (isJa(ch.codePointAt(0))) ja.add(ch);
+      for (const m of text.matchAll(re)) for (const ch of m[1]) if (ch.codePointAt(0) >= 0x20) ja.add(ch);
+    }
+    // 課名有假名的（「今、何時ですか」）在課程列表、首頁用假名字型顯示，課名裡的漢字也要收
+    if (/(^|[\\/])data[\\/]lessons[\\/]meta\.ts$/.test(file)) {
+      for (const m of text.matchAll(/\btitle: '([^']+)'/g)) {
+        if (/[\u3041-\u3096\u30a1-\u30fa]/u.test(m[1])) for (const ch of m[1]) if (isJa(ch.codePointAt(0))) ja.add(ch);
+      }
     }
     // 一串連續的日文字裡有假名，才當成日文
     let run = [];

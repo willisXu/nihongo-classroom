@@ -150,6 +150,44 @@ describe('線上語音念不出來', () => {
     expect(sp.speechState().remoteFailed).toBe(false);
   });
 
+  it('一句念完才呼叫 onEnd（整段會話一句接一句）；被下一句或停止取消的不呼叫', async () => {
+    const { spoken } = setup([HARUKA]);
+    const sp = await import('../src/lib/speech');
+    sp.initSpeech();
+    const ends: string[] = [];
+    sp.speak('いち', { onEnd: () => ends.push('いち') });
+    spoken[0].onstart?.();
+    spoken[0].onend?.();
+    expect(ends).toEqual(['いち']);
+    // 念到一半按了別的：被取消的那句之後觸發的 end、error 都不算念完
+    sp.speak('に', { onEnd: () => ends.push('に') });
+    sp.speak('さん', { onEnd: () => ends.push('さん') });
+    spoken[1].onerror?.({ error: 'interrupted' });
+    spoken[1].onend?.();
+    expect(ends).toEqual(['いち']);
+    sp.stopSpeaking();
+    spoken[2].onend?.();
+    expect(ends).toEqual(['いち']);
+    // 念不出來（內建語音出錯）也要往下走，整段播放才不會卡住
+    sp.speak('よん', { onEnd: () => ends.push('よん') });
+    spoken[3].onerror?.({ error: 'synthesis-failed' });
+    expect(ends).toEqual(['いち', 'よん']);
+  });
+
+  it('線上語音念不出來改用內建語音時，onEnd 等內建語音念完才呼叫一次', async () => {
+    const { spoken } = setup([GOOGLE, HARUKA]);
+    const sp = await import('../src/lib/speech');
+    sp.initSpeech();
+    const ends: number[] = [];
+    sp.speak('みず', { onEnd: () => ends.push(1) });
+    spoken[0].onerror?.({ error: 'network' });
+    expect(ends).toEqual([]);
+    expect(spoken[1].voice?.name).toBe(HARUKA.name);
+    spoken[1].onend?.();
+    spoken[0].onend?.();
+    expect(ends).toEqual([1]);
+  });
+
   it('離線時一開始就用內建語音', async () => {
     const { spoken } = setup([GOOGLE, HARUKA], { online: false });
     const sp = await import('../src/lib/speech');

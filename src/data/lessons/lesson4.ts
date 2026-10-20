@@ -1,8 +1,8 @@
-import type { Lesson } from '../types';
-import { lessonMeta } from './meta';
+import type { KanaLesson } from '../types';
+import { kanaMeta } from './meta';
 
-export const lesson4: Lesson = {
-  ...lessonMeta(4),
+export const lesson: KanaLesson = {
+  ...kanaMeta(4),
   summary:
     '學完這一課，46 個平假名清音全部到齊。你會念彈舌的ら行，知道 を 只當助詞、ん 自己算一拍，也能念出 [[こんにちは]] 和 [[さようなら]]。',
   sections: [

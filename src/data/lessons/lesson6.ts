@@ -1,8 +1,8 @@
-import type { Lesson } from '../types';
-import { lessonMeta } from './meta';
+import type { KanaLesson } from '../types';
+import { kanaMeta } from './meta';
 
-export const lesson6: Lesson = {
-  ...lessonMeta(6),
+export const lesson: KanaLesson = {
+  ...kanaMeta(6),
   summary:
     '這一課沒有新的形狀，只有小字 ゃ ゅ ょ っ 和長音的規則。學完後你能數出每個詞有幾拍，分得清 [[きて]] 和 [[きって]]，也能在電腦上打出日文。平假名到這裡全部學完。',
   sections: [

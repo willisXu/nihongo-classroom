@@ -32,8 +32,12 @@ const LEVEL_DESC: Record<TutorLevel, string> = {
 /**
  * 程度說明。還在學五十音（knownKana 是學過的假名）時，照實告訴模型：只認得這些字；
  * 畫面上有附羅馬拼音（romaji）時也說一聲，沒學過的字也跟得上。
+ * 在上 N5 課程（grammar 是學過的文法）時，告訴模型學到哪裡，盡量只用學過的句型。
  */
-function levelDesc(level: TutorLevel, knownKana = '', romaji = false): string {
+function levelDesc(level: TutorLevel, knownKana = '', romaji = false, grammar: string[] = []): string {
+  if (level === 'n5' && grammar.length) {
+    return `The learner is working through a beginner (JLPT N5) course and has learned these patterns so far: ${grammar.join(', ')}. Build your Japanese mainly from these patterns and basic vocabulary; avoid grammar outside this list when you can, and if you must use it, keep it very simple.`;
+  }
   if (level !== 'kana' || !knownKana) return LEVEL_DESC[level];
   const help = romaji
     ? 'The app shows romaji under every Japanese line, so they can follow even words with kana they have not learned; when it is natural, prefer words written with the kana above.'
@@ -74,7 +78,7 @@ export const CONVERSATION_SCHEMA = obj({
   done: B,
 });
 
-export function conversationSystem(s: Scenario, level: TutorLevel, knownKana = '', romaji = false): string {
+export function conversationSystem(s: Scenario, level: TutorLevel, knownKana = '', romaji = false, grammar: string[] = []): string {
   return [
     'You are a friendly Japanese conversation partner and teacher for a Taiwanese adult learner whose native language is Traditional Chinese (Taiwan).',
     '',
@@ -82,7 +86,7 @@ export function conversationSystem(s: Scenario, level: TutorLevel, knownKana = '
     `You play: ${s.aiRole}. The learner plays: ${s.learnerRole}.`,
     `The learner's goal: ${s.goal}`,
     '',
-    `Learner level: ${levelDesc(level, knownKana, romaji)} ${SPEECH_RULE[level]} ${SCRIPT_RULE[level]}`,
+    `Learner level: ${levelDesc(level, knownKana, romaji, grammar)} ${SPEECH_RULE[level]} ${SCRIPT_RULE[level]}`,
     '',
     'Rules:',
     '- Stay in character. Keep each reply to one or two short sentences so the learner can follow.',
@@ -127,10 +131,10 @@ export const CORRECTION_SCHEMA = obj({
   tip: S,
 });
 
-export function correctionSystem(level: TutorLevel, knownKana = '', romaji = false): string {
+export function correctionSystem(level: TutorLevel, knownKana = '', romaji = false, grammar: string[] = []): string {
   return [
     'You are a careful, encouraging Japanese teacher for a Taiwanese adult learner (native Traditional Chinese, Taiwan).',
-    `Learner level: ${levelDesc(level, knownKana, romaji)} ${SCRIPT_RULE[level]} Keep the learner\'s meaning and roughly their sentence length; prefer words at their level.`,
+    `Learner level: ${levelDesc(level, knownKana, romaji, grammar)} ${SCRIPT_RULE[level]} Keep the learner\'s meaning and roughly their sentence length; prefer words at their level.`,
     'The learner sends a Japanese sentence they wrote, sometimes followed by the meaning they intended in Chinese. Check it and answer in the JSON format:',
     '- verdict: "correct" (natural and correct), "minor" (understandable but with small mistakes or unnatural wording), or "wrong" (grammar or meaning problems).',
     '- corrected: the most natural correct version that keeps the intended meaning and politeness level. If already correct, repeat it.',

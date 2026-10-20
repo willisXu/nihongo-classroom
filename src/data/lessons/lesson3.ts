@@ -1,8 +1,8 @@
-import type { Lesson } from '../types';
-import { lessonMeta } from './meta';
+import type { KanaLesson } from '../types';
+import { kanaMeta } from './meta';
 
-export const lesson3: Lesson = {
-  ...lessonMeta(3),
+export const lesson: KanaLesson = {
+  ...kanaMeta(3),
   summary:
     '學完這一課，你能念出は行、ま行的 10 個字，發得出牙齒不碰嘴唇的 ふ，分得出 ひ 和 し，也知道 は、へ 當助詞時要念 wa、e。累計 35 個平假名。',
   sections: [
