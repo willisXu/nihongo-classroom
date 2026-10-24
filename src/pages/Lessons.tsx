@@ -1,13 +1,23 @@
 import { Link } from 'react-router-dom';
-import { COURSE_LESSONS, KANA_LESSONS, LESSON_META, UNITS } from '../data/lessons/meta';
+import { COURSE_LESSONS, COURSE_LEVELS, KANA_LESSONS, LESSON_META, UNITS, levelLessons } from '../data/lessons/meta';
 import type { CourseLessonMeta, KanaLessonMeta } from '../data/types';
 import { lessonStore, type LessonProgress } from '../state';
 import { useStore } from '../state/store';
-import { courseLessonsDone, kanaLessonsDone, lessonsDone, nextLesson } from '../lib/progress';
+import { kanaLessonsDone, lessonsDone, nextLesson } from '../lib/progress';
 import { Icon } from '../components/Icon';
 import { usePageTitle } from '../lib/title';
 
 const hasKana = (t: string) => /[ぁ-ゖァ-ヺ]/u.test(t);
+
+const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/** 捲到某一組課（五十音、N5、N4），焦點放在那一組的標題（鍵盤和讀屏軟體從那裡接著讀） */
+function jumpTo(id: string) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.scrollIntoView({ behavior: reduceMotion() ? 'auto' : 'smooth', block: 'start' });
+  el.focus({ preventScroll: true });
+}
 
 export default function Lessons() {
   usePageTitle('課程');
@@ -15,27 +25,52 @@ export default function Lessons() {
   const next = nextLesson(progress);
   const done = lessonsDone(progress);
   const kanaDone = kanaLessonsDone(progress);
-  const courseDone = courseLessonsDone(progress);
-  const units = UNITS.map((u) => ({ ...u, lessons: COURSE_LESSONS.filter((l) => l.unit === u.n) })).filter((u) => u.lessons.length);
+  // 初級課程照程度（N5、N4）分組，組裡再照單元分
+  const levels = COURSE_LEVELS.map((lv) => {
+    const lessons = levelLessons(lv.level);
+    const units = UNITS.map((u) => ({ ...u, lessons: lessons.filter((l) => l.unit === u.n) })).filter((u) => u.lessons.length);
+    return { ...lv, lessons, units, done: lessons.filter((l) => progress.done[l.id]).length };
+  }).filter((lv) => lv.lessons.length);
   const first = COURSE_LESSONS[0]?.id;
-  const last = COURSE_LESSONS[COURSE_LESSONS.length - 1]?.id;
   return (
     <div className="wrap">
       <header className="ph">
         <p className="eyebrow">課程 · 已完成 {done}/{LESSON_META.length}</p>
-        <h1>從五十音到 N5</h1>
+        <h1>從五十音到 {levels[levels.length - 1]?.name ?? 'N5'}</h1>
         <p className="lede">
           前 {KANA_LESSONS.length} 課學假名，每課約 40 分鐘，單字只會用到學過的假名。
           {COURSE_LESSONS.length
-            ? `第 ${first} 課起是初級課程：會話、文法、單字、漢字和練習題，${COURSE_LESSONS.length} 課學完大約是日本語能力試驗 N5 的程度。`
+            ? `第 ${first} 課起是初級課程：會話、文法、單字、漢字和練習題。` +
+              levels.map((lv) => `第 ${lv.lessons[0].id}–${lv.lessons[lv.lessons.length - 1].id} 課學完大約是日本語能力試驗 ${lv.name} 的程度`).join('，') +
+              '。'
             : ''}
           照順序上就好。
         </p>
+        {levels.length ? (
+          /* 課很多：跳到五十音、N5、N4 那一組，或直接打開下一課 */
+          <nav className="lesson-jump" aria-label="跳到">
+            <button type="button" className="chip-btn" onClick={() => jumpTo('h-kana-course')}>
+              五十音 <span className="num">{kanaDone}/{KANA_LESSONS.length}</span>
+            </button>
+            {levels.map((lv) => (
+              <button key={lv.level} type="button" className="chip-btn" onClick={() => jumpTo(`h-${lv.level}-course`)}>
+                {lv.title} <span className="num">{lv.done}/{lv.lessons.length}</span>
+              </button>
+            ))}
+            {next ? (
+              <Link className="chip-btn chip-next" to={`/lessons/${next.id}`}>
+                下一課：第 {next.id} 課 <Icon name="arrow-right" size={14} />
+              </Link>
+            ) : null}
+          </nav>
+        ) : null}
       </header>
 
       <section className="lesson-group" aria-labelledby="h-kana-course">
         <div className="lg-head">
-          <h2 id="h-kana-course">五十音</h2>
+          <h2 id="h-kana-course" tabIndex={-1}>
+            五十音
+          </h2>
           <p className="small">
             第 1–{KANA_LESSONS.length} 課 · 已完成 {kanaDone}/{KANA_LESSONS.length}
           </p>
@@ -47,15 +82,17 @@ export default function Lessons() {
         </ol>
       </section>
 
-      {units.length ? (
-        <section className="lesson-group" aria-labelledby="h-n5-course">
+      {levels.map((lv) => (
+        <section key={lv.level} className="lesson-group" aria-labelledby={`h-${lv.level}-course`}>
           <div className="lg-head">
-            <h2 id="h-n5-course">N5 初級</h2>
+            <h2 id={`h-${lv.level}-course`} tabIndex={-1}>
+              {lv.title}
+            </h2>
             <p className="small">
-              第 {first}–{last} 課 · 已完成 {courseDone}/{COURSE_LESSONS.length}
+              第 {lv.lessons[0].id}–{lv.lessons[lv.lessons.length - 1].id} 課 · 已完成 {lv.done}/{lv.lessons.length}
             </p>
           </div>
-          {units.map((u) => (
+          {lv.units.map((u) => (
             <div key={u.n} className="unit">
               <h3 className="unit-h">
                 <span className="unit-n">第 {u.n} 單元</span>
@@ -70,7 +107,7 @@ export default function Lessons() {
             </div>
           ))}
         </section>
-      ) : null}
+      ))}
 
       <div className="btn-row" style={{ marginBlock: '8px 32px' }}>
         <Link className="btn" to="/chart">
@@ -78,6 +115,9 @@ export default function Lessons() {
         </Link>
         <Link className="btn" to="/roadmap">
           <Icon name="map" size={17} /> 學習地圖
+        </Link>
+        <Link className="btn" to="/mock">
+          <Icon name="target" size={17} /> N4 模擬考
         </Link>
       </div>
     </div>

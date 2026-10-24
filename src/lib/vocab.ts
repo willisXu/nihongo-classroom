@@ -76,7 +76,7 @@ export function courseFirst(ids: string[], priority: string[]): string[] {
 }
 
 /**
- * 'all'、牌組代號或 lesson-N（N5 課程某一課的單字）→ 卡片 id 清單。
+ * 'all'、牌組代號或 lesson-N（初級課程某一課的單字）→ 卡片 id 清單。
  * priority：課程教過的字，排在新卡的最前面（見 courseFirst）。
  * 「全部牌組」裡，同一個字（假名＋漢字相同）出現在好幾個牌組時：學過的卡片照常複習（各自有排程，
  * 到期數才對得上）；還沒學過的只留一張當新卡，而且已經在別的牌組學過的字不再當新卡出現。

@@ -468,5 +468,5 @@ export const lesson: CourseLesson = {
     '和[AI 家教](/tutor?scenario=anime-talk)聊你喜歡的動畫，說說你會做什麼、喜歡做什麼。',
   ],
   next: '下一課學「た形」：用 [[富士山《ふじさん》に登《のぼ》ったことがありますか]] 和同事聊去過的地方、吃過的東西，也學怎麼給別人建議。',
-  companion: ['《いろどり 生活の日本語》初級 1 第 2 課（[國際交流基金，免費下載](https://www.irodori.jpf.go.jp/)）', '《大家的日本語》初級 I 第 18 課'],
+  companion: ['《いろどり 生活の日本語》初級 1 第 2 課（[國際交流基金，免費下載](https://www.irodori.jpf.go.jp/)）', '《大家的日本語》第 18 課'],
 };

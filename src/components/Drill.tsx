@@ -1,11 +1,11 @@
 /**
- * 課文裡的練習題（N5 課程）：選擇題、排列句子、聽力。答完馬上看對錯和說明，最後算總分。
+ * 課文裡的練習題（初級課程）：選擇題、排列句子、聽力。答完馬上看對錯和說明，最後算總分。
  * 答題紀錄不存：課程的練習是當場確認懂了沒有，要長期記住的單字交給單字卡。
  */
-import { useId, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { DrillItem } from '../data/types';
 import { jaSpeech } from '../lib/ja';
-import { speak } from '../lib/speech';
+import { speak, stopSpeaking } from '../lib/speech';
 import { Ja } from './Ja';
 import { Rich } from './Rich';
 import { Icon } from './Icon';
@@ -29,6 +29,19 @@ export function shuffled<T>(list: T[], rand: () => number = Math.random, avoid: 
 }
 
 /**
+ * 選擇題、聽力題的選項順序：每次打亂（課文裡正確答案常寫在第一個，照寫的順序顯示就變成「選第一個就對」）。
+ * 回傳原本的選項編號，答案照原本的編號比對。
+ */
+export function optionOrder(n: number, rand: () => number = Math.random): number[] {
+  const idx = Array.from({ length: n }, (_, i) => i);
+  for (let i = n - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [idx[i], idx[j]] = [idx[j], idx[i]];
+  }
+  return idx;
+}
+
+/**
  * 排列句子：排出來的詞（文字）和正確答案、或 also 裡另一種也自然的順序一樣就算對
  * （兩個一樣的詞互換也算對）
  */
@@ -43,11 +56,30 @@ export function fillBlank(ja: string, option: string): string {
   return ja.replace(/＿＿+/, option);
 }
 
-type Result = boolean | null;
+const KANA_ONLY = /^[\u3041-\u309f\u30a0-\u30ffー]+$/u;
 
-export function DrillBlock({ title, intro, items }: { title?: string; intro?: string; items: DrillItem[] }) {
+/**
+ * ⟦⟧ 題（考念法、寫法）答完以後顯示的句子：把要考的詞換成「漢字《讀音》」。
+ * 念法題：⟦切符⟧＋選項 きっぷ → 切符《きっぷ》；寫法題：⟦りょこう⟧＋選項 ⟦旅行⟧ → 旅行《りょこう》。
+ * 其他（換句話說：⟦暗《くら》い⟧）照原句顯示。
+ */
+export function fillTarget(ja: string, option: string): string {
+  const m = /⟦([^⟧]+)⟧/.exec(ja);
+  if (!m) return ja;
+  const inner = m[1];
+  const opt = option.replace(/[⟦⟧]/g, '');
+  if (!inner.includes('《') && !KANA_ONLY.test(inner) && KANA_ONLY.test(opt)) return ja.replace(m[0], `｜${inner}《${opt}》`);
+  if (KANA_ONLY.test(inner) && !KANA_ONLY.test(opt) && !opt.includes('《')) return ja.replace(m[0], `｜${opt}《${inner}》`);
+  return ja;
+}
+
+export type Result = boolean | null;
+
+export function DrillBlock({ title, intro, items, onResults }: { title?: string; intro?: string; items: DrillItem[]; onResults?: (results: Result[]) => void }) {
   const [round, setRound] = useState(0);
   const [results, setResults] = useState<Result[]>(() => items.map(() => null));
+  // 模擬考：每答一題就把結果交給頁面算總分
+  useEffect(() => onResults?.(results), [results, onResults]);
   const answered = results.filter((r) => r !== null).length;
   const right = results.filter((r) => r === true).length;
   const record = (i: number, ok: boolean) => setResults((rs) => rs.map((r, j) => (j === i ? ok : r)));
@@ -101,6 +133,8 @@ function DrillQuestion({ item, n, onAnswer }: { item: DrillItem; n: number; onAn
       return <OrderQ item={item} n={n} onAnswer={onAnswer} />;
     case 'listen':
       return <ListenQ item={item} n={n} onAnswer={onAnswer} />;
+    case 'talk':
+      return <TalkQ item={item} n={n} onAnswer={onAnswer} />;
   }
 }
 
@@ -120,7 +154,8 @@ function ChoiceQ({ item, n, onAnswer }: { item: Extract<DrillItem, { kind: 'choi
   const qid = useId();
   const done = picked !== null;
   const ok = picked === item.answer;
-  const full = item.ja ? fillBlank(item.ja, item.options[item.answer]) : null;
+  const full = item.ja ? (/＿＿/.test(item.ja) ? fillBlank(item.ja, item.options[item.answer]) : fillTarget(item.ja, item.options[item.answer])) : null;
+  const order = useMemo(() => optionOrder(item.options.length), [item.options.length]);
   return (
     <div className="dq" role="group" aria-labelledby={qid}>
       <div id={qid} className="dq-q">
@@ -134,7 +169,7 @@ function ChoiceQ({ item, n, onAnswer }: { item: Extract<DrillItem, { kind: 'choi
         {item.zh && !done ? <p className="dq-zh">{item.zh}</p> : null}
       </div>
       <div className="dq-opts">
-        {item.options.map((o, i) => (
+        {order.map((i) => (
           <button
             key={i}
             type="button"
@@ -147,7 +182,7 @@ function ChoiceQ({ item, n, onAnswer }: { item: Extract<DrillItem, { kind: 'choi
               onAnswer(i === item.answer);
             }}
           >
-            <Ja text={o} />
+            <Ja text={item.options[i]} />
           </button>
         ))}
       </div>
@@ -166,6 +201,114 @@ function ChoiceQ({ item, n, onAnswer }: { item: Extract<DrillItem, { kind: 'choi
             </p>
           ) : null}
           {item.zh ? <p className="dq-zh">{item.zh}</p> : null}
+          {item.why ? (
+            <p>
+              <Rich text={item.why} />
+            </p>
+          ) : null}
+        </Verdict>
+      ) : null}
+    </div>
+  );
+}
+
+/** 聽力題的選項：中文，或日文（optionsJa） */
+function AnswerOptions({ options, ja, order, answer, picked, onPick }: { options: string[]; ja?: boolean; order: number[]; answer: number; picked: number | null; onPick: (i: number) => void }) {
+  const done = picked !== null;
+  const ok = picked === answer;
+  return (
+    <div className={`dq-opts${ja ? '' : ' dq-opts-zh'}`}>
+      {order.map((i) => (
+        <button
+          key={i}
+          type="button"
+          className={`dq-opt${done && i === answer ? ' is-right' : ''}${done && i === picked && !ok ? ' is-wrong' : ''}`}
+          aria-disabled={done || undefined}
+          aria-pressed={picked === i}
+          onClick={() => {
+            if (done) return;
+            onPick(i);
+          }}
+        >
+          {ja ? <Ja text={options[i]} /> : options[i]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** 課程裡的角色：女生（リン、鈴木さん、山田さん）、男生（田中さん、中村さん、高橋部長、マイク、森さん） */
+const FEMALE = /女|リン|鈴木|山田/;
+const MALE = /男|田中|中村|高橋|マイク|森/;
+
+/** 對話裡的人用不同的音高念：男生低一點、女生高一點（「男の人」「女の人」和課程角色），其他的照出現順序輪流 */
+export function talkPitch(lines: { who: string }[]): number[] {
+  const order: string[] = [];
+  return lines.map(({ who }) => {
+    if (MALE.test(who)) return 0.8;
+    if (FEMALE.test(who)) return 1.15;
+    if (!order.includes(who)) order.push(who);
+    return order.indexOf(who) % 2 ? 1.15 : 0.85;
+  });
+}
+
+function TalkQ({ item, n, onAnswer }: { item: Extract<DrillItem, { kind: 'talk' }>; n: number; onAnswer: (ok: boolean) => void }) {
+  const [picked, setPicked] = useState<number | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const qid = useId();
+  const done = picked !== null;
+  const ok = picked === item.answer;
+  const order = useMemo(() => optionOrder(item.options.length), [item.options.length]);
+  const pitch = useMemo(() => talkPitch(item.lines), [item.lines]);
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+      stopSpeaking();
+    };
+  }, []);
+  const play = (rate?: number) => {
+    stopSpeaking();
+    const next = (i: number) => {
+      if (!alive.current || i >= item.lines.length) return setPlaying(false);
+      const ln = item.lines[i];
+      const started = speak(ln.say ?? jaSpeech(ln.ja), { rate, pitch: pitch[i], onEnd: () => next(i + 1) });
+      if (!started) setPlaying(false);
+    };
+    setPlaying(true);
+    next(0);
+  };
+  return (
+    <div className="dq" role="group" aria-labelledby={qid}>
+      <div id={qid} className="dq-q">
+        <span className="dq-n">第 {n} 題</span>
+        <p className="dq-ask">
+          <Rich text={item.q} />
+        </p>
+      </div>
+      <div className="btn-row">
+        <button type="button" className="btn btn-sm" onClick={() => (playing ? (stopSpeaking(), setPlaying(false)) : play())} aria-pressed={playing}>
+          <Icon name={playing ? 'stop' : 'speaker'} size={17} /> {playing ? '停止' : '播放對話'}
+        </button>
+        <button type="button" className="btn btn-sm" onClick={() => play(0.6)}>
+          慢速
+        </button>
+      </div>
+      <AnswerOptions options={item.options} ja={item.optionsJa} order={order} answer={item.answer} picked={picked} onPick={(i) => {
+        setPicked(i);
+        onAnswer(i === item.answer);
+      }} />
+      {done ? (
+        <Verdict ok={ok}>
+          <ul className="dq-talk">
+            {item.lines.map((ln, i) => (
+              <li key={i}>
+                <Ja text={ln.who} className="dq-who" />
+                <Ja text={ln.ja} />
+              </li>
+            ))}
+          </ul>
           {item.why ? (
             <p>
               <Rich text={item.why} />
@@ -280,11 +423,12 @@ function ListenQ({ item, n, onAnswer }: { item: Extract<DrillItem, { kind: 'list
   const done = picked !== null;
   const ok = picked === item.answer;
   const say = item.say ?? jaSpeech(item.ja);
+  const order = useMemo(() => optionOrder(item.options.length), [item.options.length]);
   return (
     <div className="dq" role="group" aria-labelledby={qid}>
       <div id={qid} className="dq-q">
         <span className="dq-n">第 {n} 題</span>
-        <p className="dq-ask">聽聽看，選出意思</p>
+        <p className="dq-ask">{item.q ? <Rich text={item.q} /> : '聽聽看，選出意思'}</p>
       </div>
       <div className="btn-row">
         <button type="button" className="btn btn-sm" onClick={() => speak(say)}>
@@ -294,24 +438,10 @@ function ListenQ({ item, n, onAnswer }: { item: Extract<DrillItem, { kind: 'list
           慢速
         </button>
       </div>
-      <div className="dq-opts dq-opts-zh">
-        {item.options.map((o, i) => (
-          <button
-            key={i}
-            type="button"
-            className={`dq-opt${done && i === item.answer ? ' is-right' : ''}${done && i === picked && !ok ? ' is-wrong' : ''}`}
-            aria-disabled={done || undefined}
-            aria-pressed={picked === i}
-            onClick={() => {
-              if (done) return;
-              setPicked(i);
-              onAnswer(i === item.answer);
-            }}
-          >
-            {o}
-          </button>
-        ))}
-      </div>
+      <AnswerOptions options={item.options} ja={item.optionsJa} order={order} answer={item.answer} picked={picked} onPick={(i) => {
+        setPicked(i);
+        onAnswer(i === item.answer);
+      }} />
       {done ? (
         <Verdict ok={ok}>
           <div className="dv-sent">

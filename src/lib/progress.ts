@@ -1,7 +1,7 @@
 /** 由各項紀錄推算的進度數字 */
 import { SEION_CELLS } from '../data/kana';
 import { COURSE_LESSONS, KANA_LESSONS, LESSON_META } from '../data/lessons/meta';
-import type { CourseLessonMeta, KanaLessonMeta, LessonMeta } from '../data/types';
+import type { CourseLessonMeta, CourseLevel, KanaLessonMeta, LessonMeta } from '../data/types';
 import { kanaLevel, type Activity, type KanaStats, type LessonProgress, type TutorLevel } from '../state';
 import { addDays, studyDayKey, studyDayStart } from './date';
 import { buildPool } from './kanaQuiz';
@@ -18,7 +18,7 @@ export function lessonQuizKeys(lesson: KanaLessonMeta): string[] {
   return buildPool(lesson.quiz.rows, lesson.quiz.script, 'see').map((it) => it.key);
 }
 
-/** 下一堂要上的課（五十音或 N5，全部完成時回傳 undefined） */
+/** 下一堂要上的課（五十音或初級課程，全部完成時回傳 undefined） */
 export function nextLesson(progress: LessonProgress): LessonMeta | undefined {
   return LESSON_META.find((l) => !progress.done[l.id]);
 }
@@ -28,12 +28,12 @@ export function nextKanaLesson(progress: LessonProgress): KanaLessonMeta | undef
   return KANA_LESSONS.find((l) => !progress.done[l.id]);
 }
 
-/** N5 課程的下一課 */
+/** 初級課程（N5、N4）的下一課 */
 export function nextCourseLesson(progress: LessonProgress): CourseLessonMeta | undefined {
   return COURSE_LESSONS.find((l) => !progress.done[l.id]);
 }
 
-/** 完成幾課（五十音和 N5 一起算） */
+/** 完成幾課（五十音和初級課程一起算） */
 export function lessonsDone(progress: LessonProgress): number {
   return LESSON_META.filter((l) => progress.done[l.id]).length;
 }
@@ -57,7 +57,7 @@ export function learnedKana(progress: LessonProgress): string {
   return KANA_LESSONS.filter((l) => l.id < upTo).flatMap((l) => l.newKana).join('');
 }
 
-/** 完成的 N5 課，加上正在上的那一課（照課的順序） */
+/** 完成的初級課程的課，加上正在上的那一課（照課的順序） */
 function startedCourse(progress: LessonProgress): CourseLessonMeta[] {
   const now = nextCourseLesson(progress);
   // 五十音還沒學完時，N5 的第一課還不算「正在上」
@@ -66,11 +66,13 @@ function startedCourse(progress: LessonProgress): CourseLessonMeta[] {
 }
 
 /**
- * 學過的 N5 文法（完成的課，加上正在上的那一課）：AI 家教照這些出題、聊天。
- * 還沒開始上 N5 課程時是空的。
+ * 學過的文法（完成的課，加上正在上的那一課）：AI 家教照這些出題、聊天。
+ * level：只要某個程度（N5、N4）的課。還沒開始上初級課程時是空的。
  */
-export function learnedGrammar(progress: LessonProgress): string[] {
-  return startedCourse(progress).flatMap((l) => l.grammar);
+export function learnedGrammar(progress: LessonProgress, level?: CourseLevel): string[] {
+  return startedCourse(progress)
+    .filter((l) => !level || l.level === level)
+    .flatMap((l) => l.grammar);
 }
 
 /** 課程教過的單字（同上，照課的順序）：單字卡先出這些新卡（見 lib/vocab.ts 的 courseFirst） */
@@ -110,7 +112,9 @@ export function todayActivity(activity: Activity, now: number) {
   return activity[studyDayKey(now)] ?? {};
 }
 
-/** AI 家教的建議程度：五十音還沒學完就用「只用假名」 */
+/** AI 家教的建議程度：五十音還沒學完就用「只用假名」，N5 的課都上完了就用 N4 */
 export function suggestedLevel(progress: LessonProgress): TutorLevel {
-  return kanaCourseDone(progress) ? 'n5' : 'kana';
+  if (!kanaCourseDone(progress)) return 'kana';
+  const n5 = COURSE_LESSONS.filter((l) => l.level === 'n5');
+  return n5.length && n5.every((l) => progress.done[l.id]) ? 'n4' : 'n5';
 }

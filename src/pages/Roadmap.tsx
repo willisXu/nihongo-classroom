@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom';
 import { lessonStore } from '../state';
 import { useStore } from '../state/store';
-import { courseLessonsDone, kanaLessonsDone } from '../lib/progress';
-import { COURSE_LESSONS, KANA_LESSONS } from '../data/lessons/meta';
+import { kanaLessonsDone } from '../lib/progress';
+import { KANA_LESSONS, levelLessons } from '../data/lessons/meta';
 import { usePageTitle } from '../lib/title';
 
 const PHASES = [
@@ -21,7 +21,7 @@ const PHASES = [
   {
     when: '第 5～9 個月',
     title: '初級後半（約 N4）',
-    body: '主教材第 26–50 課：可能形、被動、使役等動詞變化，以及敬語入門。加入固定的聽力練習，考前兩個月開始做模擬題。',
+    body: '這裡的第 33–56 課（N4），每週約 2 課：可能形、被動、使役等動詞變化，條件句，以及職場敬語入門；每個單元最後有小測驗。想多讀多聽，可以搭配《いろどり》初級 2 或《大家的日本語》第 26–50 課。加入固定的聽力練習，考前兩個月開始做模擬題（這裡有一份 N4 模擬考，也可以做 JLPT 官方樣題）。',
     goal: '聽懂慢速的日常對話，讀懂簡單的短文。',
   },
   {
@@ -70,8 +70,11 @@ export default function Roadmap() {
   usePageTitle('學習地圖');
   const progress = useStore(lessonStore);
   const kanaDone = kanaLessonsDone(progress);
-  const courseDone = courseLessonsDone(progress);
-  const phaseNow = kanaDone < KANA_LESSONS.length ? 0 : courseDone < COURSE_LESSONS.length ? 1 : 2;
+  const n5 = levelLessons('n5');
+  const n4 = levelLessons('n4');
+  const n5Done = n5.filter((l) => progress.done[l.id]).length;
+  const n4Done = n4.filter((l) => progress.done[l.id]).length;
+  const phaseNow = kanaDone < KANA_LESSONS.length ? 0 : n5Done < n5.length ? 1 : n4Done < n4.length ? 2 : 3;
 
   return (
     <div className="wrap">
@@ -106,9 +109,15 @@ export default function Roadmap() {
                     五十音課程已完成 {kanaDone}/{KANA_LESSONS.length} 課。<Link to="/lessons">看課程</Link>
                   </p>
                 ) : null}
-                {i === 1 && COURSE_LESSONS.length ? (
+                {i === 1 && n5.length ? (
                   <p className="small">
-                    N5 課程已完成 {courseDone}/{COURSE_LESSONS.length} 課。<Link to="/lessons">看課程</Link>
+                    N5 課程已完成 {n5Done}/{n5.length} 課。<Link to="/lessons">看課程</Link>
+                  </p>
+                ) : null}
+                {i === 2 && n4.length ? (
+                  <p className="small">
+                    N4 課程已完成 {n4Done}/{n4.length} 課。<Link to="/lessons">看課程</Link>　學完以後做
+                    <Link to="/mock">N4 模擬考</Link>，檢查每一科能不能答對七成。
                   </p>
                 ) : null}
               </div>

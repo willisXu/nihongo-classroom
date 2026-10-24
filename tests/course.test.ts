@@ -40,6 +40,7 @@ function blockInlines(b: LessonBlock): Inline[] {
     case 'table':
       return b.rows.flat();
     case 'dialog':
+    case 'reading':
       return b.scene ? [b.scene] : [];
     case 'grammar':
       return [...b.points, ...b.examples.flatMap((e) => (e.note ? [e.note] : []))];
@@ -64,6 +65,7 @@ function jaTextsOf(l: CourseLesson): { where: string; text: JaText }[] {
     for (const b of s.blocks) {
       const at = (what: string) => `「${s.title}」的${what}`;
       if (b.type === 'dialog') for (const ln of b.lines) out.push({ where: at('會話'), text: ln.ja }, { where: at('會話的人名'), text: ln.who });
+      if (b.type === 'reading') for (const ln of b.lines) out.push({ where: at('短文'), text: ln.ja });
       if (b.type === 'grammar') {
         out.push({ where: at('句型'), text: b.form });
         for (const e of b.examples) out.push({ where: at('例句'), text: e.ja });
@@ -79,6 +81,8 @@ function jaTextsOf(l: CourseLesson): { where: string; text: JaText }[] {
           }
           if (d.kind === 'order') for (const t of d.tiles) out.push({ where: at('排列題'), text: t });
           if (d.kind === 'listen') out.push({ where: at('聽力題'), text: d.ja });
+          if (d.kind === 'talk') for (const ln of d.lines) out.push({ where: at('對話聽力'), text: ln.ja }, { where: at('對話聽力的人名'), text: ln.who });
+          if ((d.kind === 'listen' || d.kind === 'talk') && d.optionsJa) for (const o of d.options) out.push({ where: at('聽力題的選項'), text: o });
         }
       }
     }
@@ -87,7 +91,7 @@ function jaTextsOf(l: CourseLesson): { where: string; text: JaText }[] {
 }
 
 /** 網站裡的連結：有這一頁（App.tsx 的路由）、這一課、這個牌組、這個 AI 家教情境 */
-const PAGES = /^\/(?:lessons(?:\/\d+)?|chart|mistakes|stats|practice|writing|vocab(?:\/[\w-]+)?|review\/[\w-]+|tutor|roadmap|settings)?$/;
+const PAGES = /^\/(?:lessons(?:\/\d+)?|chart|mistakes|stats|practice|writing|vocab(?:\/[\w-]+)?|review\/[\w-]+|tutor|roadmap|settings|mock)?$/;
 function linkProblem(href: string): string | null {
   if (!href.startsWith('/')) return null;
   const u = new URL(href, 'https://x.test');
@@ -113,7 +117,7 @@ function linkProblem(href: string): string | null {
 const blocksOf = (l: CourseLesson) => l.sections.flatMap((s) => s.blocks);
 const drillsOf = (l: CourseLesson): DrillItem[] => blocksOf(l).flatMap((b) => (b.type === 'drill' ? b.items : []));
 
-describe('N5 的漢字', () => {
+describe('課程的漢字（N5、N4）', () => {
   it('讀音、台灣寫法的格式；課程教的字都在清單裡，清單裡的字都有一課教', () => {
     const bad: string[] = [];
     const taught = new Set(COURSE_LESSONS.flatMap((l) => [...l.kanji]));
@@ -135,7 +139,7 @@ describe('N5 的漢字', () => {
   });
 });
 
-describe('N5 課程', () => {
+describe('初級課程（N5、N4）', () => {
   it('課程摘要：每一課都屬於一個單元，單元照順序', () => {
     expect(COURSE_LESSON_DATA.map((l) => l.id)).toEqual(COURSE_LESSONS.map((l) => l.id));
     if (!COURSE_LESSONS.length) return;
@@ -185,6 +189,8 @@ describe('N5 課程', () => {
       it('日文的格式正確，漢字都標了讀音', () => {
         const bad: string[] = [];
         for (const { where, text } of jaTextsOf(lesson)) {
+          // ⟦⟧（考漢字的念法、寫法：不標讀音）只能用在選擇題
+          if (text.includes('⟦') && !/選擇題|練習題/.test(where)) bad.push(`${where}「${text}」：⟦⟧ 只能用在選擇題`);
           try {
             parseJa(text);
           } catch (e) {
@@ -261,6 +267,38 @@ describe('N5 課程', () => {
         expect(new Set(ids).size, '同一張單字卡出現兩次').toBe(ids.length);
       });
 
+      it('單字：N4 的新詞填詞性（之後做成單字卡），不做卡片的詞標 noCard', () => {
+        const POS = ['noun', 'verb', 'i-adj', 'na-adj', 'adverb', 'expression', 'number', 'pronoun', 'counter', 'particle', 'conjunction', 'interjection', 'prefix', 'suffix'];
+        const bad: string[] = [];
+        for (const b of blocksOf(lesson)) {
+          if (b.type !== 'vocab') continue;
+          for (const w of b.items) {
+            if (lesson.level === 'n5') {
+              if (w.pos || w.group || w.noCard) bad.push(`${w.ja}：N5 的課不用 pos、group、noCard`);
+              continue;
+            }
+            const marks = [w.id && 'id', w.pos && 'pos', w.noCard && 'noCard'].filter(Boolean);
+            if (marks.length !== 1) bad.push(`${w.ja}：id、pos、noCard 要剛好填一個（現在：${marks.join('、') || '都沒有'}）`);
+            if (w.pos && !POS.includes(w.pos)) bad.push(`${w.ja}：沒有 ${w.pos} 這個詞性`);
+            if (w.group && w.pos !== 'verb') bad.push(`${w.ja}：只有動詞填 group`);
+            if (w.pos !== 'verb') continue;
+            if (!w.group) {
+              bad.push(`${w.ja}：動詞要填 group（第幾類）`);
+              continue;
+            }
+            const r = jaReading(w.ja).replace(/[〜～]/g, '');
+            try {
+              conjugate(r, w.group, 'te');
+            } catch {
+              bad.push(`${w.ja}：第 ${w.group} 類動詞的辭書形語尾不對（單字區塊的動詞寫辭書形）`);
+            }
+            if (w.group === 2 && !/[いきぎしじちぢにひびぴみりえけげせぜてでねへべぺめれ]る$/.test(r)) bad.push(`${w.ja}：第二類動詞要是 い段／え段＋る`);
+            if (w.group === 3 && !/(する|くる)$/.test(r)) bad.push(`${w.ja}：第三類只有 する、くる`);
+          }
+        }
+        expect(bad).toEqual([]);
+      });
+
       it('摘要（meta.ts）的 words 和課文的單字卡 id 一致', () => {
         const ids = blocksOf(lesson).flatMap((b) => (b.type === 'vocab' ? b.items.flatMap((w) => (w.id ? [w.id] : [])) : []));
         expect(lesson.words).toEqual(ids);
@@ -297,13 +335,18 @@ describe('N5 課程', () => {
             }
             continue;
           }
-          const opts = d.options.map((o) => (d.kind === 'choice' ? jaPlain(o) : o));
+          // 選項在畫面上會打亂順序（components/Drill.tsx 的 optionOrder）：說明不能用「第二句」「第三個選項」指選項
+          const pos = /第[一二三四1-4]\s*(?:句|個句子|個選項|項)|前兩句|後兩句|最後一句/;
+          for (const t of [d.why ?? '', d.kind === 'choice' ? d.q ?? '' : '']) if (pos.test(t)) bad.push(`選項會打亂，不能用位置指選項：${t}`);
+          if (d.kind === 'talk' && d.lines.length < 2) bad.push(`對話聽力至少要兩句：${d.q}`);
+          const opts = d.options.map((o) => (d.kind === 'choice' || ('optionsJa' in d && d.optionsJa) ? jaPlain(o) : o));
           if (d.answer < 0 || d.answer >= d.options.length) bad.push(`答案超出選項：${opts.join('／')}`);
           if (new Set(opts).size !== opts.length) bad.push(`選項重複：${opts.join('／')}`);
           if (d.options.length < 2) bad.push(`選項太少：${opts.join('／')}`);
           if (d.kind === 'choice') {
             if (!d.q && !d.ja) bad.push(`選擇題沒有題目：${opts.join('／')}`);
-            if (d.ja && !/＿＿/.test(d.ja)) bad.push(`題目句沒有空格（＿＿）：${d.ja}`);
+            // 題目句要有空格（＿＿），或是用 ⟦⟧ 標出要考的詞（念法、寫法、換句話說）
+            if (d.ja && !/＿＿|⟦/.test(d.ja)) bad.push(`題目句沒有空格（＿＿）也沒有 ⟦⟧：${d.ja}`);
           }
         }
         expect(bad).toEqual([]);

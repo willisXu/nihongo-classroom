@@ -85,7 +85,7 @@ function acceptedAs(target: string, src: string): boolean {
 /* ───────── 資料 ───────── */
 
 describe('stroke data', () => {
-  it('has all 169 kana and the N5 kanji in the 109×109 KanjiVG space', () => {
+  it('has all 169 kana and the course kanji (N5, N4) in the 109×109 KanjiVG space', () => {
     expect(data._viewBox).toBe('0 0 109 109');
     const kana = CHARS.filter((c) => /[\u3040-\u30ff]/u.test(c));
     expect(kana).toHaveLength(169);
@@ -105,7 +105,7 @@ describe('stroke data', () => {
   });
 
   it('returns undefined for unknown characters, including prototype keys', () => {
-    expect(getStrokePaths('漢')).toBeUndefined();
+    expect(getStrokePaths('鬱')).toBeUndefined();
     expect(getStrokePaths('constructor')).toBeUndefined();
     expect(getStrokePoints('toString')).toBeUndefined();
     expect(hasStrokes('')).toBe(false);

@@ -36,6 +36,29 @@ describe('動詞變化', () => {
     expect(() => conjugate('たべ', 2, 'masu')).toThrow();
   });
 
+  it('N4 的變化：可能形、被動、使役、意向形、命令形、ば形、禁止形', () => {
+    const forms = ['potential', 'passive', 'causative', 'volitional', 'imperative', 'ba', 'prohibitive'] as const;
+    const all = (w: string, g: 1 | 2 | 3) => forms.map((f) => conjugate(w, g, f));
+    expect(all('書く', 1)).toEqual(['書ける', '書かれる', '書かせる', '書こう', '書け', '書けば', '書くな']);
+    expect(all('かう', 1)).toEqual(['かえる', 'かわれる', 'かわせる', 'かおう', 'かえ', 'かえば', 'かうな']);
+    expect(all('まつ', 1)).toEqual(['まてる', 'またれる', 'またせる', 'まとう', 'まて', 'まてば', 'まつな']);
+    expect(all('はなす', 1)).toEqual(['はなせる', 'はなされる', 'はなさせる', 'はなそう', 'はなせ', 'はなせば', 'はなすな']);
+    expect(all('行く', 1)).toEqual(['行ける', '行かれる', '行かせる', '行こう', '行け', '行けば', '行くな']);
+    expect(all('帰る', 1)).toEqual(['帰れる', '帰られる', '帰らせる', '帰ろう', '帰れ', '帰れば', '帰るな']);
+    expect(all('食べる', 2)).toEqual(['食べられる', '食べられる', '食べさせる', '食べよう', '食べろ', '食べれば', '食べるな']);
+    expect(all('する', 3)).toEqual(['できる', 'される', 'させる', 'しよう', 'しろ', 'すれば', 'するな']);
+    expect(all('勉強する', 3)).toEqual(['勉強できる', '勉強される', '勉強させる', '勉強しよう', '勉強しろ', '勉強すれば', '勉強するな']);
+    expect(all('くる', 3)).toEqual(['こられる', 'こられる', 'こさせる', 'こよう', 'こい', 'くれば', 'くるな']);
+    expect(all('来る', 3)).toEqual(['来られる', '来られる', '来させる', '来よう', '来い', '来れば', '来るな']);
+    expect(conjugate('ある', 1, 'ba')).toBe('あれば');
+    // 敬語動詞：ます形〜います、命令形〜い（くださる → ください）
+    expect(['いらっしゃる', 'おっしゃる', 'なさる', 'くださる'].map((w) => conjugate(w, 1, 'masu'))).toEqual(['いらっしゃいます', 'おっしゃいます', 'なさいます', 'くださいます']);
+    expect(conjugate('くださる', 1, 'imperative')).toBe('ください');
+    expect(conjugate('なさる', 1, 'te')).toBe('なさって');
+    expect(conjugate('いらっしゃる', 1, 'nai')).toBe('いらっしゃらない');
+    expect(() => conjugate('ある', 1, 'potential')).toThrow();
+  });
+
   it('單字卡的每個動詞都變得出來（分類有填、語尾對）', () => {
     for (const d of DECKS) {
       for (const it of d.items) {

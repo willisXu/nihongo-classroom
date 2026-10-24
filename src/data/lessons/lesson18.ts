@@ -427,5 +427,5 @@ export const lesson: CourseLesson = {
     '和[AI 家教](/tutor?scenario=shopping)練習在藥妝店找東西、問價錢。',
   ],
   next: '下一課學形容詞：[[おいしい]]、[[高《たか》い]]、[[きれい]]、[[静《しず》か]]，和同事吃午餐時說「好好吃耶」「好熱鬧」，也學句尾 [[ね]]、[[よ]] 的語氣。',
-  companion: ['《いろどり 生活の日本語》入門 第 15、16 課（[國際交流基金，免費下載](https://www.irodori.jpf.go.jp/)）', '《大家的日本語》初級 I 第 3 課'],
+  companion: ['《いろどり 生活の日本語》入門 第 15、16 課（[國際交流基金，免費下載](https://www.irodori.jpf.go.jp/)）', '《大家的日本語》第 3 課'],
 };

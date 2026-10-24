@@ -176,7 +176,8 @@ export default function Tutor() {
   const knownKana =
     kanaCourseDone(lessons) ? '' : learnedKana(lessons) + (nextKanaLesson(lessons)?.newKana.join('') ?? '');
   // 在上 N5 課程：告訴 AI 學過哪些文法（完成的課和正在上的那一課）
-  const grammar = useMemo(() => learnedGrammar(lessons), [lessons]);
+  // N4 程度：N5 的文法都會了，只列 N4 課程學過的句型
+  const grammar = useMemo(() => learnedGrammar(lessons, level === 'n4' ? 'n4' : 'n5'), [lessons, level]);
 
   // 在這一頁設定好金鑰時，設定的區塊會整個換成家教畫面（「連線成功」來不及看到、焦點也會掉）：
   // 另外顯示一行成功訊息，焦點放在那裡

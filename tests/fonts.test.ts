@@ -45,6 +45,9 @@ describe('字型瘦身', () => {
     const hot = displayHotChars({ file: 'data/lessons/lesson9.ts', text }, []);
     for (const ch of '技巧單字練習') expect(hot.has(ch)).toBe(true);
     expect(hot.has('讀')).toBe(false);
+    // 短文區塊（課文）和模擬考題組的短文，標題也是 .rowtitle
+    expect(collectChars([{ file: 'data/lessons/lesson47.ts', text: "{ type: 'reading', title: '洗衣店的價目和須知', lines: [] }" }]).ja.has('須')).toBe(true);
+    expect(collectChars([{ file: 'data/mock/n4.ts', text: "{ id: 'a', title: '問題 1', reading: { title: '桌上的便條', lines: [] } }" }]).ja.has('桌')).toBe(true);
     // 其他資料檔的 label（例如五十音的行名）不是印章
     expect(collectChars([{ file: 'data/kana.ts', text: "{ type: 'callout', label: '假的' }" }]).display.has('假')).toBe(false);
     expect(objectTops("{ a: '{x}', b: [1, { c: 2 }], d: 'e' }")).toEqual([' c: 2 ', " a: '{x}', b: , d: 'e' "]);
@@ -58,11 +61,13 @@ describe('字型瘦身', () => {
     const { ja } = collectChars([{ file: 'data/lessons/lesson9.ts', text }]);
     for (const ch of '田中私学生日先校') expect(ja.has(ch), ch).toBe(true);
     for (const ch of '太陽在文是我') expect(ja.has(ch), ch).toBe(false);
+    // 寫法題的選項（⟦旅族⟧）只有漢字，也要收
+    expect(collectChars([{ file: 'data/lessons/lesson36.ts', text: "{ kind: 'choice', options: ['⟦旅族⟧', '⟦家族⟧'] }" }]).ja.has('旅')).toBe(true);
     // 日文欄位裡的符號（會話的「―」、表格裡的「→」）也收
     const marks = collectChars([{ file: 'data/lessons/lesson20.ts', text: "{ ja: '元気《げんき》ですか。―はい。', note: '{{楽《たの》しい → 楽《たの》しかった}}' }" }]);
     for (const ch of '―→') expect(marks.ja.has(ch), ch).toBe(true);
     // 課程摘要的文法名稱：只有漢字的也收（課程列表用假名字型）
-    const meta = collectChars([{ file: 'data/lessons/meta.ts', text: "{ kind: 'n5', grammar: ['〜歳', '数字'], headline: '說明' }" }]);
+    const meta = collectChars([{ file: 'data/lessons/meta.ts', text: "{ kind: 'course', grammar: ['〜歳', '数字'], headline: '說明' }" }]);
     for (const ch of '歳数字') expect(meta.ja.has(ch), ch).toBe(true);
     expect(meta.ja.has('說')).toBe(false);
     // 課名是日文時（有假名），裡面單獨的漢字也收；中文課名不收

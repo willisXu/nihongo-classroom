@@ -412,5 +412,5 @@ export const lesson: CourseLesson = {
     '和[AI 家教](/tutor?scenario=anime-talk)聊你喜歡的動畫和歌：說喜歡哪一部、為什麼喜歡。',
   ],
   next: '下一課進入第 3 單元「食べ物と買い物」：在餐廳點餐，學 [[これをお願《ねが》いします。]]、[[コーヒーを二《ふた》つください。]]',
-  companion: ['《いろどり 生活の日本語》入門 第 5、11 課（[國際交流基金，免費下載](https://www.irodori.jpf.go.jp/)）', '《大家的日本語》初級 I 第 9 課'],
+  companion: ['《いろどり 生活の日本語》入門 第 5、11 課（[國際交流基金，免費下載](https://www.irodori.jpf.go.jp/)）', '《大家的日本語》第 9 課'],
 };

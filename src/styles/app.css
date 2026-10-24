@@ -388,7 +388,7 @@ table.jlpt { min-width: 560px; }
 .pager { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding-block: 8px 24px; }
 /* 課名很長（例如第 28 課）時，手機上換行，不撐出畫面 */
 .pager .btn { white-space: normal; max-width: 100%; border-radius: 22px; text-align: start; }
-.pager .btn .ja { word-break: auto-phrase; }
+.pager .btn .ja { word-break: auto-phrase; overflow-wrap: anywhere; }
 
 /* ============ N5 課程（第 9 課起） ============ */
 /* 振假名：一般大小的句子裡讀音約字的一半大；「漢字標讀音」關掉時讀音隱藏但保留位置，版面不跳動 */
@@ -397,8 +397,10 @@ table.jlpt { min-width: 560px; }
 }
 .dlg-who rt { font-size: 0.66em; }
 .furi-off rt { visibility: hidden; }
-/* 日文句子在詞和詞之間換行（Chrome 支援；其他瀏覽器照一般的規則，在任何字之間換行） */
-.ex-ja, .dlg-ja, .dq-ja, .dv-sent, .gram-form { word-break: auto-phrase; }
+/* 日文句子在詞和詞之間換行（Chrome 支援；其他瀏覽器照一般的規則，在任何字之間換行）。
+   一個詞組比一行還長時（手機上、句子裡夾著標讀音的漢字時很常見）也要能在字中間換行：
+   不加 overflow-wrap: anywhere 的話，答題後的整句（.dv-sent 是 flex）會把練習題撐得比畫面寬 */
+.ex-ja, .dlg-ja, .dq-ja, .dv-sent, .gram-form { word-break: auto-phrase; overflow-wrap: anywhere; }
 ruby { ruby-align: center; }
 .slot {
   display: inline-block; font-family: var(--font-body); font-size: 0.62em; font-weight: 500; color: var(--ink-2); letter-spacing: 0.02em;
@@ -445,6 +447,19 @@ ruby { ruby-align: center; }
 }
 .dlg-ja:hover { color: var(--accent); }
 .dlg-zh { font-size: 14.5px; color: var(--ink-2); }
+
+/* 考題要考的詞（⟦⟧）：不標讀音、加底線 */
+.ja-target { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 0.18em; }
+/* 對話聽力：答完才顯示的對話 */
+.dq-talk { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-family: var(--font-kana); font-size: 17px; line-height: 2; }
+.dq-talk li { display: grid; grid-template-columns: 5.5em minmax(0, 1fr); gap: 8px; }
+.dq-who { color: var(--ink-2); font-size: 14px; }
+
+/* 短文（告示、Email）：一張紙，段落一段一段排 */
+.rd-sheet { display: grid; gap: 2px; background: var(--paper); border: 1.5px solid var(--grid); border-radius: var(--r); padding: 10px 12px; }
+.rd-line { padding: 4px 8px; border-radius: 8px; }
+.rd-line.is-playing { background: var(--accent-soft); }
+.rd-ja { font-size: 18px; line-height: 2.1; }
 
 /* 單字（有振假名，卡片的字小一點） */
 .vocab-words .w-ja { font-family: var(--font-kana); font-size: 21px; line-height: 1.9; }
@@ -526,6 +541,21 @@ ruby { ruby-align: center; }
 
 /* 課程列表：五十音、N5 分兩段，N5 照單元分組 */
 .lesson-group { display: grid; gap: 4px; margin-bottom: 18px; }
+.lesson-jump { display: flex; flex-wrap: wrap; gap: 8px; }
+/* 模擬考 */
+.mock-part { display: grid; gap: 10px; margin-bottom: 14px; }
+.mock-result { display: grid; gap: 12px; margin-block: 8px 32px; scroll-margin-top: 12px; }
+.mock-result h2:focus { outline: none; }
+.mock-table { border-collapse: collapse; width: 100%; max-width: 520px; font-variant-numeric: tabular-nums; }
+.mock-table th, .mock-table td { text-align: start; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+.mock-table tbody tr.is-ok td:last-child { color: var(--ok-ink); font-weight: 600; }
+.mock-total th, .mock-total td { font-weight: 600; border-bottom: 0; }
+.lesson-jump .num { color: var(--ink-3); margin-left: 2px; font-variant-numeric: tabular-nums; }
+.lesson-jump .chip-btn { text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
+.lesson-jump .chip-next { border-color: var(--accent); color: var(--accent); }
+.lg-head h2 { scroll-margin-top: 12px; }
+.lg-head h2:focus { outline: none; }
+.lg-head h2:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
 .lg-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
 .lg-head h2 { font-size: clamp(21px, 3vw, 26px); }
 .unit { display: grid; gap: 2px; margin-top: 10px; }

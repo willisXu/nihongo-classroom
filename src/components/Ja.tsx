@@ -17,22 +17,33 @@ export function Ja({ text, className, as: Tag = 'span' }: { text: JaText; classN
 export function JaParts({ text }: { text: JaText }) {
   return (
     <>
-      {parseJa(text).map((s, i) =>
-        'slot' in s ? (
-          <span key={i} className="slot" lang="zh-Hant-TW">
-            {s.slot}
-          </span>
-        ) : 'r' in s ? (
-          <ruby key={i}>
-            {s.t}
-            <rp>（</rp>
-            <rt>{s.r}</rt>
-            <rp>）</rp>
-          </ruby>
+      {parseJa(text).map((s, i) => {
+        if ('slot' in s)
+          return (
+            <span key={i} className="slot" lang="zh-Hant-TW">
+              {s.slot}
+            </span>
+          );
+        const body =
+          'r' in s ? (
+            <ruby>
+              {s.t}
+              <rp>（</rp>
+              <rt>{s.r}</rt>
+              <rp>）</rp>
+            </ruby>
+          ) : (
+            s.t
+          );
+        // ⟦⟧：考題要考的詞，加底線
+        return s.u ? (
+          <u key={i} className="ja-target">
+            {body}
+          </u>
         ) : (
-          <Fragment key={i}>{s.t}</Fragment>
-        ),
-      )}
+          <Fragment key={i}>{body}</Fragment>
+        );
+      })}
     </>
   );
 }

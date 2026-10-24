@@ -32,11 +32,14 @@ const LEVEL_DESC: Record<TutorLevel, string> = {
 /**
  * 程度說明。還在學五十音（knownKana 是學過的假名）時，照實告訴模型：只認得這些字；
  * 畫面上有附羅馬拼音（romaji）時也說一聲，沒學過的字也跟得上。
- * 在上 N5 課程（grammar 是學過的文法）時，告訴模型學到哪裡，盡量只用學過的句型。
+ * 在上 N5、N4 課程（grammar 是學過的文法）時，告訴模型學到哪裡，盡量只用學過的句型。
  */
 function levelDesc(level: TutorLevel, knownKana = '', romaji = false, grammar: string[] = []): string {
   if (level === 'n5' && grammar.length) {
     return `The learner is working through a beginner (JLPT N5) course and has learned these patterns so far: ${grammar.join(', ')}. Build your Japanese mainly from these patterns and basic vocabulary; avoid grammar outside this list when you can, and if you must use it, keep it very simple.`;
+  }
+  if (level === 'n4' && grammar.length) {
+    return `The learner has finished a beginner (JLPT N5) course and is working through an elementary (JLPT N4) course. On top of N5 grammar they have learned these N4 patterns so far: ${grammar.join(', ')}. Use N5 grammar and these patterns freely; avoid other N4/N3 grammar when you can, and if you must use it, keep it simple.`;
   }
   if (level !== 'kana' || !knownKana) return LEVEL_DESC[level];
   const help = romaji

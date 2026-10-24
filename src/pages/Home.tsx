@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useMemo } from 'react';
-import { COURSE_LESSONS, KANA_LESSONS, unitOf } from '../data/lessons/meta';
+import { COURSE_LESSONS, COURSE_LEVELS, KANA_LESSONS, levelLessons, unitOf } from '../data/lessons/meta';
+import type { CourseLevel } from '../data/types';
 import { DECK_META, metaItemIds, unseenWords } from '../data/vocab/meta';
 import {
   activityStore, apiKeyStore, kanaLevel, kanaStore, lastExportStore, lessonStore, missStore, settingsStore, srsStore, writingStore,
@@ -37,6 +38,8 @@ function nextJlpt(now: number): { at: number; month: 7 | 12 } {
 }
 
 const BACKUP_EVERY_DAYS = 14;
+
+const levelName = (level: CourseLevel) => COURSE_LEVELS.find((x) => x.level === level)?.name ?? level.toUpperCase();
 
 export default function Home() {
   usePageTitle(null);
@@ -85,7 +88,7 @@ export default function Home() {
   // 這一課沒有新漢字（第 30 課起）或全部學完時，複習學過的漢字
   const kanaWrite = nextKanaLesson(lessons);
   const learnedKanji = COURSE_LESSONS.filter((l) => lessons.done[l.id]).map((l) => l.kanji).join('');
-  const courseWrite = next?.kind === 'n5' && next.kanji ? next : undefined;
+  const courseWrite = next?.kind === 'course' && next.kanji ? next : undefined;
   const kanaShown = kanaWrite ?? (courseWrite || learnedKanji ? undefined : KANA_LESSONS[KANA_LESSONS.length - 1]);
   const toWrite = kanaShown ? kanaShown.newKana : [...(courseWrite?.kanji ?? learnedKanji)];
   const writeWhat = kanaShown ? `第 ${kanaShown.id} 課的字` : courseWrite ? `第 ${courseWrite.id} 課的漢字` : '學過的漢字';
@@ -94,7 +97,11 @@ export default function Home() {
   const writeLink = (ch?: string) =>
     (kanaShown ? `/writing?lesson=${kanaShown.id}` : `/writing?chars=${encodeURIComponent(toWrite.join(''))}`) +
     (ch ? `&char=${encodeURIComponent(ch)}` : '');
-  const unit = next?.kind === 'n5' ? unitOf(next.unit) : undefined;
+  const unit = next?.kind === 'course' ? unitOf(next.unit) : undefined;
+  // 這一課所在的程度（N5、N4）完成幾課
+  const levelList = next?.kind === 'course' ? levelLessons(next.level) : [];
+  const levelCount = levelList.length;
+  const levelDone = levelList.filter((l) => lessons.done[l.id]).length;
   const unitLessons = unit ? COURSE_LESSONS.filter((l) => l.unit === unit.n) : KANA_LESSONS;
 
   const suggested = SCENARIOS.filter((_, i) => i % 3 === new Date(now).getDate() % 3).slice(0, 3);
@@ -172,8 +179,8 @@ export default function Home() {
 
           <section className="card home-card home-lesson" aria-labelledby="h-next">
             <p className="eyebrow">
-              {next?.kind === 'n5'
-                ? `N5 課程 · 已完成 ${courseDone}/${COURSE_LESSONS.length}${unit ? ` · 第 ${unit.n} 單元「${unit.title}」` : ''}`
+              {next?.kind === 'course'
+                ? `${levelName(next.level)} 課程 · 已完成 ${levelDone}/${levelCount}${unit ? ` · 第 ${unit.n} 單元「${unit.title}」` : ''}`
                 : next
                   ? `五十音課程 · 已完成 ${kanaDone}/${KANA_LESSONS.length}`
                   : `課程 · 已完成 ${done} 課`}
@@ -210,10 +217,15 @@ export default function Home() {
             ) : (
               <>
                 <h2 id="h-next">課程全部學完了</h2>
-                <p className="muted">接下來每天複習單字卡，用 AI 家教練習會話，準備 N5 檢定。</p>
+                <p className="muted">
+                  接下來做一次 N4 模擬考，看看每一科能不能答對七成；再每天複習單字卡，用 AI 家教練習會話，準備 {levelName(COURSE_LESSONS[COURSE_LESSONS.length - 1]?.level ?? 'n5')} 檢定。
+                </p>
                 <div className="btn-row">
-                  <Link className="btn btn-primary" to="/vocab">
-                    去背單字 <Icon name="arrow-right" size={17} />
+                  <Link className="btn btn-primary" to="/mock">
+                    做 N4 模擬考 <Icon name="arrow-right" size={17} />
+                  </Link>
+                  <Link className="btn" to="/vocab">
+                    去背單字
                   </Link>
                   <Link className="btn" to="/tutor">
                     和 AI 家教聊天

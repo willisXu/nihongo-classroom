@@ -12,6 +12,7 @@ import { useNow } from '../lib/useNow';
 
 const DECK_NOTE: Record<string, string> = {
   n5: '先背這組：檢定和日常都用得到。',
+  n4: '上 N4 課程時，用每一課的單字卡一起練；N5 單字熟了以後也可以直接背這組。',
   travel: '出發去日本前一個月開始背。',
   business: '和日本同事、客戶往來用。',
   anime: '看劇、看動畫、聽歌時最常聽到。',

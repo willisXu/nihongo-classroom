@@ -61,6 +61,16 @@ describe('日文句子的讀音標記', () => {
     expect(jaSpeech('紅葉《もみじ》がきれいです。')).toBe('もみじがきれいです。');
     expect(jaSpeech('雨《あめ》が降《ふ》ります。')).toBe('雨がふります。');
     expect(jaSpeech('電車《でんしゃ》を降《お》ります。')).toBe('電車をおります。');
+    expect(jaSpeech('ドアが開《あ》きます。')).toBe('ドアがあきます。');
+    // ⟦⟧：考題要考的詞，不標讀音（不算「沒標讀音」），念的時候照寫
+    expect(bareKanji('⟦荷物⟧を届《とど》けます。')).toEqual([]);
+    expect(jaPlain('⟦荷物⟧を届《とど》けます。')).toBe('荷物を届けます。');
+    expect(jaSpeech('⟦荷物⟧を届《とど》けます。')).toBe('荷物を届けます。');
+    expect(() => parseJa('⟦荷物を届けます。')).toThrow();
+    // ⟦⟧ 裡面有《》：照樣標讀音、加底線
+    expect(parseJa('⟦荷物《にもつ》⟧を')).toEqual([{ t: '荷物', r: 'にもつ', u: true }, { t: 'を' }]);
+    expect(bareKanji('⟦大《おお》きい⟧荷物')).toEqual(['荷', '物']);
+    expect(jaSpeech('たばこを止《や》めました。')).toBe('たばこをやめました。');
     expect(jaSpeech('何分《なんぷん》ですか。')).toBe('なんぷんですか。');
     expect(jaSpeech('家《うち》でゆっくりします。')).toBe('うちでゆっくりします。');
     // 數字＋日 有兩種念法（いちにち／ついたち）：念標的讀音；日の出 照寫

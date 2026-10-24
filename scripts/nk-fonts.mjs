@@ -112,7 +112,7 @@ function displayFieldText(file, text) {
  * - display（標題字型）：畫面程式（.tsx）裡的字，加上資料裡當標題顯示的欄位；
  *   課文內文、單字解釋、家教提示詞用的是內文字型，不收。
  * - ja（假名字型）：含假名的一串日文（「は」念「わ」這種中文說明裡夾的「念」不算），加上 kanji 欄位，
- *   和課文裡單字、對照區塊的小標題（.rowtitle 用假名字型，標題是中文也一樣）。
+ *   和課文裡單字、對照、會話、短文區塊的小標題（.rowtitle 用假名字型，標題是中文也一樣）。
  * 兩套都另外收英數字、全形標點和全部假名；假名字型再加上刪節號（課程列表的假名太多時用「…」）。
  */
 export function collectChars(sources) {
@@ -134,8 +134,10 @@ export function collectChars(sources) {
     }
     for (const ch of displayFieldText(file, text)) display.add(ch);
     for (const top of lessonBlocks(file, text)) {
-      if (/\btype: '(?:words|pairs|vocab|examples|drill|dialog)'/.test(top)) for (const ch of fieldOf(top, 'title')) ja.add(ch);
+      if (/\btype: '(?:words|pairs|vocab|examples|drill|dialog|reading)'/.test(top)) for (const ch of fieldOf(top, 'title')) ja.add(ch);
     }
+    // 模擬考題組附的短文（reading: { title: '…' }）：標題也是 .rowtitle
+    if (/(^|[\\/])data[\\/]mock[\\/]/.test(file)) for (const m of text.matchAll(/\breading: \{\s*title: '([^']*)'/g)) for (const ch of m[1]) ja.add(ch);
     if (/(^|[\\/])data[\\/]vocab[\\/]/.test(file)) for (const m of text.matchAll(/\bzh: '([^']+)'/g)) for (const ch of m[1]) meaning.add(ch);
     // 明確是日文的地方：kanji／ja／say 欄位、[[漢字|かな]] 和 {{かな}} 標記、標了讀音的課文片段；
     // N5 課程的會話人名（who）、漢字（ch）、句型（form），和後面接《讀音》的漢字（見 src/lib/ja.ts）
@@ -145,6 +147,8 @@ export function collectChars(sources) {
       /\{\{([^}]+)\}\}/g,
       /text: '([^']+)', ruby: /g,
       /([\u3400-\u9fff\uf900-\ufaff々〆ヶ]+)《/g,
+      // 考題要考的詞（⟦旅行⟧）：寫法題的選項只有漢字，也要收（不然那個選項會用別的字型，等於洩漏答案）
+      /⟦([^⟧]+)⟧/g,
       // N5 課程摘要的文法名稱（課程列表用假名字型顯示），例如 grammar: ['〜歳', '〜に住んでいます']
       /\bgrammar: \[([^\]]*)\]/g,
     ];

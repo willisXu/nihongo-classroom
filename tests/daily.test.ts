@@ -80,7 +80,7 @@ describe('今天的任務', () => {
 
   it('上到沒有新漢字的課（或全部學完）：只剩單字卡', async () => {
     const { LESSON_META } = await import('../src/data/lessons/meta');
-    const upTo = (LESSON_META.find((l) => l.kind === 'n5' && !l.kanji)?.id ?? LESSON_META.length + 1) - 1;
+    const upTo = (LESSON_META.find((l) => l.kind === 'course' && !l.kanji)?.id ?? LESSON_META.length + 1) - 1;
     for (const n of [upTo, LESSON_META.length]) {
       const tasks = todayTasks(input({ lessons: lessonsDone(n), kana: allMastered() }));
       expect(tasks.map((t) => t.id)).toEqual(['vocab']);

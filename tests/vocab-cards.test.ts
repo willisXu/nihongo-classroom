@@ -27,12 +27,13 @@ describe('單字發音', () => {
 
   it('例句指定的念法（say）只把容易念錯的漢字換成假名，其他照原句', () => {
     const withSay = ALL.filter((it) => it.ex?.say);
-    expect(withSay.length).toBe(7);
+    // N4 課程單字的例句是從課文拿的，念法和課文一樣（何→なに、今→いま…，見 lib/ja.ts 的 jaSpeech）；其他牌組只有少數幾句
+    expect(withSay.filter((it) => !it.id.startsWith('n4-')).length).toBe(7);
     for (const it of withSay) {
       const ex = it.ex!;
       expect(exampleSpeech(ex), it.id).toBe(ex.say);
-      // 換掉的部分要出現在全假名讀音裡：把 say 的漢字部分拿掉後，剩下的假名都依序出現在 kana 裡
-      const kanaParts = ex.say!.split(/[一-鿿々〆]+/).filter(Boolean);
+      // 換掉的部分要出現在全假名讀音裡：把 say 的漢字（和數字、英文字母）部分拿掉後，剩下的假名都依序出現在 kana 裡
+      const kanaParts = ex.say!.split(/[一-鿿々〆0-9０-９,，A-Za-zＡ-Ｚａ-ｚ]+/).filter(Boolean);
       let at = 0;
       for (const part of kanaParts) {
         const i = ex.kana.indexOf(part, at);

@@ -424,5 +424,5 @@ export const lesson: CourseLesson = {
     '和[AI 家教](/tutor?scenario=office-gift)練習送伴手禮給同事，也問問桌上的東西是誰的。',
   ],
   next: '下一課學數字 1～99：說家裡有幾個人、每個人幾歲，也學「我爸爸」和「你爸爸」在日文裡怎麼分。',
-  companion: ['《いろどり 生活の日本語》入門 第 16 課（[國際交流基金，免費下載](https://www.irodori.jpf.go.jp/)）', '《大家的日本語》初級 I 第 2 課'],
+  companion: ['《いろどり 生活の日本語》入門 第 16 課（[國際交流基金，免費下載](https://www.irodori.jpf.go.jp/)）', '《大家的日本語》第 2 課'],
 };

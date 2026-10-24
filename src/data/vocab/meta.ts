@@ -6,6 +6,7 @@ import type { DeckId, DeckMeta } from '../types';
  */
 export const DECK_META: DeckMeta[] = [
   { id: 'n5', title: 'JLPT N5 核心單字', description: '檢定 N5 範圍的常用詞，從招呼語、數字、時間到基本動詞和形容詞。', count: 776 },
+  { id: 'n4', title: 'N4 課程單字', description: 'N4 課程（第 33–56 課）每一課的新單字，照課次排：JLPT N4 範圍的常用詞為主，加上課文情境用到的生活、職場用語。', count: 336 },
   { id: 'travel', title: '旅遊與日常', description: '點餐、購物、交通、住宿、問路，到日本自助旅行最常用到的詞和句子。', count: 226 },
   { id: 'business', title: '職場與商務', description: '自我介紹、公司用語、電話和會議的基本說法，以及職場最常聽到的客套話。', count: 127 },
   { id: 'anime', title: '日劇・動畫・音樂', description: '追劇和看動畫最常聽到的詞和口頭禪，附上語氣和使用場合。', count: 128 },

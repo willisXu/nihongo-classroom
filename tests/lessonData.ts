@@ -5,4 +5,4 @@ const modules = import.meta.glob<Lesson>('../src/data/lessons/lesson*.ts', { eag
 
 export const LESSONS: Lesson[] = Object.values(modules).sort((a, b) => a.id - b.id);
 export const KANA_LESSON_DATA = LESSONS.filter((l): l is KanaLesson => l.kind === 'kana');
-export const COURSE_LESSON_DATA = LESSONS.filter((l): l is CourseLesson => l.kind === 'n5');
+export const COURSE_LESSON_DATA = LESSONS.filter((l): l is CourseLesson => l.kind === 'course');

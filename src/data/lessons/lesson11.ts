@@ -509,5 +509,5 @@ export const lesson: CourseLesson = {
     '和[AI 家教](/tutor?scenario=new-friend)練習認識新朋友：互相介紹家人、問年紀。',
   ],
   next: '下一課學時間：「現在幾點？」「從幾點到幾點？」。數字會一直用到，還要注意 4 點、7 點、9 點的特別念法。',
-  companion: ['《いろどり 生活の日本語》入門 第 4 課（[國際交流基金，免費下載](https://www.irodori.jpf.go.jp/)）', '《大家的日本語》初級 I 第 3 課（數字）'],
+  companion: ['《いろどり 生活の日本語》入門 第 4 課（[國際交流基金，免費下載](https://www.irodori.jpf.go.jp/)）', '《大家的日本語》第 3 課（數字）'],
 };

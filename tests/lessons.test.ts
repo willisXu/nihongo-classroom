@@ -48,9 +48,9 @@ describe('lessons', () => {
     LESSONS.forEach((l, i) => expect(l.id).toBe(i + 1));
   });
 
-  it('五十音的課在前面，N5 的課接在後面', () => {
-    const kinds = LESSONS.map((l) => l.kind).join(',');
-    expect(kinds).toMatch(/^(kana,)*kana(,n5)*$/);
+  it('五十音的課在前面，接著是 N5、N4 的課', () => {
+    const kinds = LESSONS.map((l) => (l.kind === 'course' ? l.level : l.kind)).join(',');
+    expect(kinds).toMatch(/^(kana,)*kana(,n5)*(,n4)*$/);
   });
 });
 

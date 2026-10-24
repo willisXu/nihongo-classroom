@@ -170,7 +170,7 @@ function canAutoplay(): boolean {
  * onEnd：這一句念完（或念不出來、放棄）時呼叫，用來一句接一句念整段會話。
  * 被下一句、stopSpeaking() 取消的不呼叫（整段播放就停在那裡）。
  */
-function utter(text: string, rate: number, onEnd?: () => void): boolean {
+function utter(text: string, rate: number, onEnd?: () => void, pitch?: number): boolean {
   const ss = window.speechSynthesis;
   // 先放掉上一句：被取消的那一句之後觸發的 end、error 都不算念不出來
   current = null;
@@ -180,6 +180,7 @@ function utter(text: string, rate: number, onEnd?: () => void): boolean {
   const v = pickVoice(state.voices, settingsStore.get().voiceURI, avoidRemote());
   if (v) u.voice = v;
   u.rate = rate;
+  if (pitch) u.pitch = pitch;
   current = u;
   let ended = false;
   const finish = () => {
@@ -198,7 +199,7 @@ function utter(text: string, rate: number, onEnd?: () => void): boolean {
       // 有內建的日文語音才重念；沒有的話頁面會提示加裝
       if (state.voices.some((x) => !isRemoteVoice(x))) {
         ended = true;
-        utter(text, rate, onEnd);
+        utter(text, rate, onEnd, pitch);
       } else finish();
     };
     const watchdog = window.setTimeout(fallback, REMOTE_START_MS);
@@ -226,12 +227,13 @@ function utter(text: string, rate: number, onEnd?: () => void): boolean {
 }
 
 /** 念出日文。回傳 false 表示這台裝置不能發音（這時 onEnd 不會被呼叫）。 */
-export function speak(text: string, opts: { rate?: number; onEnd?: () => void } = {}): boolean {
+/** pitch：音高（1 是正常；對話聽力用來分出兩個人，見 components/Drill.tsx） */
+export function speak(text: string, opts: { rate?: number; pitch?: number; onEnd?: () => void } = {}): boolean {
   if (!text || !supported) return false;
   // 語音清單晚到、又沒觸發 voiceschanged：念之前再讀一次
   if (!state.voices.length) refreshVoices();
   try {
-    return utter(speechFor(text), opts.rate ?? (settingsStore.get().slow ? 0.6 : 0.9), opts.onEnd);
+    return utter(speechFor(text), opts.rate ?? (settingsStore.get().slow ? 0.6 : 0.9), opts.onEnd, opts.pitch);
   } catch {
     return false;
   }

@@ -435,5 +435,5 @@ export const lesson: CourseLesson = {
     '和[AI 家教](/tutor?scenario=opening-hours)練習打電話問美術館的開放時間。',
   ],
   next: '第 2 單元開始學動詞：用 [[〜ます]] 說每天做的事，例如「每天早上幾點起床？」。說「幾點做什麼」時，時間後面要加 [[に]]。',
-  companion: ['《いろどり 生活の日本語》入門 第 9 課（[國際交流基金，免費下載](https://www.irodori.jpf.go.jp/)）', '《大家的日本語》初級 I 第 4 課'],
+  companion: ['《いろどり 生活の日本語》入門 第 9 課（[國際交流基金，免費下載](https://www.irodori.jpf.go.jp/)）', '《大家的日本語》第 4 課'],
 };

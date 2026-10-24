@@ -118,14 +118,19 @@ describe('程度規則', () => {
     expect(conversationSystem(SCENARIOS[0], 'n5', known)).not.toContain(known);
   });
 
-  it('在上 N5 課程：告訴 AI 學過哪些文法；沒上課、或選了 N4 時照原本的說明', async () => {
+  it('在上 N5／N4 課程：告訴 AI 學過哪些文法；沒上課時照原本的說明', async () => {
     const { conversationSystem, correctionSystem, SCENARIOS } = await import('../src/data/tutor');
     const grammar = ['〜は〜です', '〜ます／〜ません'];
     for (const sys of [conversationSystem(SCENARIOS[0], 'n5', '', false, grammar), correctionSystem('n5', '', false, grammar)]) {
       expect(sys).toContain('has learned these patterns so far: 〜は〜です, 〜ます／〜ません');
     }
     expect(conversationSystem(SCENARIOS[0], 'n5')).toMatch(/around JLPT N5/);
-    expect(conversationSystem(SCENARIOS[0], 'n4', '', false, grammar)).not.toContain('〜は〜です');
+    // N4：N5 的文法都學過，另外列出學過的 N4 文法
+    const n4 = ['可能形', '〜てあげます'];
+    for (const sys of [conversationSystem(SCENARIOS[0], 'n4', '', false, n4), correctionSystem('n4', '', false, n4)]) {
+      expect(sys).toContain('they have learned these N4 patterns so far: 可能形, 〜てあげます');
+    }
+    expect(conversationSystem(SCENARIOS[0], 'n4')).not.toContain('N4 patterns so far');
   });
 
   it('接電話的情境由學習者先開口：AI 不先說話，系統提示說明第一句是學習者的', async () => {

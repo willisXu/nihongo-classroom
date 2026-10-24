@@ -13,7 +13,7 @@ import { Rich } from '../components/Rich';
 import { Masu, Stamp, Switch } from '../components/Controls';
 import { SpeakButton, usePlayFlash } from '../components/Speak';
 import { Icon } from '../components/Icon';
-import { DialogBlock, ExamplesBlock, GrammarBlock, KanjiBlock, VocabBlock } from '../components/CourseBlocks';
+import { DialogBlock, ExamplesBlock, GrammarBlock, KanjiBlock, ReadingBlock, VocabBlock } from '../components/CourseBlocks';
 import { DrillBlock } from '../components/Drill';
 import { readJSON, writeJSON } from '../state/store';
 import { usePageTitle } from '../lib/title';
@@ -109,7 +109,7 @@ function LessonView({ lesson }: { lesson: Lesson | undefined }) {
   const hwDone = hwKeys.filter((k) => progress.hw[k]).length;
   const prev = lessonMetaById(lesson.id - 1);
   const next = lessonMetaById(lesson.id + 1);
-  const course = lesson.kind === 'n5' ? lesson : null;
+  const course = lesson.kind === 'course' ? lesson : null;
   // 「用單字卡練這些字」只放在最後一組單字下面
   const lastVocab = lesson.sections.flatMap((s) => s.blocks).filter((b) => b.type === 'vocab').pop();
   const unit = course ? unitOf(course.unit) : undefined;
@@ -449,6 +449,8 @@ function Block({ block, lessonId, deckLink }: { block: LessonBlock; lessonId: nu
       return <LessonTable head={block.head} rows={block.rows} />;
     case 'dialog':
       return <DialogBlock title={block.title} scene={block.scene} lines={block.lines} />;
+    case 'reading':
+      return <ReadingBlock title={block.title} scene={block.scene} lines={block.lines} />;
     case 'grammar':
       return <GrammarBlock title={block.title} form={block.form} points={block.points} examples={block.examples} />;
     case 'examples':

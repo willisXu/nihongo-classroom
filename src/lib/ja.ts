@@ -5,6 +5,8 @@
  *   食《た》べます            → 讀音標在《前面連續的漢字上（含 々）
  *   ｜日本《にほん》語《ご》   → 要從一串漢字的中間開始標時，在開頭加｜（通常不需要）
  *   〔名詞〕は〔名詞〕です     → 〔〕是句型的空格（顯示成框，不念）
+ *   ⟦荷物⟧を届けます          → ⟦⟧是考題要考的詞：加底線。裡面沒有《》時不標讀音（考漢字的念法、寫法），
+ *   ⟦荷物《にもつ》⟧           → 有《》時照樣標讀音（考意思、用法）。只用在選擇題。
  *
  * 一般說明文字（Inline）裡也可以用同樣的寫法，見 components/Rich.tsx。
  */
@@ -12,10 +14,10 @@
 export type JaText = string;
 
 export type JaSeg =
-  /** 一般文字（假名、標點、沒標讀音的字） */
-  | { t: string }
+  /** 一般文字（假名、標點、沒標讀音的字）；u：考題要考的詞（⟦⟧，加底線） */
+  | { t: string; u?: true }
   /** 標了讀音的漢字 */
-  | { t: string; r: string }
+  | { t: string; r: string; u?: true }
   /** 句型的空格，例如〔名詞〕 */
   | { slot: string };
 
@@ -26,7 +28,7 @@ export const isKanji = (ch: string) => KANJI.test(ch);
 
 /** 有沒有《》讀音或〔〕空格（沒有的話就是普通文字） */
 export function hasJaMarkup(text: string): boolean {
-  return /[《〔｜]/.test(text);
+  return /[《〔｜⟦]/.test(text);
 }
 
 /**
@@ -70,6 +72,18 @@ export function parseJa(text: JaText): JaSeg[] {
       continue;
     }
     if (c === '》') throw new Error(`多了 》：${text}`);
+    if (c === '⟦') {
+      const end = text.indexOf('⟧', i + 1);
+      if (end < 0 || end === i + 1) throw new Error(`⟦ 沒有對應的 ⟧：${text}`);
+      if (mark >= 0) throw new Error(`｜後面沒有《讀音》：${text}`);
+      const inner = text.slice(i + 1, end);
+      if (/[⟦〔]/.test(inner)) throw new Error(`⟦⟧ 裡面不能再有 ⟦ 或 〔：${text}`);
+      flush();
+      for (const seg of parseJa(inner)) if (!('slot' in seg)) out.push({ ...seg, u: true });
+      i = end;
+      continue;
+    }
+    if (c === '⟧') throw new Error(`多了 ⟧：${text}`);
     if (c === '〔') {
       const end = text.indexOf('〕', i + 1);
       if (end < 0) throw new Error(`〔 沒有對應的 〕：${text}`);
@@ -102,7 +116,8 @@ export function jaReading(text: JaText): string {
 /** 文字裡沒有標讀音的漢字（課文的漢字都要標讀音，測試用） */
 export function bareKanji(text: JaText): string[] {
   const out: string[] = [];
-  for (const s of parseJa(text)) if (!('slot' in s) && !('r' in s)) for (const ch of s.t) if (isKanji(ch)) out.push(ch);
+  // ⟦⟧ 裡沒標讀音的字是故意的（考漢字的念法、寫法）
+  for (const s of parseJa(text)) if (!('slot' in s) && !('r' in s) && !s.u) for (const ch of s.t) if (isKanji(ch)) out.push(ch);
   return out;
 }
 
@@ -120,17 +135,25 @@ const SAY_READING = new Set([
   ...['今日', '明日', '昨日', '今朝', '一日', '二十日', '二十歳', '十分', '一昨日', '明後日'],
   // 紅葉 こうよう／もみじ、梅雨 つゆ／ばいう、上手 じょうず／うわて、下手 へた／しもて
   ...['紅葉', '梅雨', '上手', '下手'],
+  // 人気 にんき／ひとけ、市場 いちば／しじょう、一時 いちじ／いっとき、大家 おおや／たいか
+  ...['人気', '市場', '一時', '大家'],
+  // 今日中 きょうじゅう（語音可能念成 こんにちちゅう）、鶏肉 とりにく／けいにく
+  ...['今日中', '鶏肉'],
 ]);
 /**
  * 單一個漢字、念法很多的（私 可能念成 わたくし、何 有 なに／なん、方 有 ほう／かた、
- * 家 有 いえ／うち；降ります 有 ふります（下雨）／おります（下車）…）。
+ * 家 有 いえ／うち；降ります 有 ふります（下雨）／おります（下車）；開く 有 あく／ひらく、止める 有 とめる／やめる、
+ * 他 有 ほか／た、床 有 ゆか／とこ、訳 有 わけ／やく…）。
+ * 袋 有 ふくろ／ぶくろ（非常持《ひじょうも》ち出《だ》し袋《ぶくろ》）。
  * 日 不放：「日《ひ》の出《で》」念成「ひの出」反而奇怪，照寫「日の出」語音念得對。
  */
-const SAY_READING_SINGLE = new Set([...'私何方間後前上下中外空生金角辛今家降']);
+const SAY_READING_SINGLE = new Set([...'私何方間後前上下中外空生金角辛今家降開止他床訳袋']);
 
-function sayReading(base: string): boolean {
+function sayReading(base: string, reading: string): boolean {
   return (
     SAY_READING.has(base) ||
+    // 讀音標片假名的（台北《タイペイ》、台中《タイチュウ》）：照外語念，語音引擎會用日文的音讀念成 たいほく
+    /^[ァ-ヺー]+$/.test(reading) ||
     // 何 開頭的詞（何時、何人、何分 なんぷん／なにぶん…）
     base.startsWith('何') ||
     // 數字＋日（｜1日《いちにち》、｜1日《ついたち》）：同一個寫法有兩種念法
@@ -144,7 +167,7 @@ function sayReading(base: string): boolean {
  */
 export function jaSpeech(text: JaText): string {
   const out = parseJa(text)
-    .map((s) => ('slot' in s ? '' : 'r' in s ? (sayReading(s.t) ? s.r : s.t) : s.t))
+    .map((s) => ('slot' in s ? '' : 'r' in s ? (sayReading(s.t, s.r) ? s.r : s.t) : s.t))
     .join('')
     .replace(/[〜～]/g, '')
     .trim();

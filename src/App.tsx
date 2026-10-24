@@ -20,6 +20,7 @@ const Settings = lazy(() => import('./pages/Settings'));
 const Roadmap = lazy(() => import('./pages/Roadmap'));
 const Mistakes = lazy(() => import('./pages/Mistakes'));
 const Stats = lazy(() => import('./pages/Stats'));
+const Mock = lazy(() => import('./pages/Mock'));
 
 /** 網址列、安裝後 App 標題列的顏色（和 index.html、tokens.css 的紙張顏色一樣） */
 const BAR_COLOR = { light: '#f5f8f3', dark: '#1a2e28' };
@@ -71,6 +72,7 @@ export default function App() {
           <Route path="review/:deck" element={<Review />} />
           <Route path="tutor" element={<Tutor />} />
           <Route path="roadmap" element={<Roadmap />} />
+          <Route path="mock" element={<Mock />} />
           <Route path="settings" element={<Settings />} />
           <Route path="*" element={<NotFound />} />
         </Route>

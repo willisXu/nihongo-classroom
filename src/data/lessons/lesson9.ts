@@ -395,5 +395,5 @@ export const lesson: CourseLesson = {
     '和[AI 家教](/tutor?scenario=intro-work)練習第一次見面的自我介紹。',
   ],
   next: '下一課學 [[これ]]、[[それ]]、[[あれ]]：問「這是什麼？」「這是誰的？」，也學送伴手禮給同事時怎麼說。',
-  companion: ['《いろどり 生活の日本語》入門 第 1–3 課（[國際交流基金，免費下載](https://www.irodori.jpf.go.jp/)）', '《大家的日本語》初級 I 第 1 課'],
+  companion: ['《いろどり 生活の日本語》入門 第 1–3 課（[國際交流基金，免費下載](https://www.irodori.jpf.go.jp/)）', '《大家的日本語》第 1 課'],
 };

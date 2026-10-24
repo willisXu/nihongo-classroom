@@ -415,5 +415,5 @@ export const lesson: CourseLesson = {
     '和[AI 家教](/tutor?scenario=new-friend)聊你去過的地方、吃過的東西。',
   ],
   next: '下一課是 N5 的最後一課：學「普通形」，和好朋友鈴木小姐用常體輕鬆聊天、約去唱 KTV，最後做 N5 總複習。',
-  companion: ['《いろどり 生活の日本語》初級 1 第 8 課（[國際交流基金，免費下載](https://www.irodori.jpf.go.jp/)）', '《大家的日本語》初級 I 第 19 課'],
+  companion: ['《いろどり 生活の日本語》初級 1 第 8 課（[國際交流基金，免費下載](https://www.irodori.jpf.go.jp/)）', '《大家的日本語》第 19 課'],
 };
