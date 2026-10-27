@@ -100,6 +100,34 @@ describe('備份', () => {
     expect(peekBackup(exportBackup()).current.words).toBe(1);
   });
 
+  it('第 9–56 課的完成紀錄（含第一次完成的日期、作業）匯出再匯入都在', () => {
+    lessonStore.set({ done: { 1: 1, 9: 9, 33: 33, 56: 56 }, hw: { '33:0': true, '56:4': true }, first: { 20: 20 } });
+    const before = lessonStore.get();
+    const text = exportBackup();
+    resetAllProgress();
+    importBackup(text);
+    expect(lessonStore.get()).toEqual(before);
+    expect(peekBackup(text).backup.lessons).toBe(4);
+  });
+
+  it('壞掉或手改過的備份：課次不是正整數的不收；比較的數字只算課程裡有的課、認得的單字卡', () => {
+    const junk = JSON.stringify({
+      app: 'nihongo-classroom',
+      version: 1,
+      data: {
+        'nk.lessons': { done: { abc: 1, 0: 2, '-3': 3, 1.5: 4, 57: 5, 1: 6 }, hw: {}, first: { abc: 1, 2: 2 } },
+        'nk.srs': { cards: { 'zzz-0001': card, 'n5-9999': card, 'n4-0001': card }, days: {} },
+      },
+    });
+    const p = peekBackup(junk);
+    expect(p.backup.lessons).toBe(1);
+    expect(p.backup.words).toBe(1);
+    importBackup(junk);
+    // 比現在的課多的課次留著（之後的版本用得到），亂寫的課次不收
+    expect(Object.keys(lessonStore.get().done).sort()).toEqual(['1', '57']);
+    expect(lessonStore.get().first).toEqual({ 2: 2 });
+  });
+
   it('匯入錯了可以復原；匯入後從現在起算多久沒備份', () => {
     srsStore.set({ cards: { 'n5-0001': card }, days: {} });
     lessonStore.set({ done: { 1: 1, 2: 2 }, hw: {} });

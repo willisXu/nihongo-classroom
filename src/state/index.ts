@@ -3,6 +3,7 @@ import { SEION_CELLS } from '../data/kana';
 import { isCardId } from '../data/vocab/meta';
 import type { CardState } from '../lib/srs';
 import { studyDayKey } from '../lib/date';
+import { LESSON_META } from '../data/lessons/meta';
 
 /* ---------------- 設定 ---------------- */
 export type ThemePref = 'system' | 'light' | 'dark';
@@ -161,11 +162,12 @@ export interface LessonProgress {
 export const lessonStore = createStore<LessonProgress>('nk.lessons', () => ({ done: {}, hw: {} }), (raw) => {
   const out: LessonProgress = { done: {}, hw: {} };
   if (!isObj(raw)) return out;
-  if (isObj(raw.done)) for (const [k, v] of Object.entries(raw.done)) if (typeof v === 'number') out.done[k] = v;
+  // 課次一定是正整數（壞掉或手改過的備份裡的 abc、0 不收）；比現在的課多的課次留著，換到新版的網站還用得到
+  if (isObj(raw.done)) for (const [k, v] of Object.entries(raw.done)) if (typeof v === 'number' && /^[1-9]\d*$/.test(k)) out.done[k] = v;
   if (isObj(raw.hw)) for (const [k, v] of Object.entries(raw.hw)) if (v === true) out.hw[k] = true;
   if (isObj(raw.first)) {
     const first: Record<string, number> = {};
-    for (const [k, v] of Object.entries(raw.first)) if (typeof v === 'number') first[k] = v;
+    for (const [k, v] of Object.entries(raw.first)) if (typeof v === 'number' && /^[1-9]\d*$/.test(k)) first[k] = v;
     if (Object.keys(first).length) out.first = first;
   }
   return out;
@@ -472,7 +474,8 @@ export interface BackupSummary {
 
 function summarize(lessons: LessonProgress, kana: KanaStats, srs: SrsData, activity: Activity): BackupSummary {
   return {
-    lessons: Object.keys(lessons.done).length,
+    // 只算課程裡有的課（和首頁、課程列表的「完成幾課」一樣）
+    lessons: LESSON_META.filter((l) => lessons.done[l.id]).length,
     kana: Object.keys(kana).filter((k) => kanaLevel(kana, k) === 2).length,
     words: Object.entries(srs.cards).filter(([id, c]) => c.reps > 0 && isCardId(id)).length,
     days: Object.values(activity).filter((d) => Object.values(d).some((v) => (v ?? 0) > 0)).length,
