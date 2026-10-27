@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { COURSE_LESSONS, KANA_LESSONS, kanaLessonById } from '../data/lessons/meta';
 import { kanaInfo, originText } from '../data/kana';
@@ -46,6 +46,11 @@ function sayFor(ch: string): string {
   if (kj) return [...kj.on, ...kj.kun.map((r) => r.replace('・', ''))].join('、');
   return SMALL_INFO[ch]?.say ?? ch;
 }
+
+/** 字的按鈕列最多先顯示幾行：字很多時（學過的漢字可能有兩百多個）描字格會被擠到好幾個畫面以下 */
+const STRIP_ROWS = 2;
+/** 自選的字超過這麼多個，上面的說明只寫有幾個字，不一個一個列出來（下面的按鈕列已經有） */
+const PICK_LIST_MAX = 16;
 
 /** 單獨打開一個漢字（錯題本、首頁的連結 ?char=日）：練教這個字的那一課的漢字 */
 function kanjiPick(ch: string | null) {
@@ -104,6 +109,14 @@ export default function Writing() {
   const [demoKey, setDemoKey] = useState(0);
   const [resetKey, setResetKey] = useState(0);
   const [result, setResult] = useState<TraceResult | null>(null);
+  /** 從課文、首頁、錯題本的連結帶字進來（網址參數等一下就會清掉，先記下來） */
+  const [fromLink] = useState(() => !!(params.get('lesson') || params.get('char') || params.get('chars')));
+  const mainRef = useRef<HTMLDivElement>(null);
+  const stripRef = useRef<HTMLDivElement>(null);
+  const stripId = useId();
+  /** 按鈕列一行放得下幾個字（量出來之前是 0：全部顯示） */
+  const [perRow, setPerRow] = useState(0);
+  const [stripOpen, setStripOpen] = useState(false);
 
   useEffect(() => writeJSON('nk.write', prefs), [prefs]);
   useEffect(() => {
@@ -117,7 +130,42 @@ export default function Writing() {
 
   useEffect(() => setResult(null), [current, prefs.mode, resetKey]);
 
+  // 量按鈕列一行放得下幾個字（轉向、改變視窗大小時重量）
+  useLayoutEffect(() => {
+    const el = stripRef.current;
+    if (!el) return;
+    const measure = () => {
+      const btn = el.querySelector<HTMLElement>('.cs-btn');
+      if (!btn || !btn.offsetWidth) return;
+      const gap = Number.parseFloat(getComputedStyle(el).columnGap) || 0;
+      setPerRow(Math.max(1, Math.floor((el.clientWidth + gap) / (btn.offsetWidth + gap))));
+    };
+    measure();
+    if (typeof ResizeObserver !== 'function') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // 從連結帶字進來：把描字格捲進畫面（手機上設定和字的按鈕在上面，格子常常在畫面外）。
+  // 等到下一個畫面再捲：Layout 換頁時會先捲回頂端
+  useEffect(() => {
+    if (!fromLink) return;
+    const id = requestAnimationFrame(() => {
+      const el = mainRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      if (r.top < 0 || r.bottom > window.innerHeight) el.scrollIntoView({ block: 'center' });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [fromLink]);
+
   const idx = chars.indexOf(current);
+  // 字比兩行多：先只顯示目前這個字所在的那一段（照順序切，換到下一段才整段換），按「顯示全部」再展開
+  const stripMax = perRow * STRIP_ROWS;
+  const stripLong = perRow > 0 && chars.length > stripMax;
+  const stripFrom = stripLong && !stripOpen ? Math.min(Math.floor(Math.max(idx, 0) / stripMax) * stripMax, chars.length - stripMax) : 0;
+  const stripChars = stripLong && !stripOpen ? chars.slice(stripFrom, stripFrom + stripMax) : chars;
   const go = (delta: number) => {
     if (!chars.length) return;
     const n = chars[(idx + delta + chars.length) % chars.length];
@@ -245,8 +293,12 @@ export default function Writing() {
         {pick ? (
           <p className="pick-note">
             <span>
-              {kanjiMode ? `現在練 ${pick.chars.length} 個漢字：` : `現在只練課文裡長得像的 ${pick.chars.length} 個字：`}
-              <span lang="ja">{pick.chars.join('、')}</span>
+              {kanjiMode ? `現在練 ${pick.chars.length} 個漢字` : `現在只練課文裡長得像的 ${pick.chars.length} 個字`}
+              {pick.chars.length <= PICK_LIST_MAX ? (
+                <>
+                  ：<span lang="ja">{pick.chars.join('、')}</span>
+                </>
+              ) : null}
             </span>
             <button type="button" className="linkbtn" onClick={() => setPick(null)}>
               回到原本的範圍
@@ -255,8 +307,8 @@ export default function Writing() {
         ) : null}
       </div>
 
-      <div className="char-strip" role="group" aria-label={`選擇要寫的字（已寫過 ${writtenInScope}/${chars.length}）`}>
-        {chars.map((c) => {
+      <div ref={stripRef} id={stripId} className="char-strip" role="group" aria-label={`選擇要寫的字（已寫過 ${writtenInScope}/${chars.length}）`}>
+        {stripChars.map((c) => {
           const st = writing[c];
           return (
             <button
@@ -273,9 +325,24 @@ export default function Writing() {
           );
         })}
       </div>
+      {stripLong ? (
+        <button
+          type="button"
+          className="linkbtn"
+          aria-expanded={stripOpen}
+          aria-controls={stripId}
+          onClick={() => {
+            setStripOpen(!stripOpen);
+            // 收起後按鈕列一下子變短，剛按的按鈕會跑到畫面外：捲回按鈕列
+            if (stripOpen) requestAnimationFrame(() => stripRef.current?.scrollIntoView({ block: 'nearest' }));
+          }}
+        >
+          {stripOpen ? '收起' : `顯示全部 ${chars.length} 個字`}
+        </button>
+      ) : null}
 
       <div className="write-layout">
-        <div className="write-main">
+        <div ref={mainRef} className="write-main">
           <TraceCanvas char={current} mode={prefs.mode} onComplete={onComplete} demoKey={demoKey} resetKey={resetKey} size={360} />
           <div className="btn-row write-btns">
             <button type="button" className="btn" onClick={() => setDemoKey((k) => k + 1)}>

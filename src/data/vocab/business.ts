@@ -85,7 +85,7 @@ export const business: Deck = {
     { id: 'business-0070', kana: '〜でございます', zh: '是〜（「です」的鄭重說法）', pos: 'expression', topic: '電話用語', note: '丁寧語，例如「ABC 社でございます」' },
     { id: 'business-0071', kana: 'しょうしょうおまちください', kanji: '少々お待ちください', zh: '請稍等', pos: 'expression', topic: '電話用語', note: '比「ちょっと待ってください」有禮貌得多' },
     { id: 'business-0072', kana: 'おまたせいたしました', kanji: 'お待たせいたしました', zh: '讓您久等了', pos: 'expression', topic: '電話用語' },
-    { id: 'business-0073', kana: '〜はただいませきをはずしております', kanji: '〜はただいま席を外しております', zh: '〜現在不在座位上', pos: 'expression', topic: '電話用語', note: '對公司外的人提到自己同事，名字後面不加「さん」' },
+    { id: 'business-0073', kana: '〜はただいませきをはずしております', kanji: '〜はただいま席を外しております', r: '~ wa tadaima seki o hazushite orimasu', zh: '〜現在不在座位上', pos: 'expression', topic: '電話用語', note: '對公司外的人提到自己同事，名字後面不加「さん」' },
     { id: 'business-0074', kana: 'おりかえしおでんわいたします', kanji: '折り返しお電話いたします', zh: '（我們）再回電給您', pos: 'expression', topic: '電話用語', note: '「いたします」是謙讓語，對公司外的人用' },
     { id: 'business-0075', kana: 'おつなぎいたします', zh: '幫您轉接', pos: 'expression', topic: '電話用語', note: '「つなぐ」（接通）的謙讓說法' },
     { id: 'business-0076', kana: 'ないせん', kanji: '内線', zh: '分機', pos: 'noun', topic: '電話用語', ex: { ja: '内線は何番ですか。', kana: 'ないせんはなんばんですか。', zh: '分機是幾號？' } },

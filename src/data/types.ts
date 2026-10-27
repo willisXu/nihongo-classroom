@@ -176,8 +176,6 @@ type DrillItemBase =
    */
   | { kind: 'talk'; q: Inline; lines: { who: string; ja: JaText; say?: string }[]; options: string[]; optionsJa?: boolean; answer: number; why?: Inline };
 
-export type DrillKind = DrillItem['kind'];
-
 /* ---------------- 模擬考（照 JLPT 題型） ---------------- */
 
 /** 一個題組：例如「問題 1 漢字的念法」；讀解的題組附一篇短文 */
@@ -335,6 +333,12 @@ export interface VocabItem {
   kana: string;
   /** 常見漢字寫法（只有平時用漢字寫的詞才填） */
   kanji?: string;
+  /**
+   * 羅馬拼音（選填，和課文單字的 r 一樣）：有助詞 は、へ 的說法和句子才填，助詞寫 wa、e，句子分詞
+   * （こんにちは → konnichiwa、トイレはどこですか → toire wa doko desu ka）。
+   * 沒填就從 kana 自動產生（見 lib/vocab.ts 的 romajiOf）；測試會檢查該填的都有填。
+   */
+  r?: string;
   /** 繁體中文意思（台灣用語） */
   zh: string;
   pos: Pos;

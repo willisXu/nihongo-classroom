@@ -113,6 +113,12 @@ describe('錯題本', () => {
     expect(vocabMistakes(misses, cards).map((m) => m.id)).toEqual(['n5-0001', 'n5-0004']);
   });
 
+  it('單字：這個版本不認得的卡片（比較新版匯出的備份）不算，首頁的題數和錯題本頁一致', () => {
+    const misses = { 'n6-0001': { n: 2, t: 100, ok: 0 }, 'n4plus-0369': { n: 1, t: 100, ok: 0 } };
+    const cards = { 'n6-0002': card({ lapses: 1 }), 'n4plus-0001': card({ lapses: 1, last: 50 }) };
+    expect(vocabMistakes(misses, cards).map((m) => m.id)).toEqual(['n4plus-0369', 'n4plus-0001']);
+  });
+
   it('手寫：上次寫錯的字，最近寫的在前面', () => {
     const w = {
       あ: { n: 3, recall: 0, lastMistakes: 1, t: 10 },

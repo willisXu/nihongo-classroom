@@ -83,6 +83,18 @@ function addPoint(d: Drawing, p: Pt): void {
   d.points.push(p);
 }
 
+/** 幾個位置差的平均；還沒有時是 0 */
+function meanOf(list: readonly Pt[]): Pt {
+  if (!list.length) return { x: 0, y: 0 };
+  let x = 0;
+  let y = 0;
+  for (const p of list) {
+    x += p.x;
+    y += p.y;
+  }
+  return { x: x / list.length, y: y / list.length };
+}
+
 /** polyline 的 points 屬性；只有一點時重複一次，讓圓頭筆觸畫出一個點 */
 function pointsAttr(points: readonly Pt[]): string {
   const list = points.length === 1 ? [points[0], points[0]] : points;
@@ -123,6 +135,8 @@ export function TraceCanvas({ char, mode, onComplete, onStroke, demoKey, resetKe
   const [fails, setFails] = useState<FailLine[]>([]);
   const [message, setMessage] = useState<Message | null>(null);
   const [demo, setDemo] = useState<Demo | null>(null);
+  /** 寫對的每一筆和標準筆畫的位置差：平均起來是這個人整體的偏移，判下一筆的筆順時先扣掉 */
+  const [shifts, setShifts] = useState<Pt[]>([]);
 
   // 換字、換模式或 resetKey 改變就從頭開始（在 render 裡調整，不會先閃一下舊進度）
   const session = `${char}\u0000${mode}\u0000${resetKey ?? ''}`;
@@ -131,6 +145,7 @@ export function TraceCanvas({ char, mode, onComplete, onStroke, demoKey, resetKe
     setSeenSession(session);
     setDone(0);
     setTries(0);
+    setShifts([]);
     setMistakes(0);
     setFails([]);
     setMessage(null);
@@ -230,13 +245,15 @@ export function TraceCanvas({ char, mode, onComplete, onStroke, demoKey, resetKe
   const finishStroke = (points: Pt[]) => {
     const index = done;
     if (index >= total) return;
-    const j = judgeStroke(points, index, model, judgeScale(char));
+    const j = judgeStroke(points, index, model, judgeScale(char), meanOf(shifts));
     onStroke?.(j, index);
     const id = ++seqRef.current;
     if (j.ok) {
       const next = index + 1;
+      const shift = j.shift;
       setDone(next);
       setTries(0);
+      if (shift) setShifts((list) => [...list, shift]);
       if (next >= total) {
         setMessage({ id, text: '完成！', tone: 'ok' });
         onComplete?.({ char, mistakes, strokes: total });

@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { DECK_META, learnedInOtherDeck, metaItemIds, unseenWords } from '../data/vocab/meta';
+import { DECK_META, learnedInOtherDeck, metaItemIds, unseenWords, wordLearned } from '../data/vocab/meta';
 import { NEW_PER_DAY_OPTIONS, lessonStore, settingsStore, srsStore, updateSettings } from '../state';
 import { useStore } from '../state/store';
 import { deckStats } from '../lib/srs';
@@ -30,9 +30,12 @@ export default function Vocab() {
   const freshToday = srs.days[studyDayKey(now)]?.fresh ?? 0;
   const newLeft = Math.min(unseenWords(srs.cards), Math.max(0, settings.newPerDay - freshToday));
   const all = deckStats(srs.cards, DECK_META.flatMap(metaItemIds), now);
-  // 在上 N5 課程：新卡先出上到的那幾課的字（見 lib/vocab.ts 的 courseFirst）
+  // 在上初級課程：新卡先出上到的那幾課的字（見 lib/vocab.ts 的 courseFirst）。
+  // 上到 N4 時，N5 的課都完成了，先出的字包含 N5 和 N4 兩部分
   const courseNow = kanaCourseDone(lessons) ? nextCourseLesson(lessons) : undefined;
-  const courseLeft = courseWords(lessons).filter((id) => !(srs.cards[id]?.reps ?? 0)).length;
+  const courseLevels = courseNow?.level === 'n4' ? 'N5、N4' : 'N5';
+  // 在別的牌組學過的同一個字不會再當新卡，不算「沒學」
+  const courseLeft = courseWords(lessons).filter((id) => !wordLearned(srs.cards, id)).length;
 
   return (
     <div className="wrap">
@@ -85,7 +88,7 @@ export default function Vocab() {
         </div>
         {courseNow ? (
           <p className="small">
-            新卡會先出 N5 課程上到的字{courseLeft ? `（還有 ${courseLeft} 個沒學）` : ''}。只練一課：
+            新卡會先出 {courseLevels} 課程上到的字{courseLeft ? `（還有 ${courseLeft} 個沒學）` : ''}。只練一課：
             <Link to={`/review/lesson-${courseNow.id}`}>第 {courseNow.id} 課的單字</Link>
           </p>
         ) : null}
@@ -96,6 +99,9 @@ export default function Vocab() {
           const s = deckStats(srs.cards, metaItemIds(d), now);
           // 在別的牌組學過的同一個字，這個牌組不會再當新卡出現：也算學過
           const elsewhere = metaItemIds(d).filter((id) => learnedInOtherDeck(srs.cards, id)).length;
+          // 整組都學過了：還有到期或學習中的卡就照常複習，都沒有的話不放「學新卡」（按下去也沒有卡）
+          const allLearned = s.seen + elsewhere >= s.total;
+          const finished = allLearned && !s.due && !s.learning;
           return (
             <article key={d.id} className="card deck-card">
               <div className="deck-top">
@@ -113,9 +119,13 @@ export default function Vocab() {
               </div>
               {elsewhere ? <p className="small">其中 {elsewhere} 個字在別的牌組學過，這裡不會再當新卡出現。</p> : null}
               <div className="btn-row">
-                <Link className="btn btn-primary" to={`/review/${d.id}`}>
-                  {s.due ? '開始複習' : '學新卡'}
-                </Link>
+                {finished ? (
+                  <span className="small">這組都學過了，卡片到期時會再出現。</span>
+                ) : (
+                  <Link className="btn btn-primary" to={`/review/${d.id}`}>
+                    {s.due || allLearned ? '開始複習' : '學新卡'}
+                  </Link>
+                )}
                 <Link className="btn" to={`/vocab/${d.id}`}>
                   瀏覽單字
                 </Link>

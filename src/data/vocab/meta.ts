@@ -26,6 +26,18 @@ export function metaItemIds(m: DeckMeta): string[] {
   return Array.from({ length: m.count }, (_, i) => `${m.id}-${String(i + 1).padStart(4, '0')}`);
 }
 
+const DECK_COUNT = new Map<string, number>(DECK_META.map((d) => [d.id, d.count]));
+/**
+ * 這個版本的網站認得的卡片 id（看字首和編號，不用載入單字資料）。
+ * 比較新版的網站匯出的備份可能有這裡還沒有的牌組、卡片：紀錄照樣留著，但不算進錯題數、匯入前的比較。
+ */
+export function isCardId(id: string): boolean {
+  const m = /^([a-z0-9]+)-(\d{4,})$/.exec(id);
+  if (!m) return false;
+  const n = Number(m[2]);
+  return n >= 1 && n <= (DECK_COUNT.get(m[1]) ?? 0);
+}
+
 /**
  * 同一個字（假名＋漢字都一樣）出現在好幾個牌組時：後面那幾張卡片 → 最前面那張的 id（牌組順序 n5、旅遊、職場、動畫）。
  * 「全部牌組」把它們當成同一個字（見 lib/vocab.ts 的 deckItemIds），算「還有幾個字沒學」時也要合併。
@@ -87,6 +99,14 @@ export function wordGroupOf(id: string): string[] {
 export function learnedInOtherDeck(cards: Record<string, { reps: number } | undefined>, id: string): boolean {
   if ((cards[id]?.reps ?? 0) > 0) return false;
   return wordGroupOf(id).some((x) => x !== id && (cards[x]?.reps ?? 0) > 0);
+}
+
+/**
+ * 這個字學過了：這張卡片學過，或同一個字在別的牌組學過（那就不會再當新卡出現）。
+ * 「還有幾個沒學」「已經學過幾個」要用這個算，數字才和實際出的新卡一致。
+ */
+export function wordLearned(cards: Record<string, { reps: number } | undefined>, id: string): boolean {
+  return (cards[id]?.reps ?? 0) > 0 || learnedInOtherDeck(cards, id);
 }
 
 /** 還沒學過的字有幾個：同一個字在好幾個牌組只算一次，任何一張學過就不算 */

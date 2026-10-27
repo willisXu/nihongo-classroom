@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import data from '../src/data/strokes.json';
 import { KANJI } from '../src/data/kanji';
+import { strokeCount } from '../src/data/strokeCounts';
+import { roundPath } from '../scripts/fetch-kanjivg.mjs';
 import {
   GLYPH_CENTER,
   GLYPH_SIZE,
@@ -116,6 +118,23 @@ describe('stroke data', () => {
     a?.push('M0,0');
     expect(getStrokePaths('あ')).toHaveLength(3);
   });
+
+  it('strokeCounts.ts（只要畫數的頁面用）和 strokes.json 的筆畫數一致', () => {
+    for (const ch of CHARS) expect(strokeCount(ch), ch).toBe(getStrokePaths(ch)?.length);
+    expect(strokeCount('鬱')).toBeUndefined();
+    expect(strokeCount('constructor')).toBeUndefined();
+    expect(strokeCount('')).toBeUndefined();
+  });
+
+  it('npm run strokes 把座標取到 1 位小數：相對座標照取整後的位置重算，誤差不會一段一段累積', () => {
+    expect(roundPath('M31.01,33c0.88,0.88,2.75,1.82,5.25,1.75')).toBe('M31,33c0.9,0.9,2.8,1.8,5.3,1.8');
+    expect(roundPath('M10,20c-0.04,1.26,0,0,1,-2.5')).toBe('M10,20c0,1.3,0,0,1-2.5');
+    // 每段往右 0.04：各自取整會全部變成 0，最後差 0.4；照取整後的位置重算，終點還在 0.05 以內
+    const d = 'M10.04,20' + 'c0.04,0,0.04,0,0.04,0'.repeat(10);
+    const end = samplePath(roundPath(d), 2)[1];
+    expect(Math.abs(end.x - 10.44)).toBeLessThanOrEqual(0.05 + 1e-9);
+    expect(() => roundPath('M0,0H10')).toThrow();
+  });
 });
 
 /* ───────── 取樣 ───────── */
@@ -134,8 +153,8 @@ describe('samplePath', () => {
     const d = getStrokePaths('あ')?.[2] ?? '';
     const pts = samplePath(d);
     expect(pts).toHaveLength(48);
-    expect(pts[0].x).toBeCloseTo(65.63, 2);
-    expect(pts[0].y).toBeCloseTo(44.12, 2);
+    expect(pts[0].x).toBeCloseTo(65.6, 2);
+    expect(pts[0].y).toBeCloseTo(44.1, 2);
     const gaps = pts.slice(1).map((p, i) => dist(p, pts[i]));
     const mean = gaps.reduce((a, b) => a + b, 0) / gaps.length;
     for (const g of gaps) expect(Math.abs(g - mean)).toBeLessThan(0.15 * mean); // 曲線上的弦長接近等距
@@ -151,6 +170,61 @@ describe('samplePath', () => {
       { x: 5, y: 6 },
       { x: 5, y: 6 },
     ]);
+  });
+});
+
+describe('path → 折線（自己拆貝茲曲線，不用 svg-path-properties）', () => {
+  it('strokes.json 的每一筆 path 都看得懂', () => {
+    const failures: string[] = [];
+    for (const ch of CHARS) {
+      for (const d of getStrokePaths(ch) ?? []) {
+        try {
+          if (!(pathLength(d) > 0)) failures.push(`${ch} 長度是 0`);
+        } catch (e) {
+          failures.push(`${ch} ${String(e)}`);
+        }
+      }
+    }
+    expect(failures).toEqual([]);
+  });
+
+  it('資料沒用到的指令、參數不完整、不是一個 M 開頭的 path 會丟錯，不會默默畫錯', () => {
+    for (const d of ['M0,0H10', 'M0,0V10', 'M0,0Q1,1,2,2', 'M0,0T5,5', 'M0,0A5,5,0,0,1,10,10', 'M0,0L10,0Z', 'L10,0', 'C1,2,3,4,5,6', 'M0,0c1,2,3', '10,20', 'M0,0L5,5M10,10L20,20', '']) {
+      expect(() => samplePath(d), d).toThrow();
+    }
+  });
+
+  it('S 的第一個控制點是上一段第二個控制點的鏡射；M 後面多的座標是直線', () => {
+    // 對稱的兩段曲線：S 寫法和 C 寫法要畫出一樣的線
+    const viaS = samplePath('M0,0C0,10,10,10,10,0S20,-10,20,0', 9);
+    const viaC = samplePath('M0,0C0,10,10,10,10,0C10,-10,20,-10,20,0', 9);
+    viaS.forEach((p, i) => expect(dist(p, viaC[i])).toBeLessThan(1e-9));
+    expect(samplePath('M0,0 10,0 10,10', 3)).toEqual([
+      { x: 0, y: 0 },
+      { x: 10, y: 0 },
+      { x: 10, y: 10 },
+    ]);
+  });
+
+  it('取樣結果和以前用的 svg-path-properties 差不到 0.15 單位', () => {
+    // 用 svg-path-properties 算的（這份資料）：整筆長度，和沿著弧長 0、¼、½、¾、1 的點
+    const GOLDEN: [string, number, number, [number, number][]][] = [
+      ['あ', 2, 198.03, [[65.6, 44.1], [41.68, 85.24], [37.36, 58.64], [83.52, 57.11], [66.5, 94.1]]],
+      ['ぱ', 3, 45.34, [[91.0, 24.4], [83.95, 17.21], [91.14, 10.1], [98.24, 17.3], [91.0, 24.4]]],
+      ['ゃ', 0, 58.71, [[22.2, 74.36], [35.56, 70.24], [49.32, 65.42], [59.08, 72.76], [47.25, 80.12]]],
+      ['ろ', 0, 203.82, [[37.0, 21.9], [53.08, 37.2], [39.1, 61.28], [84.06, 63.69], [52.8, 95.0]]],
+      ['ぬ', 1, 290.39, [[57.1, 19.3], [29.24, 83.23], [56.73, 35.83], [81.86, 81.22], [94.2, 86.3]]],
+      ['曜', 0, 47.89, [[15.5, 29.8], [17.06, 41.26], [17.0, 53.24], [16.94, 65.25], [16.9, 77.2]]],
+      ['書', 9, 40.55, [[37.3, 95.3], [47.44, 94.71], [57.52, 94.2], [67.63, 93.74], [77.8, 93.3]]],
+      ['験', 17, 37.31, [[68.2, 69.9], [74.41, 76.87], [81.07, 83.4], [87.85, 89.83], [95.3, 95.2]]],
+      ['教', 4, 32.66, [[29.5, 54.8], [37.61, 54.07], [45.63, 52.77], [42.01, 59.07], [36.2, 64.8]]],
+      ['ー', 0, 80.08, [[14.5, 53.0], [34.49, 51.88], [54.45, 51.2], [74.48, 50.4], [94.5, 49.8]]],
+    ];
+    for (const [ch, i, len, pts] of GOLDEN) {
+      const d = getStrokePaths(ch)![i];
+      expect(Math.abs(pathLength(d) - len), `${ch} 第 ${i + 1} 筆的長度`).toBeLessThan(0.15);
+      samplePath(d, 5).forEach((p, k) => expect(dist(p, { x: pts[k][0], y: pts[k][1] }), `${ch} 第 ${i + 1} 筆的第 ${k} 點`).toBeLessThan(0.15));
+    }
   });
 });
 
@@ -448,6 +522,34 @@ describe('judgeStroke on specific characters', () => {
     expect(judgeStroke(translate(circle, -40, 30), 3, r)).toMatchObject({ ok: false, reason: 'position' });
   });
 
+  it('教: the 5th stroke (㇖) ends close to where it starts, but writing it backwards is still a direction error', () => {
+    const r = refOf('教');
+    expect(span(r[4])).toBeLessThan(14);
+    expect(polylineLength(r[4])).toBeGreaterThan(30);
+    expect(judgeStroke(r[4], 4, r).ok).toBe(true);
+    expect(judgeStroke(jitter(r[4], 2, prng(5)), 4, r).ok).toBe(true);
+    expect(judgeStroke(reversed(r[4]), 4, r)).toMatchObject({ ok: false, reason: 'direction' });
+  });
+
+  it('long strokes (≥ 20) need the right direction even when their ends are close; short ones and loops do not', () => {
+    const failures: string[] = [];
+    let checked = 0;
+    for (const ch of CHARS) {
+      const ref = refOf(ch);
+      const scale = judgeScale(ch);
+      ref.forEach((s, k) => {
+        const len = polylineLength(s);
+        const ends = span(resample(s, 32));
+        if (ends >= 15 * scale || len < 20 * scale || ends < 5 * scale) return;
+        checked++;
+        const j = judgeStroke(reversed(s), k, ref, scale);
+        if (j.ok || j.reason !== 'direction') failures.push(`${ch}#${k + 1}: ${describeJ(j)}`);
+      });
+    }
+    expect(failures).toEqual([]);
+    expect(checked).toBeGreaterThanOrEqual(3); // 教 第 5 筆、や（ゃ）第 2 筆
+  });
+
   it('ー: one stroke, left to right', () => {
     const r = refOf('ー');
     const s = r[0];
@@ -459,6 +561,95 @@ describe('judgeStroke on specific characters', () => {
     expect(judgeStroke([{ x: 35, y: 51 }, { x: 75, y: 51 }], 0, r)).toMatchObject({ ok: false, reason: 'tooShort' });
     expect(acceptedAs('ー', 'へ')).toBe(false);
     expect(acceptedAs('へ', 'ー')).toBe(false);
+  });
+});
+
+/* ───────── 判定：先寫了相鄰的平行筆畫（扣掉這個人整體的偏移再比） ───────── */
+
+describe('judgeStroke: writing the neighbouring parallel stroke first is an order error', () => {
+  /** 一個人的寫字習慣：整個字縮放、旋轉、偏移，每一筆再多一點位置差和抖動 */
+  type Writer = { scale: number; rot: number; dx: number; dy: number; wobble: number; jitter: number; rnd: () => number };
+  const between = (rnd: () => number, a: number, b: number) => a + (b - a) * rnd();
+  const writer = (rnd: () => number, o: { scale: number; rot: number; shift: number; wobble: number; jitter: number }): Writer => ({
+    scale: between(rnd, 1 - o.scale, 1 + o.scale),
+    rot: (between(rnd, -o.rot, o.rot) * Math.PI) / 180,
+    dx: between(rnd, -o.shift, o.shift),
+    dy: between(rnd, -o.shift, o.shift),
+    wobble: o.wobble,
+    jitter: o.jitter,
+    rnd,
+  });
+  const writeAs = (w: Writer, stroke: readonly Pt[]): Pt[] => {
+    const c = GLYPH_CENTER;
+    const cos = Math.cos(w.rot);
+    const sin = Math.sin(w.rot);
+    const ox = between(w.rnd, -w.wobble, w.wobble);
+    const oy = between(w.rnd, -w.wobble, w.wobble);
+    return resample(stroke, 20).map((p) => {
+      const x = (p.x - c.x) * w.scale;
+      const y = (p.y - c.y) * w.scale;
+      return {
+        x: c.x + x * cos - y * sin + w.dx + ox + between(w.rnd, -w.jitter, w.jitter),
+        y: c.y + x * sin + y * cos + w.dy + oy + between(w.rnd, -w.jitter, w.jitter),
+      };
+    });
+  };
+  /** 和 TraceCanvas 一樣：寫對的每一筆的 shift 平均起來，就是判下一筆時的 bias */
+  const mean = (list: readonly Pt[]): Pt =>
+    list.length ? { x: list.reduce((t, p) => t + p.x, 0) / list.length, y: list.reduce((t, p) => t + p.y, 0) / list.length } : { x: 0, y: 0 };
+  // 書（第 3、4 筆和第 9、10 筆）、題（第 3、4 筆）、計（第 2、3 筆和第 3、4 筆）：相鄰的平行橫畫
+  const SWAPS: [string, number][] = [['書', 2], ['書', 8], ['題', 2], ['計', 1], ['計', 2]];
+
+  it('書、題、計：照標準筆畫先寫了下一筆橫畫，判 order（以前在位置容許值內，直接判對）', () => {
+    for (const [ch, k] of SWAPS) {
+      const r = refOf(ch);
+      expect(judgeStroke(r[k + 1], k, r), `${ch} 第 ${k + 1} 筆的位置寫了第 ${k + 2} 筆`).toMatchObject({ ok: false, reason: 'order', matchedIndex: k + 1 });
+      // 照順序寫照樣判對
+      expect(judgeStroke(r[k], k, r).ok).toBe(true);
+    }
+  });
+
+  it('整個字寫得大一點、小一點、偏一點、歪一點：扣掉前面幾筆的偏移，對調還是抓得到', () => {
+    const rnd = prng(20261027);
+    for (const [ch, k] of SWAPS) {
+      const r = refOf(ch);
+      for (let n = 0; n < 8; n++) {
+        const w = writer(rnd, { scale: 0.08, rot: 2, shift: 4, wobble: 0, jitter: 1 });
+        const shifts: Pt[] = [];
+        for (let i = 0; i < k; i++) {
+          const j = judgeStroke(writeAs(w, r[i]), i, r, 1, mean(shifts));
+          expect(j.ok, `${ch} 第 ${i + 1} 筆`).toBe(true);
+          shifts.push(j.shift!);
+        }
+        expect(judgeStroke(writeAs(w, r[k + 1]), k, r, 1, mean(shifts)), `${ch} 先寫第 ${k + 2} 筆（第 ${n + 1} 個人）`).toMatchObject({
+          ok: false,
+          reason: 'order',
+          matchedIndex: k + 1,
+        });
+      }
+    }
+  });
+
+  it('照正確順序寫，整個字縮放、旋轉、偏移、抖動，都不會被說成筆順錯', () => {
+    const rnd = prng(7);
+    const wrong: string[] = [];
+    let strokes = 0;
+    for (const ch of CHARS) {
+      const r = refOf(ch);
+      const scale = judgeScale(ch);
+      for (let n = 0; n < 3; n++) {
+        const w = writer(rnd, { scale: 0.15, rot: 4, shift: 6, wobble: 2, jitter: 1.5 });
+        const shifts: Pt[] = [];
+        r.forEach((s, i) => {
+          strokes++;
+          const j = judgeStroke(writeAs(w, s), i, r, scale, mean(shifts));
+          if (j.ok) shifts.push(j.shift!);
+          else if (j.reason === 'order') wrong.push(`${ch} 第 ${i + 1} 筆 → 第 ${j.matchedIndex! + 1} 筆`);
+        });
+      }
+    }
+    expect(wrong).toEqual([]);
+    expect(strokes).toBeGreaterThan(8000);
   });
 });
 

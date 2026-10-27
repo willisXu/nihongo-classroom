@@ -4,18 +4,12 @@ import { COURSE_LESSONS, KANA_LESSONS, LESSON_META } from '../data/lessons/meta'
 import type { CourseLessonMeta, CourseLevel, KanaLessonMeta, LessonMeta } from '../data/types';
 import { kanaLevel, type Activity, type KanaStats, type LessonProgress, type TutorLevel } from '../state';
 import { addDays, studyDayKey, studyDayStart } from './date';
-import { buildPool } from './kanaQuiz';
 
 export const HIRA_KEYS = SEION_CELLS.map((c) => `h:${c.h}`);
 export const KATA_KEYS = SEION_CELLS.map((c) => `k:${c.k}`);
 
 export function countMastered(stats: KanaStats, keys: string[]): number {
   return keys.filter((k) => kanaLevel(stats, k) === 2).length;
-}
-
-/** 一課的測驗範圍（key 清單） */
-export function lessonQuizKeys(lesson: KanaLessonMeta): string[] {
-  return buildPool(lesson.quiz.rows, lesson.quiz.script, 'see').map((it) => it.key);
 }
 
 /** 下一堂要上的課（五十音或初級課程，全部完成時回傳 undefined） */
@@ -108,13 +102,14 @@ function hasActivity(activity: Activity, key: string): boolean {
   return !!d && Object.values(d).some((v) => (v ?? 0) > 0);
 }
 
-export function todayActivity(activity: Activity, now: number) {
-  return activity[studyDayKey(now)] ?? {};
-}
-
-/** AI 家教的建議程度：五十音還沒學完就用「只用假名」，N5 的課都上完了就用 N4 */
+/**
+ * AI 家教的建議程度：五十音還沒學完就用「只用假名」；N5 的課都上完了，或已經完成任何一課 N4 就用 N4
+ * （N5 有一課忘了勾完成，不會讓 AI 一直停在 N5）
+ */
 export function suggestedLevel(progress: LessonProgress): TutorLevel {
   if (!kanaCourseDone(progress)) return 'kana';
   const n5 = COURSE_LESSONS.filter((l) => l.level === 'n5');
-  return n5.length && n5.every((l) => progress.done[l.id]) ? 'n4' : 'n5';
+  const n5Done = n5.length > 0 && n5.every((l) => progress.done[l.id]);
+  const n4Started = COURSE_LESSONS.some((l) => l.level === 'n4' && progress.done[l.id]);
+  return n5Done || n4Started ? 'n4' : 'n5';
 }

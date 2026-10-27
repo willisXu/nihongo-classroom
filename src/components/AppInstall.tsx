@@ -7,7 +7,7 @@ const OFFLINE_TEXT: Record<OfflineState, { tone: 'ok' | 'mark' | 'busy'; text: s
     text: '已經可以離線使用：課程、練習、五十音表和單字卡，沒有網路也打得開，學習紀錄照常儲存。AI 家教需要網路；離線時發音改用裝置內建的日文語音。',
   },
   preparing: { tone: 'busy', text: '正在背景下載離線要用的檔案（只需要一次），下載好之後沒有網路也能用。' },
-  failed: { tone: 'mark', text: '離線檔案這次沒有下載完成（可能是網路不穩），下次開啟網站時會自動再試。' },
+  failed: { tone: 'mark', text: '離線檔案這次沒有下載完成（可能是網路不穩，或裝置的儲存空間不夠），下次開啟網站時會自動再試。' },
   unsupported: { tone: 'mark', text: '這個瀏覽器不支援離線使用，要有網路才能開啟。建議改用最新版的 Chrome、Edge 或 Safari。' },
   dev: { tone: 'busy', text: '開發模式不會啟用離線功能；用啟動檔（npm start）或線上版開啟才有。' },
 };

@@ -102,6 +102,30 @@ describe('程度規則', () => {
     expect(conversationSystem(casual, 'n4')).toMatch(/use natural casual speech \(plain form\)/);
   });
 
+  it('朋友情境：N5 課程上到第 32 課（普通形）就用常體，系統提示不會同時說「學過普通形」又說「還沒學」', async () => {
+    const { conversationSystem, PLAIN_FORM, SCENARIOS } = await import('../src/data/tutor');
+    const { learnedGrammar, suggestedLevel } = await import('../src/lib/progress');
+    const { COURSE_LESSONS, LESSON_META } = await import('../src/data/lessons/meta');
+    // 第 32 課教普通形、作業連到 KTV（朋友情境）：課程資料要用同一個文法名稱
+    const l32 = COURSE_LESSONS.find((l) => l.id === 32)!;
+    expect(l32.grammar).toContain(PLAIN_FORM);
+    const karaoke = SCENARIOS.find((s) => s.id === l32.tutor)!;
+    expect(karaoke.casual).toBe(true);
+    // 第 1–31 課完成、正在上第 32 課：自動程度是 N5，學過的文法已經有普通形
+    const progress = { done: Object.fromEntries(LESSON_META.filter((l) => l.id <= 31).map((l) => [l.id, 1])), hw: {} };
+    expect(suggestedLevel(progress)).toBe('n5');
+    const grammar = learnedGrammar(progress, 'n5');
+    const sys = conversationSystem(karaoke, 'n5', '', false, grammar);
+    expect(sys).toContain(PLAIN_FORM);
+    expect(sys).toMatch(/use natural casual speech \(plain form\)/);
+    expect(sys).not.toMatch(/has not learned plain forms yet/);
+    // 還沒上到第 32 課：照樣用です／ます
+    const before = learnedGrammar({ done: Object.fromEntries(LESSON_META.filter((l) => l.id <= 20).map((l) => [l.id, 1])), hw: {} }, 'n5');
+    expect(conversationSystem(karaoke, 'n5', '', false, before)).toMatch(/has not learned plain forms yet/);
+    // 只用假名的程度不受學過的文法影響（那個程度要求很短的です／ます句子）
+    expect(conversationSystem(karaoke, 'kana', '', false, grammar)).toMatch(/has not learned plain forms yet/);
+  });
+
   it('還在學五十音：告訴 AI 學過哪些假名、畫面有羅馬拼音；學完了就照原本的說明', async () => {
     const { conversationSystem, correctionSystem, SCENARIOS } = await import('../src/data/tutor');
     const known = 'あいうえおかきくけこさしすせそ';
@@ -152,5 +176,28 @@ describe('模型回覆的大小寫', () => {
     expect(sanitizeCorrection({ verdict: 'great', corrected: 'はい' })?.verdict).toBe('minor');
     const qs = sanitizeQuiz({ questions: [{ prompt: '？', ja: '', choices: ['a', 'b'], choiceLang: 'ZH', answer: 0, explanation: '' }] });
     expect(qs[0].choiceLang).toBe('zh');
+  });
+});
+
+describe('自動程度', () => {
+  const upTo = async (n: number, skip: number[] = []) => {
+    const { LESSON_META } = await import('../src/data/lessons/meta');
+    return { done: Object.fromEntries(LESSON_META.filter((l) => l.id <= n && !skip.includes(l.id)).map((l) => [l.id, 1])), hw: {} };
+  };
+
+  it('五十音沒學完是只用假名；N5 全部完成，或已經完成任何一課 N4 就是 N4', async () => {
+    const { suggestedLevel, learnedGrammar } = await import('../src/lib/progress');
+    expect(suggestedLevel(await upTo(0))).toBe('kana');
+    expect(suggestedLevel(await upTo(7))).toBe('kana');
+    expect(suggestedLevel(await upTo(8))).toBe('n5');
+    expect(suggestedLevel(await upTo(31))).toBe('n5');
+    expect(suggestedLevel(await upTo(32))).toBe('n4');
+    // N5 有一課忘了勾完成，但 N4 已經上到第 45 課：不會一直停在 N5，學過的 N4 文法也會告訴 AI
+    const skipped = await upTo(45, [11]);
+    expect(suggestedLevel(skipped)).toBe('n4');
+    const grammar = learnedGrammar(skipped, 'n4');
+    expect(grammar).toEqual(expect.arrayContaining(['受身', '可能形']));
+    // 五十音沒學完時，即使勾了後面的課也還是只用假名
+    expect(suggestedLevel(await upTo(45, [3]))).toBe('kana');
   });
 });

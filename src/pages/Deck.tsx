@@ -1,32 +1,19 @@
-import { memo, useDeferredValue, useMemo, useState } from 'react';
+import { memo, use, useDeferredValue, useId, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { deckById } from '../data/vocab';
+import { loadDeck } from '../data/vocab/load';
 import type { VocabItem } from '../data/types';
 import { settingsStore, srsStore, updateSettings } from '../state';
 import { useStore } from '../state/store';
 import type { CardState } from '../lib/srs';
-import { romaji } from '../lib/romaji';
 import { daysBetween } from '../lib/date';
-import { POS_LABEL, VERB_GROUP_LABEL, masuForm, groupByTopic, speechText, exampleSpeech } from '../lib/vocab';
+import {
+  POS_LABEL, VERB_GROUP_LABEL, masuForm, groupByTopic, romajiOf, speechText, exampleSpeech, vocabSearchQuery, vocabSearchText,
+} from '../lib/vocabItem';
 import { SpeakIcon } from '../components/Speak';
 import { Switch } from '../components/Controls';
 import { Icon } from '../components/Icon';
 import { usePageTitle } from '../lib/title';
 import { useNow } from '../lib/useNow';
-
-const PLAIN: Record<string, string> = { ā: 'a', ī: 'i', ū: 'u', ē: 'e', ō: 'o' };
-/** 搜尋用的拼音寫法：kōhī、kohi、koohii 都算 */
-function romajiKeys(kana: string): string[] {
-  const r = romaji(kana).toLowerCase();
-  const short = r.replace(/[āīūēō]/g, (c) => PLAIN[c]);
-  const long = r.replace(/[āīūēō]/g, (c) => PLAIN[c] + PLAIN[c]);
-  return [r, short, long, short.replace(/[' -]/g, '')];
-}
-
-/** 每個單字可以被搜尋到的文字（假名、漢字、中文、各種拼音），換牌組時算一次就好 */
-function searchText(it: VocabItem): string {
-  return [it.kana, it.kanji ?? '', it.zh.toLowerCase(), ...romajiKeys(it.kana)].join('\n');
-}
 
 function statusOf(card: CardState | undefined, now: number): { label: string; cls: string } {
   if (!card || card.reps === 0) return { label: '未學', cls: '' };
@@ -38,22 +25,25 @@ function statusOf(card: CardState | undefined, now: number): { label: string; cl
 
 export default function Deck() {
   const { deck: deckId } = useParams();
-  const deck = deckById(deckId ?? '');
+  // 只下載這一副牌組（第一次打開時顯示「載入中」，見 Layout 的 Suspense）
+  const deck = use(loadDeck(deckId ?? ''));
   const srs = useStore(srsStore);
   const settings = useStore(settingsStore);
   const [query, setQuery] = useState('');
   const [topic, setTopic] = useState<string>('');
   // 打字時先更新輸入框，列表晚一點再跟上，打字不會卡
   const deferredQuery = useDeferredValue(query);
-  // 狀態用同一個時間點算，列表項目才能沿用上次的畫面；回到這個分頁、過了凌晨 4 點換日時才更新
+  // 回到這個分頁、過了凌晨 4 點換日時重新取時間。狀態在這裡算好、只把文字傳給每一列：
+  // 狀態沒變的列不重畫（切回分頁時幾百列不用全部重畫）
   const now = useNow();
   usePageTitle(deck ? deck.title : '找不到這個牌組');
 
   const groups = useMemo(() => (deck ? groupByTopic(deck.items) : []), [deck]);
-  const index = useMemo(() => new Map(deck ? deck.items.map((it) => [it.id, searchText(it)]) : []), [deck]);
+  // 每個單字可以被搜尋到的文字，換牌組時算一次就好
+  const index = useMemo(() => new Map(deck ? deck.items.map((it) => [it.id, vocabSearchText(it)]) : []), [deck]);
   const filtered = useMemo(() => {
     if (!deck) return [];
-    const q = deferredQuery.trim().toLowerCase();
+    const q = vocabSearchQuery(deferredQuery);
     return groups
       .filter((g) => !topic || g.topic === topic)
       .map((g) => ({
@@ -127,9 +117,10 @@ export default function Deck() {
         <section key={g.topic} className="vgroup" aria-label={g.topic}>
           <h2 className="h-sub">{g.topic}</h2>
           <ul className="vlist">
-            {g.items.map((it) => (
-              <VocabRow key={it.id} item={it} showRomaji={settings.showRomaji} card={srs.cards[it.id]} now={now} />
-            ))}
+            {g.items.map((it) => {
+              const st = statusOf(srs.cards[it.id], now);
+              return <VocabRow key={it.id} item={it} showRomaji={settings.showRomaji} status={st.label} statusCls={st.cls} />;
+            })}
           </ul>
         </section>
       ))}
@@ -142,16 +133,16 @@ export default function Deck() {
 const VocabRow = memo(function VocabRow({
   item,
   showRomaji,
-  card,
-  now,
+  status,
+  statusCls,
 }: {
   item: VocabItem;
   showRomaji: boolean;
-  card: CardState | undefined;
-  now: number;
+  status: string;
+  statusCls: string;
 }) {
   const [open, setOpen] = useState(false);
-  const status = statusOf(card, now);
+  const exId = useId();
   const hasMore = !!(item.ex || item.note);
   return (
     <li className="vrow">
@@ -166,7 +157,7 @@ const VocabRow = memo(function VocabRow({
           ) : (
             <span className="v-kanji">{item.kana}</span>
           )}
-          {showRomaji ? <span className="v-r">{romaji(item.kana)}</span> : null}
+          {showRomaji ? <span className="v-r">{romajiOf(item)}</span> : null}
         </p>
         <p className="v-zh">
           {item.zh}
@@ -185,9 +176,9 @@ const VocabRow = memo(function VocabRow({
           <div className="v-more">
             {item.ex ? (
               <div className="v-ex">
-                <SpeakIcon text={exampleSpeech(item.ex)} label="播放例句" />
+                <SpeakIcon text={exampleSpeech(item.ex)} label="播放例句" describedBy={exId} />
                 <div>
-                  <p lang="ja" className="v-ex-ja">
+                  <p lang="ja" className="v-ex-ja" id={exId}>
                     {item.ex.ja}
                   </p>
                   {/* 例句全是假名時，讀音和原句一樣，不重複顯示 */}
@@ -205,7 +196,7 @@ const VocabRow = memo(function VocabRow({
         ) : null}
       </div>
       <div className="v-side">
-        <span className={`v-status ${status.cls}`}>{status.label}</span>
+        <span className={`v-status ${statusCls}`}>{status}</span>
         {hasMore ? (
           <button type="button" className="linkbtn" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
             {open ? '收合' : item.ex ? '例句' : '說明'}

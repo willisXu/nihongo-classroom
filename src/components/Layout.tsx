@@ -56,42 +56,51 @@ function Loading() {
   );
 }
 
-function VoiceNote() {
+/** 線上語音念不出來（離線、連不到），又沒有內建的日文語音：按發音鍵的當下浮在畫面下方提醒（這次開網頁一次） */
+function RemoteVoiceNote() {
   const sp = useSpeech();
-  const [closed, setClosed] = useState(() => readJSON('nk.vnote') === true);
-  const [closedRemote, setClosedRemote] = useState(false);
-  // 線上語音念不出來（離線、連不到），又沒有內建的日文語音：這次開網頁提醒一次
-  if (sp.remoteFailed && !closedRemote && !sp.voices.some((v) => !isRemoteVoice(v))) {
-    return (
-      <div className="vnote" role="status">
-        <p>
-          線上的日文語音現在念不出來（可能沒有網路，或連不到語音服務），這台裝置也沒有內建的日文語音，所以聽不到發音。Windows
-          請到「設定 → 時間與語言 → 語音 → 新增語音」加入日文，之後沒有網路也能發音。
-        </p>
-        <button type="button" className="chip-btn" onClick={() => setClosedRemote(true)}>
-          知道了
-        </button>
-      </div>
-    );
-  }
-  if (closed || !sp.ready || (sp.supported && sp.hasJapanese)) return null;
+  const [closed, setClosed] = useState(false);
+  if (!sp.remoteFailed || closed || sp.voices.some((v) => !isRemoteVoice(v))) return null;
   return (
     <div className="vnote" role="status">
       <p>
-        {sp.supported
-          ? '這台裝置沒有找到日文語音，按發音鍵可能沒有聲音，或會用其他語言念。請在系統的語音設定加入「日文（Japanese）」語音，再重新開啟這頁。'
-          : '這個瀏覽器不支援語音合成，聽不到發音。建議改用最新版的 Chrome、Edge 或 Safari。'}
+        線上的日文語音現在念不出來（可能沒有網路，或連不到語音服務），這台裝置也沒有內建的日文語音，所以聽不到發音。Windows
+        請到「設定 → 時間與語言 → 語音 → 新增語音」加入日文，之後沒有網路也能發音。
       </p>
-      <button
-        type="button"
-        className="chip-btn"
-        onClick={() => {
-          setClosed(true);
-          writeJSON('nk.vnote', true);
-        }}
-      >
+      <button type="button" className="chip-btn" onClick={() => setClosed(true)}>
         知道了
       </button>
+    </div>
+  );
+}
+
+/**
+ * 裝置沒有日文語音（或不支援語音）：放在頁面最上方，按「知道了」以後不再出現。
+ * 不浮在畫面上：按掉之前會一直在，浮著的話會蓋住手寫的描字格、五十音表的說明面板。
+ */
+function VoiceNote() {
+  const sp = useSpeech();
+  const [closed, setClosed] = useState(() => readJSON('nk.vnote') === true);
+  if (closed || !sp.ready || (sp.supported && sp.hasJapanese)) return null;
+  return (
+    <div className="wrap vnote-top">
+      <div className="vnote" role="status">
+        <p>
+          {sp.supported
+            ? '這台裝置沒有找到日文語音，按發音鍵可能沒有聲音，或會用其他語言念。請在系統的語音設定加入「日文（Japanese）」語音，再重新開啟這頁。'
+            : '這個瀏覽器不支援語音合成，聽不到發音。建議改用最新版的 Chrome、Edge 或 Safari。'}
+        </p>
+        <button
+          type="button"
+          className="chip-btn"
+          onClick={() => {
+            setClosed(true);
+            writeJSON('nk.vnote', true);
+          }}
+        >
+          知道了
+        </button>
+      </div>
     </div>
   );
 }
@@ -209,10 +218,11 @@ export function Layout() {
 
       <div className="vnote-toast">
         <StorageWarning />
-        <VoiceNote />
+        <RemoteVoiceNote />
       </div>
 
       <main id="main" tabIndex={-1}>
+        <VoiceNote />
         {/* 換頁就清掉錯誤狀態；網站更新後舊分頁載不到新檔案時，會自動重新整理一次 */}
         <ErrorBoundary key={loc.pathname}>
           <Suspense fallback={<Loading />}>

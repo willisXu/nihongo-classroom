@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
 import {
   NEW_PER_DAY_OPTIONS, settingsStore, updateSettings, usageStore, exportBackup, importBackup, peekBackup, preImportStore, undoImport,
   resetAllProgress, lastExportStore, markExported, type BackupPreview, type BackupSummary, type ThemePref,
@@ -21,6 +21,14 @@ const SUMMARY_ROWS: [keyof BackupSummary, string][] = [
   ['words', '學過的單字'],
   ['days', '學習天數'],
 ];
+
+/**
+ * 確認列出現、收起來時，剛按的按鈕不見了：焦點放到接下來要用的按鈕（下一個畫面才有那顆按鈕）。
+ * 不處理的話焦點掉回頁面最上面，鍵盤和讀螢幕軟體的使用者得從頭找。
+ */
+function focusSoon(ref: RefObject<HTMLElement | null>) {
+  requestAnimationFrame(() => ref.current?.focus());
+}
 
 /** 讓瀏覽器下載一個檔案 */
 function saveFile(blob: Blob, name: string) {
@@ -52,6 +60,11 @@ export default function Settings() {
   const [confirmUndo, setConfirmUndo] = useState(false);
   const preImport = useSyncExternalStore(preImportStore.subscribe, preImportStore.get, preImportStore.get);
   const msgRef = useRef<HTMLParagraphElement>(null);
+  // 「清除所有學習紀錄」「復原匯入前的紀錄」和它們確認列的「取消」
+  const resetRef = useRef<HTMLButtonElement>(null);
+  const resetCancelRef = useRef<HTMLButtonElement>(null);
+  const undoRef = useRef<HTMLButtonElement>(null);
+  const undoCancelRef = useRef<HTMLButtonElement>(null);
 
   const exportAgo = lastExport ? daysBetween(lastExport, Date.now()) : null;
   const totalCost = Object.entries(usage.byModel).reduce(
@@ -327,11 +340,10 @@ export default function Settings() {
             </div>
           </div>
         ) : null}
-        {msg ? (
-          <p ref={msgRef} tabIndex={-1} className={`key-status tone-${msg.tone}`} role="status">
-            {msg.text}
-          </p>
-        ) : null}
+        {/* 一直留著的播報區（沒有訊息時藏起來）：焦點沒有移到這裡時（例如全部清除後回到按鈕），結果也會念出來 */}
+        <p ref={msgRef} tabIndex={-1} className={msg ? `key-status tone-${msg.tone}` : 'sr-only'} role="status">
+          {msg?.text}
+        </p>
         {preImport && !pendingImport ? (
           <div className="reset-row">
             {confirmUndo ? (
@@ -340,12 +352,29 @@ export default function Settings() {
                 <button type="button" className="btn btn-sm btn-primary" onClick={doUndo}>
                   復原
                 </button>
-                <button type="button" className="linkbtn" onClick={() => setConfirmUndo(false)}>
+                <button
+                  type="button"
+                  className="linkbtn"
+                  ref={undoCancelRef}
+                  onClick={() => {
+                    setConfirmUndo(false);
+                    focusSoon(undoRef);
+                  }}
+                >
                   取消
                 </button>
               </>
             ) : (
-              <button type="button" className="linkbtn" onClick={() => setConfirmUndo(true)}>
+              <button
+                type="button"
+                className="linkbtn"
+                ref={undoRef}
+                onClick={() => {
+                  setConfirmUndo(true);
+                  // 先停在「取消」：連按兩下 Enter 不會直接換掉紀錄
+                  focusSoon(undoCancelRef);
+                }}
+              >
                 復原 {formatDateTimeZh(preImport.at)} 匯入前的紀錄
               </button>
             )}
@@ -361,17 +390,36 @@ export default function Settings() {
                 onClick={() => {
                   resetAllProgress();
                   setConfirmReset(false);
-                  report({ tone: 'ok', text: '已清除所有學習紀錄。' });
+                  // 結果由上面的播報區念出來；焦點回到原本的按鈕
+                  setMsg({ tone: 'ok', text: '已清除所有學習紀錄。' });
+                  focusSoon(resetRef);
                 }}
               >
                 全部清除
               </button>
-              <button type="button" className="linkbtn" onClick={() => setConfirmReset(false)}>
+              <button
+                type="button"
+                className="linkbtn"
+                ref={resetCancelRef}
+                onClick={() => {
+                  setConfirmReset(false);
+                  focusSoon(resetRef);
+                }}
+              >
                 取消
               </button>
             </>
           ) : (
-            <button type="button" className="linkbtn danger" onClick={() => setConfirmReset(true)}>
+            <button
+              type="button"
+              className="linkbtn danger"
+              ref={resetRef}
+              onClick={() => {
+                setConfirmReset(true);
+                // 先停在「取消」：連按兩下 Enter 不會直接清掉紀錄
+                focusSoon(resetCancelRef);
+              }}
+            >
               清除所有學習紀錄
             </button>
           )}

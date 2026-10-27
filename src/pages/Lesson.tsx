@@ -1,4 +1,4 @@
-import { use, useEffect, useRef, useState, type MouseEvent } from 'react';
+import { memo, use, useEffect, useRef, useState, type MouseEvent } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { loadLesson, preloadLesson } from '../data/lessons';
 import { LESSON_META, lessonMetaById, unitOf } from '../data/lessons/meta';
@@ -7,7 +7,7 @@ import type { KanaRow, Lesson, LessonBlock, LessonWord, Script } from '../data/t
 import { lessonStore, setHomework, setLessonDone } from '../state';
 import { useStore } from '../state/store';
 import { romaji } from '../lib/romaji';
-import { getStrokePaths } from '../lib/strokes';
+import { strokeCount } from '../data/strokeCounts';
 import { speak } from '../lib/speech';
 import { Rich } from '../components/Rich';
 import { Masu, Stamp, Switch } from '../components/Controls';
@@ -17,18 +17,18 @@ import { DialogBlock, ExamplesBlock, GrammarBlock, KanjiBlock, ReadingBlock, Voc
 import { DrillBlock } from '../components/Drill';
 import { readJSON, writeJSON } from '../state/store';
 import { usePageTitle } from '../lib/title';
+import { jumpToElement } from '../lib/jump';
 
 /** 課名裡有假名才標成日文（第 5～8 課的課名「濁音・半濁音」「片假名（一）」是中文也看得懂的漢字） */
 const hasKana = (t: string) => /[\u3041-\u3096\u30a1-\u30fa]/u.test(t);
 
-const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-/** 捲到課文的某一段，並把焦點放在段落標題（鍵盤和讀屏軟體才會從那裡接著讀） */
-function goToSection(id: string, smooth: boolean) {
+/**
+ * 跳到課文的某一段，並把焦點放在段落標題（鍵盤和讀屏軟體才會從那裡接著讀）。
+ * 直接跳、不平滑捲動：畫面外的段落還沒排版，平滑捲動會停在錯的地方（見 lib/jump.ts）
+ */
+function goToSection(id: string) {
   const el = document.getElementById(id);
-  if (!el) return;
-  el.scrollIntoView({ behavior: smooth && !reduceMotion() ? 'smooth' : 'auto', block: 'start' });
-  el.querySelector<HTMLElement>('h2')?.focus({ preventScroll: true });
+  if (el) jumpToElement(el, el.querySelector<HTMLElement>('h2'));
 }
 
 /** 振假名（漢字上面的讀音）顯示或隱藏：整個 N5 課程一起記住 */
@@ -56,17 +56,17 @@ function LessonView({ lesson }: { lesson: Lesson | undefined }) {
   const navigate = useNavigate();
   usePageTitle(lesson ? `第 ${lesson.id} 課 ${lesson.title}` : '找不到這一課');
 
-  // 網址帶段落（例如分享的連結 #/lessons/1#beats）就捲到那一段；第一次進來直接跳過去，之後用平滑捲動
+  // 網址帶段落（例如分享的連結 #/lessons/1#beats）就捲到那一段
   const hashRuns = useRef(0);
   useEffect(() => {
     const target = decodeURIComponent(location.hash.slice(1));
-    const smooth = hashRuns.current++ > 0;
+    const first = hashRuns.current++ === 0;
     if (!target) return;
     // 等版面的「換頁回到頂端」做完再捲
     let cancelled = false;
-    const t = window.setTimeout(() => goToSection(target, smooth), 0);
+    const t = window.setTimeout(() => goToSection(target), 0);
     // 直接打開分享連結時，字型載入後版面會變長，載完再對齊一次
-    if (!smooth) void document.fonts?.ready.then(() => !cancelled && goToSection(target, false));
+    if (first) void document.fonts?.ready.then(() => !cancelled && goToSection(target));
     return () => {
       cancelled = true;
       window.clearTimeout(t);
@@ -87,7 +87,7 @@ function LessonView({ lesson }: { lesson: Lesson | undefined }) {
   const tocClick = (e: MouseEvent<HTMLAnchorElement>, sectionId: string) => {
     if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return; // 另開分頁照瀏覽器預設
     e.preventDefault();
-    if (location.hash === `#${sectionId}`) goToSection(sectionId, true);
+    if (location.hash === `#${sectionId}`) goToSection(sectionId);
     else navigate({ hash: sectionId }, { replace: true });
   };
 
@@ -184,7 +184,7 @@ function LessonView({ lesson }: { lesson: Lesson | undefined }) {
       </header>
 
       {lesson.sections.map((s, i) => (
-        <section key={s.id} id={s.id} className="block" aria-labelledby={`h-${s.id}`}>
+        <section key={s.id} id={s.id} className="block lsec" aria-labelledby={`h-${s.id}`}>
           <h2 id={`h-${s.id}`} className="sec-h" tabIndex={-1}>
             <span className="secnum" aria-hidden="true">
               {i + 1}
@@ -197,7 +197,7 @@ function LessonView({ lesson }: { lesson: Lesson | undefined }) {
         </section>
       ))}
 
-      <section id="homework" className="block" aria-labelledby="h-homework">
+      <section id="homework" className="block lsec" aria-labelledby="h-homework">
         <h2 id="h-homework" className="sec-h" tabIndex={-1}>
           <span className="secnum" aria-hidden="true">
             {lesson.sections.length + 1}
@@ -303,7 +303,11 @@ function LessonView({ lesson }: { lesson: Lesson | undefined }) {
 
 /* ---------------- 區塊 ---------------- */
 
-function Block({ block, lessonId, deckLink }: { block: LessonBlock; lessonId: number; deckLink: boolean }) {
+/**
+ * memo：勾作業、切換振假名時課文頁會重畫，課文本身（props 都是不會變的課文資料）不用跟著重畫
+ * （第 56 課有一千多個元件，不然每勾一次都整課重畫）。
+ */
+const Block = memo(function Block({ block, lessonId, deckLink }: { block: LessonBlock; lessonId: number; deckLink: boolean }) {
   switch (block.type) {
     case 'p':
       return (
@@ -462,7 +466,7 @@ function Block({ block, lessonId, deckLink }: { block: LessonBlock; lessonId: nu
     case 'drill':
       return <DrillBlock title={block.title} intro={block.intro} items={block.items} />;
   }
-}
+});
 
 /**
  * 課文表格：手機上跟著畫面寬度折行，平常不必左右捲動，也就不多佔一次 Tab。
@@ -475,8 +479,12 @@ function LessonTable({ head, rows }: { head: string[]; rows: string[][] }) {
     const el = ref.current;
     if (!el) return;
     const check = () => setOverflow(el.scrollWidth > el.clientWidth + 1);
-    check();
-    if (typeof ResizeObserver !== 'function') return;
+    // 第一次檢查也交給 ResizeObserver（開始觀察後，排版完會回呼一次）：
+    // 在這裡直接讀 scrollWidth 會強迫整頁立刻排版，長課文在手機上要多卡好幾百毫秒
+    if (typeof ResizeObserver !== 'function') {
+      check();
+      return;
+    }
     const ro = new ResizeObserver(check);
     ro.observe(el);
     if (el.firstElementChild) ro.observe(el.firstElementChild);
@@ -555,7 +563,7 @@ function KanaRowView({ row, script, showLabel }: { row: KanaRow; script: Script;
         <ul className="knotes">
           {filled.map((c) => {
             const ch = script === 'h' ? c.h : c.k;
-            const strokes = getStrokePaths(ch)?.length;
+            const strokes = strokeCount(ch);
             const example = script === 'h' ? c.ex : c.kx;
             return (
               <li key={ch}>

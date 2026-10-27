@@ -33,14 +33,18 @@ export function SpeakButton({ text, children = '播放', className = '' }: { tex
   );
 }
 
-/** 只有圖示的小發音鍵 */
-export function SpeakIcon({ text, label }: { text: string; label?: string }) {
+/**
+ * 只有圖示的小發音鍵。describedBy：念的是哪一句（元素的 id）；同一頁有很多「播放例句」時，
+ * 讀螢幕軟體用按鈕清單瀏覽才分得出是哪一句
+ */
+export function SpeakIcon({ text, label, describedBy }: { text: string; label?: string; describedBy?: string }) {
   const [on, flash] = usePlayFlash();
   return (
     <button
       type="button"
       className={`iconbtn ${on ? 'is-playing' : ''}`}
       aria-label={label ?? `播放 ${text}`}
+      aria-describedby={describedBy}
       onClick={(e) => {
         e.stopPropagation();
         speak(text);

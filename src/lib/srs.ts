@@ -209,6 +209,17 @@ export function pickNext(main: string[], learning: Pending[], now: number): stri
   return ahead?.id ?? null;
 }
 
+/**
+ * 這一輪還沒開始的新卡只留 allowed 張（今天的新卡額度用完了，例如另一個分頁也在學新卡）。
+ * keep：正在看的那張，是新卡的話先算進額度、不拿掉；複習卡不受影響。沒有拿掉任何一張時回傳原本的陣列。
+ */
+export function limitFresh(main: string[], cards: Record<string, CardState | undefined>, allowed: number, keep: string | null = null): string[] {
+  const isNew = (id: string) => !cards[id] || cards[id]!.reps === 0;
+  let left = allowed - (keep !== null && main.includes(keep) && isNew(keep) ? 1 : 0);
+  const out = main.filter((id) => !isNew(id) || id === keep || left-- > 0);
+  return out.length === main.length ? main : out;
+}
+
 /** 開一輪複習要看的卡片 */
 export function buildSession(cards: Record<string, CardState | undefined>, ids: string[], now: number, newLimit: number): Session {
   const q = buildQueue(cards, ids, now, newLimit);
@@ -225,12 +236,15 @@ export function deckStats(cards: Record<string, CardState | undefined>, ids: str
   let seen = 0;
   let due = 0;
   let mature = 0;
+  /** 學習中（含忘記後重新學習）的卡片，到期了沒都算 */
+  let learning = 0;
   for (const id of ids) {
     const c = cards[id];
     if (!c || c.reps === 0) continue;
     seen++;
     if (c.due <= now) due++;
     if (c.step === -1 && c.ivl >= 21) mature++;
+    if (c.step >= 0) learning++;
   }
-  return { total: ids.length, seen, due, mature, unseen: ids.length - seen };
+  return { total: ids.length, seen, due, mature, learning, unseen: ids.length - seen };
 }

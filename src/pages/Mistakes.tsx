@@ -4,13 +4,13 @@ import { vocabById } from '../data/vocab';
 import { clearVocabMiss, kanaStore, logActivity, missStore, settingsStore, srsStore, writingStore } from '../state';
 import { useStore } from '../state/store';
 import { vocabMistakes, weakKanaKeys, writingMistakes } from '../lib/mistakes';
-import { romaji } from '../lib/romaji';
 import { speak } from '../lib/speech';
-import { POS_LABEL, VERB_GROUP_LABEL, speechText, exampleSpeech } from '../lib/vocab';
+import { romajiOf, speechText } from '../lib/vocab';
 import { usePageTitle } from '../lib/title';
 import { focusLost, revealAnswer } from '../lib/flashcard';
 import { PracticeTabs } from '../components/PracticeTabs';
 import { SpeakIcon } from '../components/Speak';
+import { CardBack } from '../components/CardBack';
 import { Icon } from '../components/Icon';
 
 /** 單字清單先列這麼多，其他按「顯示全部」 */
@@ -278,34 +278,11 @@ function VocabDrill({ ids, onClose }: { ids: string[]; onClose: () => void }) {
             {item.kana}
           </p>
         ) : null}
-        {settings.showRomaji ? <p className="f-r">{romaji(item.kana)}</p> : null}
+        {settings.showRomaji ? <p className="f-r">{romajiOf(item)}</p> : null}
         <SpeakIcon text={speechText(item)} label="再聽一次" />
       </div>
       {flipped ? (
-        <div className="flash-back" ref={backRef} tabIndex={-1}>
-          <p className="f-zh" ref={meaningRef}>
-            {item.zh}
-          </p>
-          <p className="f-pos">
-            {POS_LABEL[item.pos]}
-            {item.verbGroup ? ` · ${VERB_GROUP_LABEL[item.verbGroup]}` : ''}
-          </p>
-          {item.ex ? (
-            <div className="v-ex">
-              <SpeakIcon text={exampleSpeech(item.ex)} label="播放例句" />
-              <div>
-                <p lang="ja" className="v-ex-ja">
-                  {item.ex.ja}
-                </p>
-                <p lang="ja" className="v-ex-kana">
-                  {item.ex.kana}
-                </p>
-                <p className="v-ex-zh">{item.ex.zh}</p>
-              </div>
-            </div>
-          ) : null}
-          {item.note ? <p className="v-note">{item.note}</p> : null}
-        </div>
+        <CardBack item={item} backRef={backRef} meaningRef={meaningRef} />
       ) : null}
       <div className="flash-actions" ref={actionsRef}>
         {!flipped ? (

@@ -62,6 +62,17 @@ const SPEECH_RULE: Record<TutorLevel, string> = {
   n4: 'Use N4 grammar and natural vocabulary.',
 };
 
+/** 常體（普通形）的文法名稱：N5 課程最後一課（第 32 課）教的，課程資料的 grammar 用同一個名稱 */
+export const PLAIN_FORM = '普通形';
+
+/**
+ * 學過常體了沒：N4 程度，或 N5 課程上到第 32 課（學過的文法裡有普通形）。
+ * 只用假名的程度一律當成還沒學（那個程度要求很短的です／ます句子）。
+ */
+export function knowsPlainForm(level: TutorLevel, grammar: string[]): boolean {
+  return level === 'n4' || (level === 'n5' && grammar.includes(PLAIN_FORM));
+}
+
 /* ---------------- 情境會話 ---------------- */
 export interface ConversationTurn {
   reply: string;
@@ -94,11 +105,11 @@ export function conversationSystem(s: Scenario, level: TutorLevel, knownKana = '
     'Rules:',
     '- Stay in character. Keep each reply to one or two short sentences so the learner can follow.',
     ...(s.learnerFirst ? ['- In this scene the learner speaks first (they pick up the phone). Their first message starts the scene; answer it in character.'] : []),
-    // 常體（普通形）是 N4 才教：只會假名、N5 的學習者，朋友情境也用簡單的です／ます
+    // 還沒學到常體（普通形）的學習者，朋友情境也用簡單的です／ます
     s.casual
-      ? level === 'n4'
+      ? knowsPlainForm(level, grammar)
         ? '- You are close friends, so use natural casual speech (plain form), but keep it simple. Never treat the learner\'s です／ます as a mistake.'
-        : '- You are close friends, but the learner has not learned plain forms yet (they come at N4), so use simple, friendly です／ます yourself and in your suggestions. Never treat the learner\'s です／ます as a mistake.'
+        : '- You are close friends, but the learner has not learned plain forms yet, so use simple, friendly です／ます yourself and in your suggestions. Never treat the learner\'s です／ます as a mistake.'
       : '- Use polite です／ます speech appropriate to the situation.',
     '- The learner may answer in Japanese, romaji, or Chinese when stuck. Understand what they mean and continue the scene.',
     '- `feedback` is only about the learner\'s most recent message. ok=true when it was natural and correct for the situation. When ok=false, `corrected` is the natural Japanese for what they meant (also when they wrote Chinese or romaji), `reading` is `corrected` written entirely in kana, and `explanation` is one or two short, kind sentences in Traditional Chinese (Taiwan) about the key fix. When ok=true, leave corrected, reading and explanation empty.',

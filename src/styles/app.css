@@ -108,7 +108,9 @@ html { scroll-padding-top: 56px; }
 .bottombar { display: none; }
 
 .vnote-toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); width: min(680px, calc(100% - 32px)); z-index: 50; display: grid; gap: 8px; }
-.vnote-toast .vnote { box-shadow: 0 10px 30px -12px var(--scrim); border: 1px solid var(--line); }
+/* 浮著的提醒底色要不透明（深色模式的 --mark-soft 是半透明的，會和下面的字疊在一起） */
+.vnote-toast .vnote { box-shadow: 0 10px 30px -12px var(--scrim); border: 1px solid var(--line); background: linear-gradient(var(--mark-soft), var(--mark-soft)), var(--sheet); }
+.vnote-top { padding-top: 14px; }
 .vnote { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; background: var(--mark-soft); border-radius: var(--r); padding: 10px 14px; font-size: 14px; }
 .vnote p { flex: 1 1 280px; min-width: 0; }
 .offline-note { margin-bottom: 14px; }
@@ -819,7 +821,8 @@ ruby { ruby-align: center; }
 .sc-goal { font-size: 13.5px; color: var(--ink-2); }
 .sc-goal b { color: var(--ink); font-weight: 500; margin-right: 6px; }
 
-.chat { display: grid; gap: 12px; max-width: 820px; }
+/* 單欄的 grid 要用 minmax(0, 1fr)：沒有空格的長字串（羅馬拼音、網址）才不會把欄寬撐開、整頁變成可以左右捲 */
+.chat { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; max-width: 820px; }
 .chat-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px 20px; align-items: flex-start; }
 .chat-head h2 { font-size: 22px; }
 .chat-head-tools { display: grid; gap: 8px; justify-items: start; }
@@ -864,7 +867,10 @@ ruby { ruby-align: center; }
 .composer textarea { min-height: 52px; font-size: 16px; }
 .cost-line { text-align: right; }
 
-.corrector, .aiquiz { display: grid; gap: 12px; max-width: 820px; }
+.corrector, .aiquiz { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; max-width: 820px; }
+/* 學習者打的、模型回的文字可能是一長串沒有空格的羅馬拼音或網址：放不下就斷行 */
+.bubble, .fb-card, .sugg, .chat-starter, .chat-error, .correction, .aiquiz .quiz, .corrector .key-status, .aiquiz .key-status { overflow-wrap: anywhere; }
+.alts .pill { white-space: normal; }
 .correct-form { display: grid; gap: 8px; }
 .correct-form label { font-size: 14px; color: var(--ink-2); }
 .correction { display: grid; gap: 8px; }
@@ -1019,7 +1025,12 @@ ruby { ruby-align: center; }
 .toc a:focus-visible { outline-offset: 1px; }
 .sec-h:focus { outline: none; }
 /* 很長的單字列表：畫面外的群組先不排版，捲到才畫 */
-.vgroup { content-visibility: auto; contain-intrinsic-size: auto 900px; }
+.vgroup { content-visibility: auto; contain-intrinsic-height: auto 900px; }
+/* 很長的課文、模擬考、課程列表也一樣：第一次打開只排看得到的段落，字型一個個下載完時也只重排看得到的部分
+   （手機上第 56 課原本整頁排版要卡 1 秒以上）。content-visibility 會裁掉超出區塊的部分，左右各留一點給焦點框。
+   預估大小只給高度：寬度也給的話，放在 grid 裡（模擬考的題組、課程列表的單元）畫面外的區塊會把欄撐到那麼寬 */
+.lsec, .mock-part, .unit { content-visibility: auto; contain-intrinsic-height: auto 1000px; padding-inline: 6px; margin-inline: -6px; }
+.unit { contain-intrinsic-height: auto 420px; }
 .err-detail { overflow-wrap: anywhere; color: var(--ink-3); }
 /* 選單的選項文字很長（語音名稱、模型說明）時，選單本身可以縮窄，不撐破版面 */
 select { min-width: 0; text-overflow: ellipsis; }
@@ -1124,7 +1135,7 @@ select { min-width: 0; text-overflow: ellipsis; }
   .heatmap, .hm-swatch, .viz-fig svg, .viz-key, .mc, .legend i { forced-color-adjust: none; }
   /* 選到的格子、答對的選項：原本靠底色和陰影，高對比下會被拿掉，改用系統強調色框 */
   .gj-cell[aria-pressed='true']:not(:focus-visible), .cs-btn[aria-pressed='true']:not(:focus-visible),
-  .opt.is-right, .opt.is-answer { outline: 3px solid Highlight; outline-offset: -4px; }
+  .opt.is-right, .opt.is-answer, .dq-opt.is-right { outline: 3px solid Highlight; outline-offset: -4px; }
   /* 字源淡字：高對比會把它變得和假名一樣深、假名後面還會墊一塊底色，兩個字疊在一起看不清楚。
      改用系統的灰字再調淡，假名自己用系統文字色、不墊底 */
   .gj-ghost, .masu .ghost { forced-color-adjust: none; color: GrayText; opacity: 0.25; }

@@ -100,7 +100,7 @@ AI 家教直接從你的瀏覽器呼叫 [Claude API](https://platform.claude.com
 - 可選模型：Claude Haiku 5.5（最省）、Claude Sonnet 5.5（預設）、Claude Opus 5.5。一次會話往返通常只用幾千個 token，「設定」頁會顯示累計用量與估算費用。
 - 三種模式都用結構化輸出（JSON schema），回覆會分成日文、假名讀音、中文翻譯、批改與建議回答。
 - 回覆用串流接收：生成再久（例如 Opus）也不會被當成逾時；送出後可以按「停止」取消。
-- 對話、批改和出題的內容存在這個分頁的 sessionStorage（`nk.tutorSession`）：換到別頁再回來、重新整理都還在，關掉分頁就清掉，也不會放進備份檔。
+- 對話、批改和出題的內容存在這個分頁的 sessionStorage（`nk.tutorSession`，打到一半的草稿另外存在 `nk.tutorDraft`）：換到別頁再回來、重新整理都還在，關掉分頁就清掉，也不會放進備份檔。
 
 ## 學習紀錄與備份
 
@@ -130,14 +130,15 @@ src/
     kana.ts            假名資料：注音對照、發音提示、字源、例字
     lessons/           第 1–8 課（五十音）、第 9–32 課（N5）、第 33–56 課（N4），一課一個檔（lesson1.ts … lesson56.ts，打開那一課才下載）；meta.ts 是每課摘要（首頁和列表只載這個）
     kanji.ts           初級課程的 284 個漢字（N5 103 個、N4 181 個）：讀音、意思、台灣寫法
-    vocab/             單字牌組：n5 / n4（N4 課程單字）/ n4plus（JLPT N4 補充單字）/ travel / business / anime / course（N5 課程補充）；meta.ts 是牌組摘要（首頁和列表只載這個）
+    vocab/             單字牌組：n5 / n4（N4 課程單字）/ n4plus（JLPT N4 補充單字）/ travel / business / anime / course（N5 課程補充）；meta.ts 是牌組摘要（首頁和列表只載這個），load.ts 只載入一副（牌組頁用）
     mock/n4.ts         N4 模擬考的題目（四個科目、每一題標出自第幾課）
     scenarios.ts       AI 家教的情境清單
     tutor.ts           AI 家教的系統提示與 JSON schema
-    strokes.json       KanjiVG 筆順（由 scripts/fetch-kanjivg.mjs 產生）
+    strokes.json       KanjiVG 筆順（由 scripts/fetch-kanjivg.mjs 產生）；strokeCounts.ts 是每個字的畫數（同一支腳本產生，課文、模擬考、五十音表只載這個）
     types.ts           資料型別
   lib/
     srs.ts             間隔複習排程（SM-2 變形）
+    vocab.ts           單字牌組：全部牌組的出卡順序、跨牌組的同一個字；vocabItem.ts 是只看一張卡片的顯示、念法、搜尋
     strokes.ts         手寫筆畫比對
     kanaQuiz.ts        假名測驗出題與干擾選項
     claude.ts          Claude API：模型、費用、金鑰整理、錯誤型別（不含 SDK）
@@ -149,16 +150,18 @@ src/
     today.ts           首頁「今天的任務」：依進度算出今天該做的事和完成度
     mistakes.ts        錯題本：答錯的假名、常忘的單字、寫錯的字
     reminder.ts        每天提醒：Google 行事曆連結、.ics 檔
+    tutorPicks.ts      首頁推薦的 AI 家教情境
     stats.ts           學習紀錄頁的統計：學習日曆、每週練習量、進步曲線、複習時記得的比例
     speech.ts          日文語音合成：挑語音、線上語音念不出來時改用內建語音
+    jump.ts            跳到頁面的某一段（課文目錄、課程列表、模擬考）：畫面外的段落先不排版，所以直接跳、跳完再對齊
   state/               localStorage 狀態（設定、進度、紀錄、備份）
-  components/          共用元件（練習格、描字畫布、發音鈕、學習紀錄的圖表 Charts.tsx…）
+  components/          共用元件（練習格、描字畫布、發音鈕、課文區塊 CourseBlocks.tsx、會話和短文 Reading.tsx、練習題 Drill.tsx、單字卡背面 CardBack.tsx、學習紀錄的圖表 Charts.tsx…）
   pages/               各頁面
 scripts/
   start.mjs            啟動程式（啟動檔和 npm start 都跑這支：檢查 Node、連接埠、安裝套件、建置）
   start-lib.mjs        啟動程式用的小工具（只用 Node 內建模組）
   stamp.mjs            npm 安裝完成時寫入安裝印記（自己跑 npm ci 之後，啟動檔也不會重裝）
-  fetch-kanjivg.mjs    下載 KanjiVG 筆順，產生 src/data/strokes.json
+  fetch-kanjivg.mjs    下載 KanjiVG 筆順，產生 src/data/strokes.json 和 strokeCounts.ts（有字下載失敗就不寫檔）
   nk-fonts.mjs         建置時從兩套字型的完整字型檔裁出網站用得到的字，依頁面分成小檔（Vite 外掛，產生 src/fonts/generated/，不進版控）
   nk-pwa.mjs           建置時產生 dist/sw.js（Vite 外掛）：列出要預先下載的檔案，套進 sw-template.js
   nk-licenses.mjs      建置後補上套件沒附的授權全文（THIRD-PARTY-LICENSES.md）

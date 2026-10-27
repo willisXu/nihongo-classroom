@@ -22,6 +22,17 @@ describe('備份', () => {
     expect(kanaDaysStore.get()).toEqual({ '2026-10-13': { h: 1, k: 0 } });
   });
 
+  it('匯出不縮排（檔案小一半）；以前縮排的備份檔照樣匯入', () => {
+    srsStore.set({ cards: { 'n5-0001': card }, days: {} });
+    const text = exportBackup();
+    expect(text).not.toContain('\n');
+    const indented = JSON.stringify(JSON.parse(text), null, 2);
+    expect(text.length).toBeLessThan(indented.length);
+    resetAllProgress();
+    expect(importBackup(indented)).toBe(9);
+    expect(srsStore.get().cards['n5-0001']).toEqual(card);
+  });
+
   it('檔案裡有一類資料格式不對：什麼都不改，也不會顯示成功', () => {
     srsStore.set({ cards: { 'n5-0001': card }, days: {} });
     const bad = JSON.stringify({ app: 'nihongo-classroom', version: 1, data: { 'nk.kana': {}, 'nk.srs': null } });
@@ -75,6 +86,18 @@ describe('備份', () => {
     expect(p.current).toEqual({ lessons: 2, kana: 2, words: 1, days: 2 });
     // 很舊的備份沒有匯出時間
     expect(peekBackup(JSON.stringify({ app: 'nihongo-classroom', version: 1, data: { 'nk.kana': {} } })).exportedAt).toBeNull();
+  });
+
+  it('比較新版匯出的備份裡、這個版本不認得的卡片：匯入前的比較不算（和各頁一致），但紀錄照樣留著', () => {
+    const newer = JSON.stringify({
+      app: 'nihongo-classroom',
+      version: 1,
+      data: { 'nk.srs': { cards: { 'n4plus-0001': card, 'n6-0001': card, 'n6-0002': card }, days: {} } },
+    });
+    expect(peekBackup(newer).backup.words).toBe(1);
+    importBackup(newer);
+    expect(Object.keys(srsStore.get().cards).sort()).toEqual(['n4plus-0001', 'n6-0001', 'n6-0002']);
+    expect(peekBackup(exportBackup()).current.words).toBe(1);
   });
 
   it('匯入錯了可以復原；匯入後從現在起算多久沒備份', () => {

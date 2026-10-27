@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 // AI 回覆可能出現網站資料沒有的漢字：這一頁才載入完整的 Klee One 來補（其他頁用裁過的 NK Kana 就夠）
 import '@fontsource/klee-one/600.css';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -7,10 +7,11 @@ import {
   conversationSystem, correctionSystem, quizSystem, quizUserMessage, sanitizeCorrection, sanitizeFeedback, sanitizeQuiz, sanitizeTurn,
   type ConversationTurn, type Correction, type Purpose, type QuizQuestion, type Scenario,
 } from '../data/tutor';
-import { DECKS } from '../data/vocab';
+// 單字資料（約 500 kB）只有「AI 出題」用得到：按下出題時才載入（見 AiQuiz 的 generate）
+import type { Deck } from '../data/types';
 import { KANA_LESSONS } from '../data/lessons/meta';
 import {
-  addUsage, apiKeyStore, kanaStore, lessonStore, settingsStore, srsStore, updateSettings, type TutorLevel,
+  addUsage, apiKeyStore, kanaStore, lessonStore, settingsStore, srsStore, updateSettings, type SrsData, type TutorLevel,
 } from '../state';
 import { isObj, num, oneOf, str, useStore } from '../state/store';
 import { TutorError, callJSON, estimateCost, preloadClaudeApi, toTutorError } from '../lib/claude';
@@ -149,6 +150,34 @@ function writeSession(part: 'mode' | 'chat' | 'correct' | 'quiz', value: unknown
   }
 }
 
+// 打到一半的草稿另外存（只有幾個字）：每打一個字只寫這一小段，不用把整段對話重寫一次
+const DRAFT_KEY = 'nk.tutorDraft';
+type DraftField = 'chat' | 'ja' | 'meaning';
+
+function readDrafts(): Partial<Record<DraftField, string>> {
+  try {
+    const raw = sessionStorage.getItem(DRAFT_KEY);
+    const data: unknown = raw ? JSON.parse(raw) : null;
+    if (!isObj(data)) return {};
+    const out: Partial<Record<DraftField, string>> = {};
+    for (const k of ['chat', 'ja', 'meaning'] as const) if (typeof data[k] === 'string') out[k] = data[k];
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function writeDraft(field: DraftField, text: string) {
+  try {
+    const data = readDrafts();
+    if (text) data[field] = text;
+    else delete data[field];
+    sessionStorage.setItem(DRAFT_KEY, JSON.stringify(data));
+  } catch {
+    /* 存不進去就算了 */
+  }
+}
+
 export default function Tutor() {
   usePageTitle('AI 日文家教');
   const apiKey = useStore(apiKeyStore);
@@ -170,6 +199,7 @@ export default function Tutor() {
   /** 目前看得到的模式：回覆送到時，只有看得到的面板才自動念出來 */
   const modeRef = useRef(mode);
   const [level, levelPref] = useLevel();
+  const autoplay = useStore(settingsStore).autoplay;
   const lessons = useStore(lessonStore);
   const online = useOnline();
   // 還在學五十音：告訴 AI 學過哪些假名（加上正在學的這一課），畫面上附羅馬拼音
@@ -261,6 +291,10 @@ export default function Tutor() {
                 ))}
               </select>
             </label>
+            {/* 回覆、批改結果要不要自動念出來：和單字卡的「自動發音」是同一個設定 */}
+            <Switch id="tutor-autoplay" checked={autoplay} onChange={(v) => updateSettings({ autoplay: v })}>
+              自動發音
+            </Switch>
             <UsageLine />
           </div>
           {/* 三個模式都保持掛載，切換時不會丟掉對話或重新呼叫 API；離開這頁再回來時從分頁紀錄還原 */}
@@ -304,7 +338,7 @@ interface ChatSession {
   history: Msg[];
   cost: Cost;
   error: string | null;
-  /** 還沒送出的草稿 */
+  /** 還沒送出的草稿（以前的版本存在這裡；現在另外存在 nk.tutorDraft，見 writeDraft） */
   input: string;
 }
 
@@ -363,6 +397,79 @@ function restoredError(s: ChatSession): string | null {
     : '離開這一頁時，這一句還沒收到回覆。按「再試一次」重新送出，或直接輸入新的句子。';
 }
 
+/** AI 說第一句之前按了「停止」：畫面上什麼都沒有，要說明接下來可以怎麼做 */
+const OPENING_STOPPED = '已經停止，AI 還沒說第一句。按「再試一次」讓 AI 開口，或直接輸入你想說的話。';
+
+/**
+ * 對話泡泡。抽出來用 memo：打字時只有輸入框在變，長對話的幾百個泡泡不用每打一個字就重畫一次。
+ * 只在對話內容或顯示設定（假名讀音、中文翻譯、羅馬拼音、程度）改變時重畫。
+ */
+const ChatEntries = memo(function ChatEntries({
+  entries,
+  level,
+  showReading,
+  showTranslation,
+  romajiOn,
+}: {
+  entries: ChatEntry[];
+  level: TutorLevel;
+  showReading: boolean;
+  showTranslation: boolean;
+  romajiOn: boolean;
+}) {
+  return entries.map((e, i) =>
+    e.role === 'ai' && e.turn ? (
+      <div key={i} className="bubble-row ai">
+        <div className="bubble ai-bubble">
+          <div className="b-top">
+            <p className="b-ja" lang="ja">
+              {level === 'kana' && e.turn.reading && sameKana(e.turn.reading, e.turn.reply) ? e.turn.reading : e.turn.reply}
+            </p>
+            <SpeakIcon text={e.turn.reply} label="播放這句" />
+          </div>
+          {showReading && e.turn.reading && !sameKana(e.turn.reading, e.turn.reply) ? (
+            <p className="b-reading" lang="ja">
+              {e.turn.reading}
+            </p>
+          ) : null}
+          {romajiOn ? <RomajiLine reading={e.turn.reading || e.turn.reply} /> : null}
+          {showTranslation ? <p className="b-zh">{e.turn.translation}</p> : null}
+        </div>
+      </div>
+    ) : (
+      <div key={i} className="bubble-row me">
+        <div className="bubble me-bubble">
+          <p lang={hasKana(e.text ?? '') ? 'ja' : undefined}>{e.text}</p>
+        </div>
+        {e.feedback ? (
+          e.feedback.ok ? (
+            <p className="fb-ok">
+              <Icon name="check" size={15} /> 說得很好
+            </p>
+          ) : (
+            <div className="fb-card">
+              <p className="fb-label">更自然的說法</p>
+              <div className="b-top">
+                <p className="b-ja" lang="ja">
+                  {level === 'kana' && e.feedback.reading && sameKana(e.feedback.reading, e.feedback.corrected) ? e.feedback.reading : e.feedback.corrected}
+                </p>
+                {e.feedback.corrected ? <SpeakIcon text={e.feedback.corrected} label="播放更正後的句子" /> : null}
+              </div>
+              {showReading && e.feedback.reading && !sameKana(e.feedback.reading, e.feedback.corrected) ? (
+                <p className="b-reading" lang="ja">
+                  {e.feedback.reading}
+                </p>
+              ) : null}
+              {romajiOn && e.feedback.corrected ? <RomajiLine reading={e.feedback.reading || e.feedback.corrected} /> : null}
+              {e.feedback.explanation ? <p className="fb-why">{e.feedback.explanation}</p> : null}
+            </div>
+          )
+        ) : null}
+      </div>
+    ),
+  );
+});
+
 function Conversation({
   level,
   knownKana,
@@ -389,7 +496,8 @@ function Conversation({
   const [heard, setHeard] = useState<{ id: number; ok: boolean; corrected: string; ja: string; zh: string; done: boolean } | null>(null);
   /** 已送出的對話紀錄；最後一則若是 user，代表還在等（或等失敗了，可以重試或改送別句） */
   const [history, setHistory] = useState<Msg[]>(boot.saved?.history ?? []);
-  const [input, setInput] = useState(boot.saved?.input ?? '');
+  // 草稿跟著接上的對話還原（以前的版本把草稿存在對話紀錄裡）
+  const [input, setInput] = useState(() => (boot.saved ? (readDrafts().chat ?? boot.saved.input) : ''));
   const [busy, setBusy] = useState(false);
   const [phase, setPhase] = useState<Phase>('connect');
   const [error, setError] = useState<string | null>(() => (boot.saved ? restoredError(boot.saved) : null));
@@ -415,8 +523,12 @@ function Conversation({
   }, [scenario]);
 
   useEffect(() => {
-    writeSession('chat', scenario ? { scenario: scenario.id, entries, history, cost, error, input } : null);
-  }, [scenario, entries, history, cost, error, input]);
+    writeSession('chat', scenario ? { scenario: scenario.id, entries, history, cost, error } : null);
+  }, [scenario, entries, history, cost, error]);
+  // 草稿另外存：打字時只寫這一小段，不用每打一個字就把整段對話寫一次
+  useEffect(() => {
+    writeDraft('chat', scenario ? input : '');
+  }, [scenario, input]);
 
   const send = async (msgs: Msg[], sc: Scenario) => {
     abort.current?.abort();
@@ -472,8 +584,9 @@ function Conversation({
         zh: settingsStore.get().showTranslation ? turn.translation : '',
         done: turn.done,
       }));
-      // 回覆送到時可能已經切到別的模式：看不到的面板不出聲，免得打斷正在播放的發音
-      if (isShown()) speak(turn.reply);
+      // 回覆送到時可能已經切到別的模式：看不到的面板不出聲，免得打斷正在播放的發音。
+      // 關掉「自動發音」（例如在安靜的地方、用讀螢幕軟體）就不自動念
+      if (isShown() && settingsStore.get().autoplay) speak(turn.reply);
     } catch (e) {
       if (ctrl.signal.aborted) return;
       setError(toTutorError(e).message);
@@ -580,9 +693,18 @@ function Conversation({
       setEntries((list) => (list.length && list[list.length - 1].role === 'me' ? list.slice(0, -1) : list));
       // 等待時已經打了下一句就保留，不要蓋掉
       setInput((cur) => (cur.trim() ? cur : last.content));
+    } else if (last?.content === OPENING_MESSAGE) {
+      // AI 還沒開口就停了：說明可以再試一次，或自己先說（「再試一次」會重送開場）
+      setError(OPENING_STOPPED);
     }
     requestAnimationFrame(() => refocus(inputRef.current, { textEntry: true }));
   };
+
+  /** AI 的最後一句（參考說法、情境完成都看它）；只在對話內容改變時找，打字時不用從頭找一次 */
+  const lastTurn = useMemo(() => {
+    for (let i = entries.length - 1; i >= 0; i--) if (entries[i].role === 'ai') return entries[i].turn;
+    return undefined;
+  }, [entries]);
 
   if (!scenario) {
     const list = SCENARIOS.filter((s) => filter === 'all' || s.purpose === filter);
@@ -620,10 +742,9 @@ function Conversation({
     );
   }
 
-  const last = [...entries].reverse().find((e) => e.role === 'ai')?.turn;
   // 參考說法：AI 上一句附的；由學習者先開口的情境，還沒開始時用情境準備好的
   const starter = scenario.learnerFirst && !entries.length && !busy ? scenario.learnerFirst : null;
-  const suggestions = last ? (last.done ? [] : last.suggestions) : (starter?.suggestions ?? []);
+  const suggestions = lastTurn ? (lastTurn.done ? [] : lastTurn.suggestions) : (starter?.suggestions ?? []);
 
   return (
     <section className="chat" aria-label={`情境會話：${scenario.title}`}>
@@ -683,57 +804,7 @@ function Conversation({
         {busy ? <p>{WAIT_LABEL[phase]}</p> : null}
       </div>
       <div className="chat-list">
-        {entries.map((e, i) =>
-          e.role === 'ai' && e.turn ? (
-            <div key={i} className="bubble-row ai">
-              <div className="bubble ai-bubble">
-                <div className="b-top">
-                  <p className="b-ja" lang="ja">
-                    {level === 'kana' && e.turn.reading && sameKana(e.turn.reading, e.turn.reply) ? e.turn.reading : e.turn.reply}
-                  </p>
-                  <SpeakIcon text={e.turn.reply} label="播放這句" />
-                </div>
-                {settings.showReading && e.turn.reading && !sameKana(e.turn.reading, e.turn.reply) ? (
-                  <p className="b-reading" lang="ja">
-                    {e.turn.reading}
-                  </p>
-                ) : null}
-                {romajiOn ? <RomajiLine reading={e.turn.reading || e.turn.reply} /> : null}
-                {settings.showTranslation ? <p className="b-zh">{e.turn.translation}</p> : null}
-              </div>
-            </div>
-          ) : (
-            <div key={i} className="bubble-row me">
-              <div className="bubble me-bubble">
-                <p lang={hasKana(e.text ?? '') ? 'ja' : undefined}>{e.text}</p>
-              </div>
-              {e.feedback ? (
-                e.feedback.ok ? (
-                  <p className="fb-ok">
-                    <Icon name="check" size={15} /> 說得很好
-                  </p>
-                ) : (
-                  <div className="fb-card">
-                    <p className="fb-label">更自然的說法</p>
-                    <div className="b-top">
-                      <p className="b-ja" lang="ja">
-                        {level === 'kana' && e.feedback.reading && sameKana(e.feedback.reading, e.feedback.corrected) ? e.feedback.reading : e.feedback.corrected}
-                      </p>
-                      {e.feedback.corrected ? <SpeakIcon text={e.feedback.corrected} label="播放更正後的句子" /> : null}
-                    </div>
-                    {settings.showReading && e.feedback.reading && !sameKana(e.feedback.reading, e.feedback.corrected) ? (
-                      <p className="b-reading" lang="ja">
-                        {e.feedback.reading}
-                      </p>
-                    ) : null}
-                    {romajiOn && e.feedback.corrected ? <RomajiLine reading={e.feedback.reading || e.feedback.corrected} /> : null}
-                    {e.feedback.explanation ? <p className="fb-why">{e.feedback.explanation}</p> : null}
-                  </div>
-                )
-              ) : null}
-            </div>
-          ),
-        )}
+        <ChatEntries entries={entries} level={level} showReading={settings.showReading} showTranslation={settings.showTranslation} romajiOn={romajiOn} />
         {starter ? (
           <div className="chat-starter">
             <p>{starter.hint}</p>
@@ -762,7 +833,7 @@ function Conversation({
         ) : null}
       </div>
 
-      {last?.done && !busy ? (
+      {lastTurn?.done && !busy ? (
         <div className="done-banner">
           <Hanamaru show className="hm-inline" />
           <div>
@@ -786,7 +857,8 @@ function Conversation({
                 className="sugg"
                 onClick={() => {
                   setInput(s.ja);
-                  speak(s.ja);
+                  // 點參考說法是為了放進輸入框，順便念出來；關掉「自動發音」時不出聲
+                  if (settingsStore.get().autoplay) speak(s.ja);
                 }}
               >
                 <span lang="ja" className="sugg-ja">
@@ -894,7 +966,9 @@ function loadCorrector(): { ja: string; meaning: string; results: CorrectionItem
     const meaning = str(x.meaning);
     return result ? [{ id: num(x.id, i), input: x.input, ...(meaning ? { meaning } : {}), result }] : [];
   });
-  return { ja: str(r.ja), meaning: str(r.meaning), results: results.slice(0, 10) };
+  // 草稿另外存（見 writeDraft）；以前的版本存在 correct 裡
+  const drafts = readDrafts();
+  return { ja: drafts.ja ?? str(r.ja), meaning: drafts.meaning ?? str(r.meaning), results: results.slice(0, 10) };
 }
 
 function Corrector({ level, knownKana, grammar, isShown }: { level: TutorLevel; knownKana: string; grammar: string[]; isShown: () => boolean }) {
@@ -908,13 +982,20 @@ function Corrector({ level, knownKana, grammar, isShown }: { level: TutorLevel; 
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<CorrectionItem[]>(saved.results);
   const abort = useAbortOnUnmount();
-  /** 給螢幕閱讀器念的批改結果（畫面上的結果卡片不會自動念出來） */
-  const [announce, setAnnounce] = useState({ id: 0, text: '' });
+  /** 給螢幕閱讀器念的批改結果（畫面上的結果卡片不會自動念出來）；ja 是改好的日文句子，用日文念 */
+  const [announce, setAnnounce] = useState({ id: 0, label: '', ja: '' });
   const jaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    writeSession('correct', { ja, meaning, results });
-  }, [ja, meaning, results]);
+    writeSession('correct', { results });
+  }, [results]);
+  // 打字時只寫草稿這一小段
+  useEffect(() => {
+    writeDraft('ja', ja);
+  }, [ja]);
+  useEffect(() => {
+    writeDraft('meaning', meaning);
+  }, [meaning]);
 
   const check = async () => {
     const text = ja.trim();
@@ -944,9 +1025,9 @@ function Corrector({ level, knownKana, grammar, isShown }: { level: TutorLevel; 
       // 「想表達的意思」是這一句的：清掉，寫下一句時不會把舊的意思一起送出（這次用的意思顯示在結果上）
       if (intended) setMeaning((cur) => (cur.trim() === intended ? '' : cur));
       // 每次都換一個新的段落：再批改一次、結果一樣時也會念
-      setAnnounce((a) => ({ id: a.id + 1, text: `批改完成：${VERDICT[result.verdict].label}。${result.corrected}` }));
-      // 切到別的模式時不出聲
-      if (result.corrected && isShown()) speak(result.corrected);
+      setAnnounce((a) => ({ id: a.id + 1, label: VERDICT[result.verdict].label, ja: result.corrected }));
+      // 切到別的模式、關掉「自動發音」時不出聲
+      if (result.corrected && isShown() && settingsStore.get().autoplay) speak(result.corrected);
     } catch (e) {
       if (!ctrl.signal.aborted) setError(toTutorError(e).message);
     } finally {
@@ -998,7 +1079,11 @@ function Corrector({ level, knownKana, grammar, isShown }: { level: TutorLevel; 
         ) : null}
       </form>
       <div className="sr-only" aria-live="polite">
-        {announce.text ? <p key={announce.id}>{announce.text}</p> : null}
+        {announce.label ? (
+          <p key={announce.id}>
+            批改完成：{announce.label}。<span lang="ja">{announce.ja}</span>
+          </p>
+        ) : null}
       </div>
 
       {results.map((r) => {
@@ -1083,11 +1168,24 @@ function loadQuiz(): { focus: QuizFocus; questions: QuizQuestion[]; idx: number;
   return { focus: oneOf(r.focus, ['mixed', 'kana', 'vocab'] as const, 'mixed'), questions, idx, picked, score };
 }
 
+/** 出題參考的單字：背過的字（常忘的、快到期的優先）；背過的太少時，補上只用學過的假名寫得出來的 N5 單字 */
+function quizWords(decks: Deck[], srs: SrsData, learned: string) {
+  const seen = decks
+    .flatMap((d) => d.items)
+    .filter((it) => srs.cards[it.id]?.reps)
+    .sort((a, b) => (srs.cards[b.id]?.lapses ?? 0) - (srs.cards[a.id]?.lapses ?? 0) || (srs.cards[a.id]?.due ?? 0) - (srs.cards[b.id]?.due ?? 0))
+    .slice(0, 25);
+  if (seen.length >= 8) return seen;
+  // 還沒背單字：從 N5 挑只用學過假名寫得出來的詞
+  const allowed = new Set(Array.from(learned + 'ー'));
+  const pool = decks[0].items.filter((it) => Array.from(it.kana).every((c) => allowed.has(c)));
+  return [...seen, ...pool.slice(0, 25 - seen.length)];
+}
+
 function AiQuiz({ level }: { level: TutorLevel }) {
   const [phase, setPhase] = useState<Phase>('connect');
   const lessons = useStore(lessonStore);
   const kana = useStore(kanaStore);
-  const srs = useStore(srsStore);
   const [saved] = useState(loadQuiz);
   const [focus, setFocus] = useState<QuizFocus>(saved.focus);
   const [busy, setBusy] = useState(false);
@@ -1113,19 +1211,6 @@ function AiQuiz({ level }: { level: TutorLevel }) {
     [kana],
   );
 
-  const words = useMemo(() => {
-    const all = DECKS.flatMap((d) => d.items);
-    const seen = all
-      .filter((it) => srs.cards[it.id]?.reps)
-      .sort((a, b) => (srs.cards[b.id]?.lapses ?? 0) - (srs.cards[a.id]?.lapses ?? 0) || (srs.cards[a.id]?.due ?? 0) - (srs.cards[b.id]?.due ?? 0))
-      .slice(0, 25);
-    if (seen.length >= 8) return seen;
-    // 還沒背單字：從 N5 挑只用學過假名寫得出來的詞
-    const allowed = new Set(Array.from(learned + 'ー'));
-    const pool = DECKS[0].items.filter((it) => Array.from(it.kana).every((c) => allowed.has(c)));
-    return [...seen, ...pool.slice(0, 25 - seen.length)];
-  }, [srs, learned]);
-
   const generate = async () => {
     if (busy) return;
     const ctrl = new AbortController();
@@ -1134,6 +1219,15 @@ function AiQuiz({ level }: { level: TutorLevel }) {
     setPhase('connect');
     setError(null);
     try {
+      // 單字資料按下出題才載入（會話、批改用不到）；網站存在裝置上時離線也載得到
+      let decks: Deck[];
+      try {
+        decks = (await import('../data/vocab')).DECKS;
+      } catch {
+        throw new TutorError('載入單字資料失敗。請確認網路連線，重新整理頁面後再試一次。', 'network');
+      }
+      if (ctrl.signal.aborted) return;
+      const words = quizWords(decks, srsStore.get(), learned);
       const res = await ask<unknown>({
         system: quizSystem(level),
         messages: [

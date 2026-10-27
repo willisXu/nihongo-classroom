@@ -26,11 +26,6 @@ const KANJI_RUN_END = /[㐀-䶿一-鿿豈-﫿々〆ヶ]+$/u;
 
 export const isKanji = (ch: string) => KANJI.test(ch);
 
-/** 有沒有《》讀音或〔〕空格（沒有的話就是普通文字） */
-export function hasJaMarkup(text: string): boolean {
-  return /[《〔｜⟦]/.test(text);
-}
-
 /**
  * 拆成一段一段。格式錯誤（《》沒成對、《前面沒有漢字、讀音裡有漢字）時丟出錯誤，測試會抓出來。
  */
@@ -163,11 +158,29 @@ function sayReading(base: string, reading: string): boolean {
 }
 
 /**
- * 語音要念的文字：漢字照寫，容易念錯的詞（見 SAY_READING）改念讀音；空格、〜 不念。
+ * 範圍的〜（午前9時〜12時、12月8日〜10日、3〜4人）：前面是數字（可以接時、日、月這類單位）、後面是數字，念「から」。
+ * 其他的〜是句型的空位（〜さん、〔名詞〕〜です），不念。
+ */
+const RANGE_BEFORE = /[0-9０-９〇一二三四五六七八九十百千万](?:時間?|時半|日間?|か月|ヶ月|月|年|分|秒|円|歳|階|回|人|本|枚|個|度|週間)?$/u;
+const RANGE_AFTER = /^[0-9０-９〇一二三四五六七八九十百千万]/u;
+
+/**
+ * 語音要念的文字：漢字照寫，容易念錯的詞（見 SAY_READING）改念讀音；空格、句型的〜 不念，範圍的〜念「から」。
  */
 export function jaSpeech(text: JaText): string {
-  const out = parseJa(text)
-    .map((s) => ('slot' in s ? '' : 'r' in s ? (sayReading(s.t, s.r) ? s.r : s.t) : s.t))
+  const segs = parseJa(text);
+  // 每一段畫面上的字：判斷〜的前後是不是數字（標了讀音的詞看寫法，例如 ｜8日《ようか》 是「8日」）
+  const shown = segs.map((s) => ('slot' in s ? '〔〕' : s.t));
+  const out = segs
+    .map((s, k) => {
+      if ('slot' in s) return '';
+      if ('r' in s) return sayReading(s.t, s.r) ? s.r : s.t;
+      return s.t.replace(/[〜～]/g, (_m, at: number) => {
+        const before = shown.slice(0, k).join('') + s.t.slice(0, at);
+        const after = s.t.slice(at + 1) + shown.slice(k + 1).join('');
+        return RANGE_BEFORE.test(before) && RANGE_AFTER.test(after) ? 'から' : '';
+      });
+    })
     .join('')
     .replace(/[〜～]/g, '')
     .trim();

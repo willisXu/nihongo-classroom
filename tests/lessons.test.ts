@@ -3,6 +3,8 @@ import { LESSONS, KANA_LESSON_DATA } from './lessonData';
 import { SEION_ROWS, DAKUON_ROWS, rowById } from '../src/data/kana';
 import type { Inline, LessonBlock, LessonWord } from '../src/data/types';
 import { getStrokePaths } from '../src/lib/strokes';
+import { loadLesson, preloadLesson } from '../src/data/lessons';
+import { asPreload, preloading } from '../src/data/lessons/preload';
 
 /** 課文裡刻意提早出現的詞（發音說明的例子，不是要學的單字） */
 const TEXT_PREVIEW: Record<number, string[]> = {
@@ -160,5 +162,27 @@ describe('五十音課程', () => {
     required.push(...'ゃゅょっャュョッー');
     const missing = required.filter((c) => !introduced.has(c));
     expect(missing, `還沒教到：${missing.join(' ')}`).toEqual([]);
+  });
+});
+
+describe('課文分檔載入', () => {
+  it('同一課只下載一次；沒有這一課（0、57、abc）得到 undefined', async () => {
+    expect(loadLesson(9)).toBe(loadLesson(9));
+    expect((await loadLesson(9))?.id).toBe(9);
+    for (const id of [0, 57, Number('abc'), 1.5]) expect(await loadLesson(id)).toBeUndefined();
+  });
+
+  it('背景預載下一課的期間標成預載（失敗時不重新整理正在看的這一課，見 main.tsx）', async () => {
+    expect(preloading()).toBe(false);
+    preloadLesson(10);
+    expect(preloading()).toBe(true);
+    await loadLesson(10);
+    await Promise.resolve();
+    expect(preloading()).toBe(false);
+    // 失敗也會結束
+    const failed = asPreload(Promise.reject(new Error('Failed to fetch dynamically imported module')));
+    expect(preloading()).toBe(true);
+    await expect(failed).rejects.toThrow();
+    expect(preloading()).toBe(false);
   });
 });

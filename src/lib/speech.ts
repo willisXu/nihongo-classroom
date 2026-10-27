@@ -226,15 +226,34 @@ function utter(text: string, rate: number, onEnd?: () => void, pitch?: number): 
   return true;
 }
 
+/** 正在念的那一句的 onStop（念完就清掉） */
+let onStopped: (() => void) | undefined;
+
+/** 正在念的那一句被別的 speak()、stopSpeaking() 取代：通知它（整段播放的按鈕才不會一直停在「停止」） */
+function stopped() {
+  const f = onStopped;
+  onStopped = undefined;
+  f?.();
+}
+
 /** 念出日文。回傳 false 表示這台裝置不能發音（這時 onEnd 不會被呼叫）。 */
 /** pitch：音高（1 是正常；對話聽力用來分出兩個人，見 components/Drill.tsx） */
-export function speak(text: string, opts: { rate?: number; pitch?: number; onEnd?: () => void } = {}): boolean {
+/** onStop：還沒念完就被別的 speak()、stopSpeaking() 取代時呼叫（和 onEnd 只會呼叫其中一個） */
+export function speak(text: string, opts: { rate?: number; pitch?: number; onEnd?: () => void; onStop?: () => void } = {}): boolean {
   if (!text || !supported) return false;
   // 語音清單晚到、又沒觸發 voiceschanged：念之前再讀一次
   if (!state.voices.length) refreshVoices();
+  stopped();
+  const { onEnd, onStop } = opts;
+  onStopped = onStop;
+  const ended = () => {
+    if (onStopped === onStop) onStopped = undefined;
+    onEnd?.();
+  };
   try {
-    return utter(speechFor(text), opts.rate ?? (settingsStore.get().slow ? 0.6 : 0.9), opts.onEnd, opts.pitch);
+    return utter(speechFor(text), opts.rate ?? (settingsStore.get().slow ? 0.6 : 0.9), ended, opts.pitch);
   } catch {
+    onStopped = undefined;
     return false;
   }
 }
@@ -247,4 +266,5 @@ export function stopSpeaking() {
   } catch {
     /* ignore */
   }
+  stopped();
 }

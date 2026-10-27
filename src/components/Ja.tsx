@@ -5,9 +5,9 @@ import { parseJa, type JaText } from '../lib/ja';
  * 顯示日文句子（JaText）：《》裡的讀音顯示成振假名，〔〕是句型的空格。
  * 振假名可以整頁隱藏（.furi-off，見 app.css），隱藏時仍佔位置，切換時版面不跳動。
  */
-export function Ja({ text, className, as: Tag = 'span' }: { text: JaText; className?: string; as?: 'span' | 'p' }) {
+export function Ja({ text, className, as: Tag = 'span', id }: { text: JaText; className?: string; as?: 'span' | 'p'; id?: string }) {
   return (
-    <Tag lang="ja" className={className}>
+    <Tag lang="ja" className={className} id={id}>
       <JaParts text={text} />
     </Tag>
   );

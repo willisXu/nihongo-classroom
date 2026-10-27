@@ -4,6 +4,7 @@
  */
 import type { CardState } from './srs';
 import type { KanaStats, VocabMisses, WritingStats } from '../state';
+import { isCardId } from '../data/vocab/meta';
 
 /** 熟卡：間隔 21 天以上（和單字牌組的統計一致） */
 const MATURE_IVL = 21;
@@ -27,15 +28,16 @@ export interface VocabMistake {
 /**
  * 常忘的單字：複習時按過「忘記了」、之後還沒在錯題本按「記住了」的卡片。
  * 錯題本出現之前就忘記過的卡片（沒有紀錄，但有 lapses）也算。卡片已經變成熟卡就不算。
+ * 這個版本不認得的卡片（比較新版匯出的備份）不算：錯題本頁列不出來，首頁的題數也不能算它。
  */
 export function vocabMistakes(misses: VocabMisses, cards: Record<string, CardState | undefined>): VocabMistake[] {
   const mature = (c: CardState | undefined, since: number) => !!c && c.step === -1 && c.ivl >= MATURE_IVL && c.last > since;
   const out: VocabMistake[] = [];
   for (const [id, m] of Object.entries(misses)) {
-    if (m.n > 0 && m.t > m.ok && !mature(cards[id], m.t)) out.push({ id, n: m.n, t: m.t });
+    if (m.n > 0 && m.t > m.ok && !mature(cards[id], m.t) && isCardId(id)) out.push({ id, n: m.n, t: m.t });
   }
   for (const [id, c] of Object.entries(cards)) {
-    if (c && c.lapses > 0 && !misses[id] && !mature(c, 0)) out.push({ id, n: c.lapses, t: c.last });
+    if (c && c.lapses > 0 && !misses[id] && !mature(c, 0) && isCardId(id)) out.push({ id, n: c.lapses, t: c.last });
   }
   return out.sort((a, b) => b.n - a.n || b.t - a.t);
 }

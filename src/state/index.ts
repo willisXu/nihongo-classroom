@@ -1,5 +1,6 @@
 import { createStore, isObj, num, bool, str, oneOf, readJSON, removeKey } from './store';
 import { SEION_CELLS } from '../data/kana';
+import { isCardId } from '../data/vocab/meta';
 import type { CardState } from '../lib/srs';
 import { studyDayKey } from '../lib/date';
 
@@ -425,7 +426,9 @@ const BACKUP_VERSION = 1;
 export function exportBackup(): string {
   const data: Record<string, unknown> = {};
   for (const s of BACKUP_STORES) data[s.key] = s.get();
-  return JSON.stringify({ app: 'nihongo-classroom', version: BACKUP_VERSION, exportedAt: new Date().toISOString(), data }, null, 2);
+  // 不縮排：全部卡片都學過、用了半年的紀錄，檔案（和匯入前留在瀏覽器的那一份）小一半（約 520 → 270 KB）。
+  // 以前縮排的備份檔照樣讀得懂
+  return JSON.stringify({ app: 'nihongo-classroom', version: BACKUP_VERSION, exportedAt: new Date().toISOString(), data });
 }
 
 /** 檢查整個備份檔，回傳裡面的資料和匯出時間；有問題就丟出錯誤訊息（什麼都不改） */
@@ -460,7 +463,7 @@ export interface BackupSummary {
   lessons: number;
   /** 熟悉的假名（連對 3 次） */
   kana: number;
-  /** 學過的單字卡 */
+  /** 學過的單字卡（這個版本認得的卡片，和學習紀錄頁一致） */
   words: number;
   /** 有學習紀錄的天數 */
   days: number;
@@ -470,7 +473,7 @@ function summarize(lessons: LessonProgress, kana: KanaStats, srs: SrsData, activ
   return {
     lessons: Object.keys(lessons.done).length,
     kana: Object.keys(kana).filter((k) => kanaLevel(kana, k) === 2).length,
-    words: Object.values(srs.cards).filter((c) => c.reps > 0).length,
+    words: Object.entries(srs.cards).filter(([id, c]) => c.reps > 0 && isCardId(id)).length,
     days: Object.values(activity).filter((d) => Object.values(d).some((v) => (v ?? 0) > 0)).length,
   };
 }

@@ -39,7 +39,7 @@ SIL Open Font License 1.1 全文：https://openfontlicense.org/open-font-license
 
 ## 打包進網站的 npm 套件
 
-網站會把 React、React Router、Anthropic TypeScript SDK、svg-path-properties 等套件打包進去。每次建置（`npm run build`、`npm start`、GitHub Actions）時，Vite 會把**實際打包進網站的每個套件**和它們的授權全文自動整理成 **`THIRD-PARTY-LICENSES.md`**，放在 `dist/` 裡和 `index.html` 同一層，跟網站一起發布：
+網站會把 React、React Router、Anthropic TypeScript SDK 等套件打包進去。每次建置（`npm run build`、`npm start`、GitHub Actions）時，Vite 會把**實際打包進網站的每個套件**和它們的授權全文自動整理成 **`THIRD-PARTY-LICENSES.md`**，放在 `dist/` 裡和 `index.html` 同一層，跟網站一起發布：
 
 - 線上版：https://willisxu.github.io/nihongo-classroom/THIRD-PARTY-LICENSES.md
 - 本機：http://localhost:5288/THIRD-PARTY-LICENSES.md

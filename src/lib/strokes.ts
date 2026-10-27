@@ -6,7 +6,6 @@
  * 逐點比對（有方向性），把誤差拆成「位置」與「形狀」分開用不同的容許值判斷，
  * 不合格時找出最可能的原因（太短、方向、筆順、位置、形狀）。
  */
-import { svgPathProperties } from 'svg-path-properties';
 import data from '../data/strokes.json';
 
 export type Pt = { x: number; y: number };
@@ -21,6 +20,8 @@ export type StrokeJudgement = {
   matchedIndex?: number;
   /** 與「應該寫的那一筆」順向比對的平均距離（109 座標單位） */
   distance: number;
+  /** ok 時：這一筆的重心 − 標準筆畫的重心。呼叫端把寫對的每一筆平均起來，當下一筆的 bias（見 judgeStroke） */
+  shift?: Pt;
 };
 
 /** 字面座標系的邊長（KanjiVG viewBox 0 0 109 109） */
@@ -86,9 +87,76 @@ export function getStrokePaths(ch: string): string[] | undefined {
   return hasStrokes(ch) ? [...strokesOf(ch)] : undefined;
 }
 
+/*
+ * path → 折線：KanjiVG 的筆畫只用 M、C、c、S、s（另外支援 L、l）。三次貝茲曲線切成短直線，
+ * 再沿折線等距取樣。以前用 svg-path-properties 的 getPointAtLength（每個點都要二分搜尋＋數值積分），
+ * 筆畫多的漢字第一次顯示在手機上會卡一兩百毫秒；這樣快 20 倍以上，取樣點的差不到 0.1 單位。
+ * 資料沒用到的指令（H、V、Q、T、A、Z）遇到就丟錯，不要默默畫錯。
+ */
+const PATH_ARITY: Readonly<Record<string, number>> = { M: 2, L: 2, C: 6, S: 4 };
+/** 每段曲線切成幾段直線（切 32 段，整筆的長度和真正的曲線差不到 0.1 單位） */
+const CURVE_STEPS = 32;
+
+/** 把一筆的 path 轉成折線（字面座標） */
+function flattenPath(d: string): Pt[] {
+  const tokens = d.match(/[A-Za-z]|-?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/gi) ?? [];
+  const out: Pt[] = [];
+  let cmd = '';
+  let args: number[] = [];
+  let x = 0;
+  let y = 0;
+  // 上一段曲線的第二個控制點：S、s 的第一個控制點是它對目前位置的鏡射
+  let cx = 0;
+  let cy = 0;
+  let afterCurve = false;
+  for (const t of tokens) {
+    if (/[A-Za-z]/.test(t)) {
+      if (!(t.toUpperCase() in PATH_ARITY)) throw new Error(`筆畫的 path 不支援 ${t} 指令：${d}`);
+      if (args.length) throw new Error(`筆畫的 path 參數不完整：${d}`);
+      cmd = t;
+      continue;
+    }
+    const abs = cmd.toUpperCase();
+    if (!cmd || (abs === 'M') !== (out.length === 0)) throw new Error(`筆畫的 path 要以 M 開頭，而且只能有一個 M：${d}`);
+    args.push(Number(t));
+    if (args.length < PATH_ARITY[abs]) continue;
+    const ox = cmd === abs ? 0 : x;
+    const oy = cmd === abs ? 0 : y;
+    const a = args.map((v, i) => v + (i % 2 ? oy : ox));
+    args = [];
+    if (abs === 'M' || abs === 'L') {
+      [x, y] = a;
+      out.push({ x, y });
+      afterCurve = false;
+      // M 後面多的座標是 lineto
+      if (abs === 'M') cmd = cmd === 'M' ? 'L' : 'l';
+      continue;
+    }
+    const [x1, y1] = abs === 'C' ? a : afterCurve ? [2 * x - cx, 2 * y - cy] : [x, y];
+    const [x2, y2, x3, y3] = abs === 'C' ? a.slice(2) : a;
+    for (let s = 1; s <= CURVE_STEPS; s++) {
+      const t1 = s / CURVE_STEPS;
+      const t0 = 1 - t1;
+      const k0 = t0 * t0 * t0;
+      const k1 = 3 * t0 * t0 * t1;
+      const k2 = 3 * t0 * t1 * t1;
+      const k3 = t1 * t1 * t1;
+      out.push({ x: k0 * x + k1 * x1 + k2 * x2 + k3 * x3, y: k0 * y + k1 * y1 + k2 * y2 + k3 * y3 });
+    }
+    cx = x2;
+    cy = y2;
+    x = x3;
+    y = y3;
+    afterCurve = true;
+  }
+  if (args.length) throw new Error(`筆畫的 path 參數不完整：${d}`);
+  if (!out.length) throw new Error(`筆畫的 path 是空的：${d}`);
+  return out;
+}
+
 /** SVG path 的總長度 */
 export function pathLength(d: string): number {
-  return new svgPathProperties(d).getTotalLength();
+  return polylineLength(flattenPath(d));
 }
 
 /** 取樣點數：取整數，非有限數或負數當作 0 */
@@ -96,22 +164,9 @@ function toCount(n: number): number {
   return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
 }
 
-/** 沿著 SVG path 等距取 n 個點（含起點與終點） */
+/** 沿著 SVG path 等距取 n 個點（含起點與終點）；只有一個點或長度是 0 時，回傳 n 個起點 */
 export function samplePath(d: string, n = 48): Pt[] {
-  const count = toCount(n);
-  if (count === 0) return [];
-  const props = new svgPathProperties(d);
-  const len = props.getTotalLength();
-  if (count === 1 || !(len > 0)) {
-    const p = props.getPointAtLength(0);
-    return Array.from({ length: count }, () => ({ x: p.x, y: p.y }));
-  }
-  const out: Pt[] = [];
-  for (let i = 0; i < count; i++) {
-    const p = props.getPointAtLength((len * i) / (count - 1));
-    out.push({ x: p.x, y: p.y });
-  }
-  return out;
+  return resample(flattenPath(d), n);
 }
 
 const pointCache = new Map<string, Pt[][]>();
@@ -207,6 +262,11 @@ export const TAP_LENGTH = 3;
 export const TINY_STROKE = 14;
 /** 參考筆畫起訖點距離至少這麼遠，才要求方向正確（點、圈不計較方向） */
 export const DIRECTION_SPAN = 14;
+/**
+ * 起訖點很近、但整筆夠長的筆畫也要求方向：像「教」第 5 筆 ㇖ 這種折回來的筆畫（長 33、起訖點只差 12），
+ * 只看起訖點距離的話反方向寫也算對。短筆畫（點）照舊不計較方向。
+ */
+export const DIRECTION_LENGTH = 20;
 /** 重心位移的容許值（絕對值，109 座標單位） */
 export const POSITION_TOLERANCE = 12;
 
@@ -227,6 +287,19 @@ const DTW_BAND = 2;
 const REVERSE_RATIO = 0.6;
 /** 判形狀不對時，長度不到參考筆畫的這個比例就改說「太短」 */
 const SHORT_RATIO = 0.6;
+/**
+ * 判對的一筆，其實是先寫了後面相鄰的平行筆畫嗎？日、目、門、言、隹 裡相鄰的橫畫重心只差 10～12 單位，
+ * 在位置容許值以內，不另外檢查的話，書、題、計 的橫畫對調著寫也全部判對。
+ * 先扣掉這個人前面幾筆的整體偏移（字寫得偏一邊、大一點小一點），離後面那一筆不到兩筆間距的 ORDER_NEAR、
+ * 離應該寫的這一筆超過 1 − ORDER_NEAR 才算筆順錯；中間的模糊地帶照舊當作寫對
+ * （模擬縮放、旋轉、偏移、抖動照順序寫全部的字約 4 萬筆，只誤判 1 筆）。
+ */
+const ORDER_NEAR = 0.35;
+/**
+ * 只看重心相距這麼近的筆畫：以前會直接判對的對調，兩筆都在位置容許值以內（實測 8～12 單位）；
+ * 再遠的照標準寫在那裡本來就判得出筆順錯。放寬的話，照順序寫的「町」「説」偶爾會被誤判。
+ */
+const ORDER_RANGE = POSITION_TOLERANCE;
 
 /** 形狀誤差的容許值：小筆畫用固定的絕對下限，長筆畫放寬一些 */
 export function shapeTolerance(ref: readonly Pt[]): number {
@@ -336,7 +409,7 @@ function refInfo(stroke: readonly Pt[], scale = 1): RefInfo {
     centeredRev: [...centered].reverse(),
     length,
     closed,
-    directional: !closed && span >= DIRECTION_SPAN * scale,
+    directional: !closed && (span >= DIRECTION_SPAN * scale || length >= DIRECTION_LENGTH * scale),
     shapeTol: shapeTolerance(stroke),
   };
   refInfoCache.set(stroke, info);
@@ -393,6 +466,39 @@ function isReversed(m: Match, r: RefInfo): boolean {
   return r.directional && m.fitRev <= 1 && m.shapeRev < REVERSE_RATIO * m.shapeFwd;
 }
 
+/**
+ * 形狀、方向都像第 k 筆的這一筆，扣掉整體偏移 bias 之後其實落在後面哪一筆上（見 ORDER_NEAR）；沒有就是 undefined。
+ * 點（濁音點、雨的四點）先寫哪一點都算，不檢查。
+ */
+function laterStrokeHere(
+  u: readonly Pt[],
+  cu: Pt,
+  k: number,
+  ref: readonly (readonly Pt[])[],
+  scale: number,
+  bias: Pt,
+): number | undefined {
+  const exp = refInfo(ref[k], scale);
+  if (exp.length < TINY_STROKE * scale) return undefined;
+  const x = cu.x - bias.x;
+  const y = cu.y - bias.y;
+  const offK = Math.hypot(x - exp.c.x, y - exp.c.y);
+  let found: number | undefined;
+  let nearest = ORDER_NEAR;
+  for (let j = k + 1; j < ref.length; j++) {
+    const rj = refInfo(ref[j], scale);
+    const sep = Math.hypot(rj.c.x - exp.c.x, rj.c.y - exp.c.y);
+    if (rj.length < TINY_STROKE * scale || !(sep > 0) || sep > ORDER_RANGE || offK <= (1 - ORDER_NEAR) * sep) continue;
+    const near = Math.hypot(x - rj.c.x, y - rj.c.y) / sep;
+    if (near >= nearest) continue;
+    const mj = matchStroke(u, cu, rj);
+    if (mj.fit > 1 || isReversed(mj, rj)) continue;
+    found = j;
+    nearest = near;
+  }
+  return found;
+}
+
 /** 整體吻合度（形狀與位移取較差的一個，≤ 1 算吻合） */
 function overallFit(m: Match): number {
   return Math.max(m.fit, m.offset / POSITION_TOLERANCE);
@@ -406,7 +512,8 @@ const REASON_RANK: Record<StrokeFailReason, number> = { order: 0, direction: 1, 
  * 判定使用者寫的一筆是否就是第 expectedIndex 筆（從 0 起算）。
  * user 是字面座標的折線；ref 是 getStrokePoints() 的結果。
  *
- * 合格：重心位移 ≤ POSITION_TOLERANCE、形狀吻合，而且（需要方向的筆畫）不是反向寫的。
+ * 合格：重心位移 ≤ POSITION_TOLERANCE、形狀吻合，（需要方向的筆畫）不是反向寫的，
+ * 而且扣掉這個人整體的偏移（bias）之後，不是落在後面相鄰的平行筆畫上（那是筆順錯）。
  * 不合格時從幾種解釋裡挑最吻合的一種：
  *   direction 反向的形狀吻合 · order 吻合後面還沒寫的某一筆 · position 形狀吻合但位置偏了；
  *   都不是就是 shape（明顯太短時改為 tooShort）。
@@ -417,6 +524,8 @@ export function judgeStroke(
   ref: readonly (readonly Pt[])[],
   /** 小字用 judgeScale(字) 的比例縮小門檻 */
   scale = 1,
+  /** 這個人前面寫對的幾筆的整體偏移（每一筆 shift 的平均）：判筆順時先扣掉。還沒寫對任何一筆時是 0 */
+  bias: Pt = { x: 0, y: 0 },
 ): StrokeJudgement {
   if (!Number.isInteger(expectedIndex) || expectedIndex < 0 || expectedIndex >= ref.length) {
     throw new RangeError(`expectedIndex ${expectedIndex} 超出範圍（共 ${ref.length} 筆）`);
@@ -439,7 +548,10 @@ export function judgeStroke(
   const shapeOk = m.fit <= 1;
   const posOk = m.offset <= POSITION_TOLERANCE;
   const reversed = isReversed(m, exp);
-  if (shapeOk && posOk && !reversed) return { ok: true, matchedIndex: k, distance };
+  // 形狀、方向都對，但扣掉整體偏移之後落在後面相鄰的筆畫上：是先寫了那一筆（不要說成寫對或位置偏了）
+  const later = shapeOk && !reversed ? laterStrokeHere(u, cu, k, ref, scale, bias) : undefined;
+  if (later !== undefined) return { ok: false, reason: 'order', matchedIndex: later, distance };
+  if (shapeOk && posOk && !reversed) return { ok: true, matchedIndex: k, distance, shift: { x: cu.x - exp.c.x, y: cu.y - exp.c.y } };
 
   const candidates: Candidate[] = [];
   if (reversed) candidates.push({ reason: 'direction', score: m.fitRev });

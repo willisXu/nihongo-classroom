@@ -87,7 +87,7 @@ describe('srs', () => {
     expect(q.review).toEqual(['b']);
     expect(q.fresh).toEqual(['d', 'e']);
     const s = deckStats({ a: learning, b: reviewCard, c: future }, ids, NOW);
-    expect(s).toMatchObject({ total: 6, seen: 3, due: 2, unseen: 3 });
+    expect(s).toMatchObject({ total: 6, seen: 3, due: 2, unseen: 3, learning: 1 });
   });
 
   it('labels the next interval for each button', () => {

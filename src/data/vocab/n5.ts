@@ -5,8 +5,8 @@ export const n5: Deck = {
   ...deckHead('n5'),
   items: [
     { id: 'n5-0001', kana: 'おはようございます', zh: '早安', pos: 'expression', topic: '招呼語', note: '對長輩或在職場用；朋友之間說「おはよう」', ex: { ja: '先生、おはようございます。', kana: 'せんせい、おはようございます。', zh: '老師早安。' } },
-    { id: 'n5-0002', kana: 'こんにちは', zh: '你好；午安', pos: 'expression', topic: '招呼語', note: '白天見面時說；最後的「は」念「わ」' },
-    { id: 'n5-0003', kana: 'こんばんは', zh: '晚安（晚上見面時的問候）', pos: 'expression', topic: '招呼語', note: '晚上見面時打招呼用；睡前道晚安要說「おやすみなさい」' },
+    { id: 'n5-0002', kana: 'こんにちは', r: 'konnichiwa', zh: '你好；午安', pos: 'expression', topic: '招呼語', note: '白天見面時說；最後的「は」念「わ」' },
+    { id: 'n5-0003', kana: 'こんばんは', r: 'konbanwa', zh: '晚安（晚上見面時的問候）', pos: 'expression', topic: '招呼語', note: '晚上見面時打招呼用；睡前道晚安要說「おやすみなさい」' },
     { id: 'n5-0004', kana: 'おやすみなさい', zh: '晚安（睡前說）', pos: 'expression', topic: '招呼語', note: '朋友、家人之間說「おやすみ」' },
     { id: 'n5-0005', kana: 'さようなら', zh: '再見', pos: 'expression', topic: '招呼語', note: '語氣較正式，或有一段時間不會見面時用；朋友之間常說「じゃあね」' },
     { id: 'n5-0006', kana: 'ありがとうございます', zh: '謝謝', pos: 'expression', topic: '招呼語', note: '對朋友說「ありがとう」；對方已經幫完忙時常說「ありがとうございました」', ex: { ja: 'どうもありがとうございます。', kana: 'どうもありがとうございます。', zh: '非常謝謝您。' } },
@@ -766,7 +766,7 @@ export const n5: Deck = {
     { id: 'n5-0760', kana: 'しかし', zh: '但是；然而', pos: 'conjunction', topic: '連接詞與其他', note: '比「でも」書面' },
     { id: 'n5-0761', kana: 'だから', zh: '所以', pos: 'conjunction', topic: '連接詞與其他', ex: { ja: '雨です。だから、出かけません。', kana: 'あめです。だから、でかけません。', zh: '在下雨，所以我不出門。' } },
     { id: 'n5-0762', kana: 'じゃあ', zh: '那麼', pos: 'conjunction', topic: '連接詞與其他', note: '口語；比較正式時說「では」', ex: { ja: 'じゃあ、また明日。', kana: 'じゃあ、またあした。', zh: '那麼，明天見。' } },
-    { id: 'n5-0763', kana: 'それでは', zh: '那麼（正式）', pos: 'conjunction', topic: '連接詞與其他', ex: { ja: 'それでは、始めましょう。', kana: 'それでは、はじめましょう。', zh: '那麼，我們開始吧。' } },
+    { id: 'n5-0763', kana: 'それでは', r: 'soredewa', zh: '那麼（正式）', pos: 'conjunction', topic: '連接詞與其他', ex: { ja: 'それでは、始めましょう。', kana: 'それでは、はじめましょう。', zh: '那麼，我們開始吧。' } },
     { id: 'n5-0764', kana: 'あのう', zh: '那個…；請問', pos: 'interjection', topic: '連接詞與其他', note: '開口叫人或說話猶豫時用' },
     { id: 'n5-0765', kana: 'ええと', zh: '嗯…；這個嘛', pos: 'interjection', topic: '連接詞與其他', note: '一邊想一邊說話時用' },
     { id: 'n5-0766', kana: 'さあ', zh: '來吧；這個嘛…', pos: 'interjection', topic: '連接詞與其他', note: '催促別人，或被問到不知道的事時說' },
@@ -778,7 +778,7 @@ export const n5: Deck = {
     { id: 'n5-0772', kana: 'はなし', kanji: '話', zh: '話；談話；故事', pos: 'noun', topic: '連接詞與其他', ex: { ja: '先生の話は面白いです。', kana: 'せんせいのはなしはおもしろいです。', zh: '老師說的話很有趣。' } },
     { id: 'n5-0773', kana: 'ほか', zh: '其他；別的', pos: 'noun', topic: '連接詞與其他', note: '漢字寫作「他」或「外」', ex: { ja: 'ほかに質問はありますか。', kana: 'ほかにしつもんはありますか。', zh: '還有其他問題嗎？' } },
     { id: 'n5-0774', kana: 'ほんとう', kanji: '本当', zh: '真的；真實', pos: 'noun', topic: '連接詞與其他', note: '「本当に」＝真的、實在', ex: { ja: 'それは本当ですか。', kana: 'それはほんとうですか。', zh: '那是真的嗎？' } },
-    { id: 'n5-0775', kana: 'では', zh: '那麼（比較正式）', pos: 'conjunction', topic: '連接詞與其他', note: '口語說「じゃあ」' },
+    { id: 'n5-0775', kana: 'では', r: 'dewa', zh: '那麼（比較正式）', pos: 'conjunction', topic: '連接詞與其他', note: '口語說「じゃあ」' },
     { id: 'n5-0776', kana: 'ベッド', zh: '床', pos: 'noun', topic: '家與房間', ex: { ja: 'ベッドで本を読みます。', kana: 'ベッドでほんをよみます。', zh: '我在床上看書。' } },
   ],
 };

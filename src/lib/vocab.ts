@@ -1,61 +1,10 @@
-import type { Pos, VocabItem } from '../data/types';
+import type { VocabItem } from '../data/types';
 import { DECKS, vocabById } from '../data/vocab';
-import { learnedInOtherDeck } from '../data/vocab/meta';
+import { learnedInOtherDeck, wordLearned } from '../data/vocab/meta';
 import { courseLessonById } from '../data/lessons/meta';
-import { conjugate } from './verbs';
 
-export const POS_LABEL: Record<Pos, string> = {
-  noun: '名詞',
-  verb: '動詞',
-  'i-adj': 'い形容詞',
-  'na-adj': 'な形容詞',
-  adverb: '副詞',
-  expression: '句子',
-  number: '數字',
-  pronoun: '代名詞',
-  counter: '量詞',
-  particle: '助詞',
-  conjunction: '連接詞',
-  interjection: '感嘆詞',
-  prefix: '接頭詞',
-  suffix: '接尾詞',
-};
-
-export const VERB_GROUP_LABEL: Record<1 | 2 | 3, string> = {
-  1: '第一類（五段）',
-  2: '第二類（一段）',
-  3: '第三類（する・くる）',
-};
-
-/** 動詞的ます形（課程第 13–24 課都用ます形；單字卡存辭書形） */
-export function masuForm(item: Pick<VocabItem, 'pos' | 'verbGroup' | 'kana' | 'kanji'>): string | null {
-  if (item.pos !== 'verb' || !item.verbGroup) return null;
-  try {
-    return conjugate(item.kanji ?? item.kana, item.verbGroup, 'masu');
-  } catch {
-    return null;
-  }
-}
-
-/** 卡片正面顯示的寫法：有漢字用漢字 */
-export function displayForm(item: VocabItem): string {
-  return item.kanji ?? item.kana;
-}
-
-/**
- * 單字要念的文字：一律念假名。
- * 同一個漢字常有好幾種念法（四＝よん／し、一日＝いちにち／ついたち），
- * 單獨把漢字丟給語音引擎，念出來的不一定是這張卡要教的讀音。
- * 「〜にん」這類接尾詞的「〜」不念。
- */
-export function speechText(item: Pick<VocabItem, 'kana' | 'say'>): string {
-  return item.say ?? item.kana.replace(/[〜～]/g, '').trim();
-}
-
-/** 例句要念的文字：有指定念法（漢字容易念錯）就念那個 */
-export function exampleSpeech(ex: NonNullable<VocabItem['ex']>): string {
-  return ex.say ?? ex.ja;
-}
+// 只看一張卡片的函式（顯示、念法、搜尋）在 vocabItem.ts；從這裡 import 的地方照舊可以用
+export * from './vocabItem';
 
 /** 課程單字的「牌組」代號：lesson-9 → 9（不是的話 null） */
 export function lessonDeckId(deckId: string): number | null {
@@ -94,34 +43,46 @@ export function deckItemIds(deckId: string, cards: Record<string, { reps: number
     const learnedKeys = new Set(DECKS.flatMap((d) => d.items.filter(started).map(keyOf)));
     const freshKeys = new Set<string>();
     const ids: string[] = [];
+    // 每個字留在清單裡的第一張卡（課程的字換成留下的那張用）
+    const firstOfKey = new Map<string, string>();
     for (const d of DECKS) {
       for (const it of d.items) {
-        if (started(it)) {
-          ids.push(it.id);
-          continue;
-        }
         const key = keyOf(it);
-        if (learnedKeys.has(key) || freshKeys.has(key)) continue;
-        freshKeys.add(key);
+        if (!started(it)) {
+          if (learnedKeys.has(key) || freshKeys.has(key)) continue;
+          freshKeys.add(key);
+        }
         ids.push(it.id);
+        if (!firstOfKey.has(key)) firstOfKey.set(key, it.id);
       }
     }
     // 課程的字如果在別的牌組也有、這裡留的是別張：換成留下的那張
-    return courseFirst(ids, priority.map((id) => sameWordIn(ids, id)));
+    // （用 Set、Map 查，不在清單裡逐一找：學過很多張、上了很多課時，每次開複習頁都要算）
+    const inIds = new Set(ids);
+    const sameWord = (id: string) => {
+      const it = vocabById(id);
+      if (!it || inIds.has(id)) return id;
+      return firstOfKey.get(keyOf(it)) ?? id;
+    };
+    return courseFirst(ids, priority.map(sameWord));
   }
   const deck = DECKS.find((d) => d.id === deckId);
   return deck ? courseFirst(deck.items.filter((it) => !learnedInOtherDeck(cards, it.id)).map((it) => it.id), priority) : [];
 }
 
-/** 同一個字在 ids 裡的那張卡（全部牌組裡同一個字只留一張新卡） */
-function sameWordIn(ids: string[], id: string): string {
-  const it = vocabById(id);
-  if (!it || ids.includes(id)) return id;
-  const key = `${it.kana}|${it.kanji ?? ''}`;
-  return ids.find((x) => {
-    const o = vocabById(x);
-    return o && `${o.kana}|${o.kanji ?? ''}` === key;
-  }) ?? id;
+/**
+ * 這個牌組（或某一課）的字都學過了嗎：在別的牌組學過的同一個字也算（不會再當新卡）。
+ * 找不到這個牌組、或裡面沒有字時是 false（複習頁照一般的說法）。
+ */
+export function deckAllLearned(deckId: string, cards: Record<string, { reps: number } | undefined>): boolean {
+  const lessonId = lessonDeckId(deckId);
+  const ids =
+    lessonId !== null
+      ? (courseLessonById(lessonId)?.words ?? []).filter((id) => vocabById(id))
+      : deckId === 'all'
+        ? DECKS.flatMap((d) => d.items.map((it) => it.id))
+        : (DECKS.find((d) => d.id === deckId)?.items.map((it) => it.id) ?? []);
+  return ids.length > 0 && ids.every((id) => wordLearned(cards, id));
 }
 
 export function deckTitle(deckId: string): string {
@@ -129,15 +90,4 @@ export function deckTitle(deckId: string): string {
   if (lessonId !== null) return `第 ${lessonId} 課的單字`;
   if (deckId === 'all') return '全部牌組';
   return DECKS.find((d) => d.id === deckId)?.title ?? '牌組';
-}
-
-/** 依主題分組，保持原本順序 */
-export function groupByTopic(items: VocabItem[]): { topic: string; items: VocabItem[] }[] {
-  const map = new Map<string, VocabItem[]>();
-  for (const it of items) {
-    const t = it.topic ?? '其他';
-    if (!map.has(t)) map.set(t, []);
-    map.get(t)!.push(it);
-  }
-  return [...map.entries()].map(([topic, list]) => ({ topic, items: list }));
 }

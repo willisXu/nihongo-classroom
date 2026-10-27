@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  LEARN_AHEAD_MS, MAX_IVL, MIN_MS, buildSession, newCard, pickNext, review, type CardState,
+  LEARN_AHEAD_MS, MAX_IVL, MIN_MS, buildSession, limitFresh, newCard, pickNext, review, type CardState,
 } from '../src/lib/srs';
 import { addDays, studyDayStart } from '../src/lib/date';
 import { saveCard, srsStore } from '../src/state';
@@ -77,6 +77,27 @@ describe('一輪複習', () => {
     expect(pickNext(['d'], [b], NOW)).toBe('d');
     expect(pickNext([], [b], NOW)).toBe('b');
     expect(pickNext([], [{ id: 'c', due: NOW + LEARN_AHEAD_MS + 1 }], NOW)).toBeNull();
+  });
+});
+
+describe('今天的新卡額度用完了（例如兩個分頁各開一個牌組學新卡）', () => {
+  const r = reviewCard(4, NOW - 3600_000);
+  const cards: Record<string, CardState> = { r1: r, r2: r, n4: { ...newCard(NOW) } }; // n4：有紀錄但還沒學（reps 0）也是新卡
+  const main = ['r1', 'n1', 'n2', 'r2', 'n3', 'n4'];
+
+  it('這一輪還沒開始的新卡只留額度內的，複習卡不動；沒有要拿掉的時候是同一個陣列', () => {
+    expect(limitFresh(main, cards, 4)).toBe(main);
+    expect(limitFresh(main, cards, 9)).toBe(main);
+    expect(limitFresh(main, cards, 2)).toEqual(['r1', 'n1', 'n2', 'r2']);
+    expect(limitFresh(main, cards, 0)).toEqual(['r1', 'r2']);
+  });
+
+  it('正在看的那張新卡不拿掉，先算進額度', () => {
+    expect(limitFresh(main, cards, 1, 'n2')).toEqual(['r1', 'n2', 'r2']);
+    expect(limitFresh(main, cards, 0, 'n3')).toEqual(['r1', 'r2', 'n3']);
+    // 正在看的是複習卡、或不在這一輪裡（學習中的卡）：照常算
+    expect(limitFresh(main, cards, 2, 'r1')).toEqual(['r1', 'n1', 'n2', 'r2']);
+    expect(limitFresh(main, cards, 1, 'x')).toEqual(['r1', 'n1', 'r2']);
   });
 });
 

@@ -6,7 +6,7 @@ import { writingStore } from '../state';
 import { useStore } from '../state/store';
 import { speak } from '../lib/speech';
 import { romaji } from '../lib/romaji';
-import { getStrokePaths } from '../lib/strokes';
+import { strokeCount } from '../data/strokeCounts';
 import { Masu, Segmented, Switch } from '../components/Controls';
 import { SpeakButton } from '../components/Speak';
 import { Icon } from '../components/Icon';
@@ -246,7 +246,7 @@ function Detail({ ch, onClose, written }: { ch: string; onClose: () => void; wri
   const c = inf.cell;
   const s = inf.script;
   const other = s === 'h' ? c.k : c.h;
-  const strokes = getStrokePaths(ch)?.length;
+  const strokes = strokeCount(ch);
   let ghost: string | undefined;
   let tip = '';
   let ex: [string, string] | null | undefined;

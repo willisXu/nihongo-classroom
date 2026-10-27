@@ -5,13 +5,13 @@ import { lessonStore, recordVocabMiss, saveCard, settingsStore, srsStore, update
 import { courseWords } from '../lib/progress';
 import { useStore } from '../state/store';
 import {
-  LEARN_AHEAD_MS, buildSession, formatMinutes, newCard, pickNext, previewLabel, review, GRADES, type CardState, type Grade, type Pending,
+  LEARN_AHEAD_MS, buildSession, formatMinutes, limitFresh, newCard, pickNext, previewLabel, review, GRADES, type CardState, type Grade, type Pending,
 } from '../lib/srs';
 import { studyDayKey, studyDayStart, addDays } from '../lib/date';
-import { romaji } from '../lib/romaji';
 import { speak } from '../lib/speech';
-import { POS_LABEL, VERB_GROUP_LABEL, masuForm, deckItemIds, deckTitle, speechText, exampleSpeech } from '../lib/vocab';
+import { deckAllLearned, deckItemIds, deckTitle, romajiOf, speechText } from '../lib/vocab';
 import { SpeakIcon } from '../components/Speak';
+import { CardBack } from '../components/CardBack';
 import { Switch } from '../components/Controls';
 import { Icon } from '../components/Icon';
 import { usePageTitle } from '../lib/title';
@@ -89,14 +89,15 @@ function Review({ deck, restarted, onRestart }: { deck: string; restarted: boole
   const isNew = !card || card.reps === 0;
   const early = !!card && card.reps > 0 && card.due > now;
 
-  // 換卡（或同一張卡再出現）時翻回正面，並自動念一次
+  // 換卡（或同一張卡再出現）時翻回正面，並自動念一次。
+  // 分頁看得到才念：在另一個分頁複習時，這一頁在背景跟著換卡（見下面），不要也跟著出聲
   const autoplayRef = useRef(autoplay);
   autoplayRef.current = autoplay;
   useEffect(() => {
     setFlipped(false);
     setNow(Date.now());
     const it = currentId ? vocabById(currentId) : undefined;
-    if (it && autoplayRef.current) speak(speechText(it));
+    if (it && autoplayRef.current && document.visibilityState === 'visible') speak(speechText(it));
   }, [currentId, turn]);
 
   // 翻面後把答案捲進畫面（手機上不能被固定在下方的評分按鈕蓋住）。
@@ -117,9 +118,15 @@ function Review({ deck, restarted, onRestart }: { deck: string; restarted: boole
     }
   }, [flipped, currentId, restarted]);
 
-  // 另一個分頁已經複習過的卡片從這一輪拿掉；正在看的這張也是的話，直接換下一張
+  // 另一個分頁已經複習過的卡片從這一輪拿掉；正在看的這張也是的話，直接換下一張。
+  // 另一個分頁也在學新卡、今天的額度用完了：還沒開始的新卡也拿掉（正在看的那張留著）
   useEffect(() => {
-    const m = main.filter((id) => !mainTaken(id, session.base, srs.cards));
+    const m = limitFresh(
+      main.filter((id) => !mainTaken(id, session.base, srs.cards)),
+      srs.cards,
+      newLimitNow(Date.now()),
+      currentId,
+    );
     const l = learning.filter((p) => !learningTaken(p, srs.cards));
     if (m.length === main.length && l.length === learning.length) return;
     setMain(m);
@@ -139,7 +146,7 @@ function Review({ deck, restarted, onRestart }: { deck: string; restarted: boole
       const pending = learning.find((p) => p.id === currentId);
       // 剛好在另一個分頁評過分（上面的整理還沒輪到）：這次不算，換下一張
       if (pending ? learningTaken(pending, cardsNow) : mainTaken(currentId, session.base, cardsNow)) {
-        const m = main.filter((x) => x !== currentId);
+        const m = limitFresh(main.filter((x) => x !== currentId), cardsNow, newLimitNow(t));
         const l = learning.filter((p) => p.id !== currentId);
         setMain(m);
         setLearning(l);
@@ -154,7 +161,8 @@ function Review({ deck, restarted, onRestart }: { deck: string; restarted: boole
       saveCard(currentId, after, wasNew, { due: before.reps > 0 && before.step === -1, forgot: g === 'again' });
       // 按「忘記了」的卡片收進錯題本
       if (g === 'again') recordVocabMiss(currentId);
-      const m = main.filter((x) => x !== currentId);
+      // 換下一張前再看一次今天的新卡額度（另一個分頁可能也學了新卡）
+      const m = limitFresh(main.filter((x) => x !== currentId), srsStore.get().cards, newLimitNow(t));
       let l = learning.filter((p) => p.id !== currentId);
       if (after.step >= 0 && after.due <= t + LEARN_AHEAD_MS) l = [...l, { id: currentId, due: after.due }];
       setMain(m);
@@ -230,6 +238,9 @@ function Review({ deck, restarted, onRestart }: { deck: string; restarted: boole
     return due.length ? { n: due.length, wait: due[0] - t } : null;
   }, [item, ids, cards, tick]);
 
+  // 這組的字都學過了（沒有新卡了）：結束畫面不說「今天的新卡學完了、明天再來」
+  const allLearned = useMemo(() => !item && deckAllLearned(deck, cards), [item, deck, cards]);
+
   return (
     <div className="wrap review-wrap">
       <header className="ph ph-tight">
@@ -269,20 +280,24 @@ function Review({ deck, restarted, onRestart }: { deck: string; restarted: boole
                 複習了 {done.cards.size} 張卡片、作答 {done.total} 次，其中 {done.total - done.again} 次記得（
                 {Math.round(((done.total - done.again) / done.total) * 100)}%）。
               </p>
+              {allLearned && !laterToday && !readyNow ? <p>這組的字都學過了，卡片到期時會再出現在這裡。</p> : null}
             </>
           ) : (
             <>
-              <h2>{readyNow ? '又有卡片可以複習了' : '現在沒有要複習的卡片'}</h2>
+              <h2>{readyNow ? '又有卡片可以複習了' : allLearned ? '這組的字都學過了' : '現在沒有要複習的卡片'}</h2>
               {!laterToday && !readyNow ? (
                 <p>
-                  {settingsStore.get().newPerDay === 0
-                    ? '每天新卡設定為 0 張，到單字牌組頁調整後就能學新卡。'
-                    : '今天的新卡已經學完，到期的卡片也都複習過了。明天再來。'}
+                  {allLearned
+                    ? '沒有新卡了，到期的卡片也都複習過了。卡片到期時會再出現在這裡。'
+                    : settingsStore.get().newPerDay === 0
+                      ? '每天新卡設定為 0 張，到單字牌組頁調整後就能學新卡。'
+                      : '今天的新卡已經學完，到期的卡片也都複習過了。明天再來。'}
                 </p>
               ) : null}
             </>
           )}
-          {readyNow ? <p>還有 {readyNow} 張卡片現在就可以複習（剛到期或快到期的學習中卡片）。</p> : null}
+          {/* 可能是剛到期的卡、學習中的卡，或過了凌晨 4 點的新卡：不指定是哪一種 */}
+          {readyNow ? <p>還有 {readyNow} 張卡片現在就可以複習。</p> : null}
           {laterToday ? (
             <p className="small">
               還有 {laterToday.n} 張學習中的卡片，約 {formatMinutes(laterToday.wait)}後到期；這一頁開著的話，到期時會出現「繼續複習」。
@@ -318,43 +333,11 @@ function Review({ deck, restarted, onRestart }: { deck: string; restarted: boole
                 {item.kana}
               </p>
             ) : null}
-            {settings.showRomaji ? <p className="f-r">{romaji(item.kana)}</p> : null}
+            {settings.showRomaji ? <p className="f-r">{romajiOf(item)}</p> : null}
             <SpeakIcon text={speechText(item)} label="再聽一次" />
           </div>
           {flipped ? (
-            <div className="flash-back" ref={backRef} tabIndex={-1}>
-              <p className="f-zh" ref={meaningRef}>
-                {item.zh}
-              </p>
-              <p className="f-pos">
-                {POS_LABEL[item.pos]}
-                {item.verbGroup ? ` · ${VERB_GROUP_LABEL[item.verbGroup]}` : ''}
-                {masuForm(item) ? (
-                  <>
-                    {' · ます形 '}
-                    <span lang="ja">{masuForm(item)}</span>
-                  </>
-                ) : null}
-              </p>
-              {item.ex ? (
-                <div className="v-ex">
-                  <SpeakIcon text={exampleSpeech(item.ex)} label="播放例句" />
-                  <div>
-                    <p lang="ja" className="v-ex-ja">
-                      {item.ex.ja}
-                    </p>
-                    {/* 例句全是假名時，讀音和原句一樣，不重複顯示 */}
-                    {item.ex.kana !== item.ex.ja ? (
-                      <p lang="ja" className="v-ex-kana">
-                        {item.ex.kana}
-                      </p>
-                    ) : null}
-                    <p className="v-ex-zh">{item.ex.zh}</p>
-                  </div>
-                </div>
-              ) : null}
-              {item.note ? <p className="v-note">{item.note}</p> : null}
-            </div>
+            <CardBack item={item} backRef={backRef} meaningRef={meaningRef} />
           ) : null}
           <div className="flash-actions" ref={actionsRef}>
             {!flipped ? (

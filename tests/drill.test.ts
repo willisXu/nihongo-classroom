@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { fillBlank, fillTarget, optionOrder, orderCorrect, shuffled, talkPitch } from '../src/components/Drill';
+import { fillBlank, fillTarget, optionOrder, orderCorrect, shuffled, talkPitch, withResult } from '../src/components/Drill';
+import { parseJa } from '../src/lib/ja';
 
 /** 固定的亂數（測試每次結果一樣） */
 function seeded(seed: number) {
@@ -58,6 +59,27 @@ describe('課文練習題', () => {
     expect(fillTarget('駅《えき》で⟦切符⟧を買《か》いました。', 'きっぷ')).toBe('駅《えき》で｜切符《きっぷ》を買《か》いました。');
     expect(fillTarget('⟦りょこう⟧の計画《けいかく》', '⟦旅行⟧')).toBe('｜旅行《りょこう》の計画《けいかく》');
     expect(fillTarget('この部屋《へや》は⟦暗《くら》い⟧です。', '電気《でんき》がついていません')).toBe('この部屋《へや》は⟦暗《くら》い⟧です。');
+  });
+
+  it('⟦⟧ 題答完：送假名不標讀音（振假名只標在漢字上）', () => {
+    expect(fillTarget('この図書館《としょかん》は、⟦たてられました⟧。', '⟦建てられました⟧')).toBe('この図書館《としょかん》は、｜建《た》てられました。');
+    expect(fillTarget('この帽子《ぼうし》は⟦かるい⟧ので', '⟦軽い⟧')).toBe('この帽子《ぼうし》は｜軽《かる》いので');
+    expect(fillTarget('⟦たのしかった⟧です', '⟦楽しかった⟧')).toBe('｜楽《たの》しかったです');
+    expect(fillTarget('荷物《にもつ》を⟦届けます⟧', 'とどけます')).toBe('荷物《にもつ》を｜届《とど》けます');
+    // 沒有共同的假名結尾：整個詞標讀音
+    expect(fillTarget('⟦かぞく⟧と', '⟦家族⟧')).toBe('｜家族《かぞく》と');
+    expect(parseJa(fillTarget('⟦かよって⟧います', '⟦通って⟧'))).toEqual([{ t: '通', r: 'かよ' }, { t: 'っています' }]);
+  });
+
+  it('模擬考只算第一次作答；課文的練習題重做時改成新的結果', () => {
+    const start = [null, null, null];
+    const first = withResult(start, 1, false, true);
+    expect(first).toEqual([null, false, null]);
+    // 模擬考：看過答案再排一次也不會變成答對（同一個陣列，不必重畫）
+    expect(withResult(first, 1, true, true)).toBe(first);
+    expect(withResult(first, 2, true, true)).toEqual([null, false, true]);
+    // 課文：再排一次排對就算對
+    expect(withResult(first, 1, true)).toEqual([null, true, null]);
   });
 
   it('選擇題的題目句：＿＿ 換成答案', () => {

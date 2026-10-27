@@ -15,7 +15,8 @@ import { daysBetween, formatDateZh, studyDayKey, studyDayStart } from '../lib/da
 import { Icon } from '../components/Icon';
 import { Meter } from '../components/Controls';
 import { Hanamaru } from '../components/Hanamaru';
-import { SCENARIOS, PURPOSE_LABEL } from '../data/scenarios';
+import { PURPOSE_LABEL } from '../data/scenarios';
+import { homeScenarios } from '../lib/tutorPicks';
 import { usePageTitle } from '../lib/title';
 import { useNow } from '../lib/useNow';
 
@@ -104,7 +105,8 @@ export default function Home() {
   const levelDone = levelList.filter((l) => lessons.done[l.id]).length;
   const unitLessons = unit ? COURSE_LESSONS.filter((l) => l.unit === unit.n) : KANA_LESSONS;
 
-  const suggested = SCENARIOS.filter((_, i) => i % 3 === new Date(now).getDate() % 3).slice(0, 3);
+  // AI 家教：先推薦這一課搭配的情境，其餘每天輪流（還在 N5 時不推薦 N4 課程的情境）
+  const suggested = homeScenarios(lessons, now);
   const jlpt = nextJlpt(now);
   const jlptDays = daysBetween(now, jlpt.at);
   const jlptDate = new Date(jlpt.at);

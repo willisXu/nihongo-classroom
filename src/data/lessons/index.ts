@@ -1,4 +1,5 @@
 import type { Lesson } from '../types';
+import { asPreload } from './preload';
 
 /**
  * 課文：每一課一個檔案（lesson1.ts、lesson2.ts…，各自匯出 lesson），打開那一課才下載。
@@ -31,7 +32,7 @@ export function loadLesson(id: number): Promise<Lesson | undefined> {
   return p;
 }
 
-/** 先下載下一課（在課文頁看到一半時呼叫，按「下一課」就不用等） */
+/** 先下載下一課（在課文頁看到一半時呼叫，按「下一課」就不用等）；下載失敗不重新整理正在看的這一課（見 preload.ts） */
 export function preloadLesson(id: number) {
-  void loadLesson(id).catch(() => undefined);
+  void asPreload(loadLesson(id)).catch(() => undefined);
 }

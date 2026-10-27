@@ -27,7 +27,26 @@ export default defineConfig({
     // 輸出成 dist/THIRD-PARTY-LICENSES.md，和 index.html 放在一起發布。
     // 不用預設的 .vite/license.md：GitHub Pages 上傳時會略過以「.」開頭的資料夾。
     license: { fileName: 'THIRD-PARTY-LICENSES.md' },
-    // 第一次建置時裁切字型要幾秒，不要印出「外掛花太久」的英文警告（之後有快取就很快）
-    rolldownOptions: { checks: { bundlerTimings: false } },
+    rolldownOptions: {
+      // 第一次建置時裁切字型要幾秒，不要印出「外掛花太久」的英文警告（之後有快取就很快）
+      checks: { bundlerTimings: false },
+      output: {
+        // 首頁一開始就要的程式，拆成套件（vendor）和共用模組（shared）兩個檔，各頁的程式檔改成 import 它們。
+        // 不拆的話，每一頁的程式檔都 import 主程式（檔名有內容雜湊），而主程式記著所有程式檔的檔名：
+        // 改一課的資料，主程式改名 → 七十幾個 import 它的檔跟著改名，離線版更新要重下載約 1 MB。
+        // 拆開以後，改一課只會換掉 1～3 個檔。
+        codeSplitting: {
+          groups: [
+            { name: 'vendor', test: /node_modules[\\/]/, tags: ['$initial'], priority: 2 },
+            {
+              name: 'shared',
+              priority: 1,
+              tags: ['$initial'],
+              test: (id: string) => /[\\/]src[\\/]/.test(id) && !/[\\/]src[\\/](main\.tsx|App\.tsx|pages[\\/])/.test(id),
+            },
+          ],
+        },
+      },
+    },
   },
 });

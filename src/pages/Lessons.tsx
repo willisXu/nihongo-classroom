@@ -6,17 +6,17 @@ import { useStore } from '../state/store';
 import { kanaLessonsDone, lessonsDone, nextLesson } from '../lib/progress';
 import { Icon } from '../components/Icon';
 import { usePageTitle } from '../lib/title';
+import { jumpToElement } from '../lib/jump';
 
 const hasKana = (t: string) => /[ぁ-ゖァ-ヺ]/u.test(t);
 
-const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-/** 捲到某一組課（五十音、N5、N4），焦點放在那一組的標題（鍵盤和讀屏軟體從那裡接著讀） */
+/**
+ * 跳到某一組課（五十音、N5、N4），焦點放在那一組的標題（鍵盤和讀屏軟體從那裡接著讀）。
+ * 直接跳、不平滑捲動：畫面外的單元還沒排版，平滑捲動會停在錯的地方（見 lib/jump.ts）
+ */
 function jumpTo(id: string) {
   const el = document.getElementById(id);
-  if (!el) return;
-  el.scrollIntoView({ behavior: reduceMotion() ? 'auto' : 'smooth', block: 'start' });
-  el.focus({ preventScroll: true });
+  if (el) jumpToElement(el);
 }
 
 export default function Lessons() {

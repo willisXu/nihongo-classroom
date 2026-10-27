@@ -12,10 +12,13 @@ import { storageHealth } from './state/store';
 import { initSpeech } from './lib/speech';
 import { initPwa } from './lib/pwa';
 import { reloadOnce } from './components/ErrorBoundary';
+import { preloading } from './data/lessons/preload';
 
 // 網站更新後，舊分頁載不到新版的程式檔：自動重新整理一次（30 秒內不重複）。
 // 沒有重新整理時不攔下錯誤，交給頁面的錯誤畫面顯示「重新整理」按鈕。
 window.addEventListener('vite:preloadError', (event) => {
+  // 背景預載下一課失敗：使用者還沒打開那一課，不重新整理正在看的這一課（真的打開時課文頁的錯誤處理會接手）
+  if (preloading()) return;
   if (reloadOnce()) event.preventDefault();
 });
 

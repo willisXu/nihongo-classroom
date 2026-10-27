@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DECKS } from '../src/data/vocab';
+import { DECK_LOADERS, loadDeck } from '../src/data/vocab/load';
+import { DECK_META } from '../src/data/vocab/meta';
 import type { Pos } from '../src/data/types';
 
 const POS: Pos[] = ['noun', 'verb', 'i-adj', 'na-adj', 'adverb', 'expression', 'number', 'pronoun', 'counter', 'particle', 'conjunction', 'interjection', 'prefix', 'suffix'];
@@ -59,4 +61,16 @@ describe('vocab decks', () => {
       });
     });
   }
+});
+
+describe('只載入一副牌組（牌組頁）', () => {
+  it('每一副牌組都有載入的方法，載到的和全部載入時的一樣', async () => {
+    expect(Object.keys(DECK_LOADERS).sort()).toEqual(DECK_META.map((m) => m.id).sort());
+    for (const d of DECKS) expect(await loadDeck(d.id), d.id).toBe(d);
+  });
+
+  it('沒有這副牌組時是 undefined', async () => {
+    expect(await loadDeck('nope')).toBeUndefined();
+    expect(await loadDeck('toString')).toBeUndefined();
+  });
 });

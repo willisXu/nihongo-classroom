@@ -174,6 +174,31 @@ describe('線上語音念不出來', () => {
     expect(ends).toEqual(['いち', 'よん']);
   });
 
+  it('還沒念完就被別的 speak、stopSpeaking 取代時呼叫 onStop；念完的、整段一句接一句的不呼叫', async () => {
+    const { spoken } = setup([HARUKA]);
+    const sp = await import('../src/lib/speech');
+    sp.initSpeech();
+    const log: string[] = [];
+    const playFrom = (i: number): boolean => sp.speak(['いち', 'に'][i], { onEnd: () => i < 1 && playFrom(i + 1), onStop: () => log.push(`stop ${i}`) });
+    playFrom(0);
+    spoken[0].onend?.();
+    expect(spoken.map((u) => u.text)).toEqual(['いち', 'に']);
+    expect(log).toEqual([]);
+    // 第 2 句念到一半，按了別的發音鍵：通知整段播放停了；被取消的那句之後的 error 不再通知
+    sp.speak('ねこ');
+    expect(log).toEqual(['stop 1']);
+    spoken[1].onerror?.({ error: 'interrupted' });
+    expect(log).toEqual(['stop 1']);
+    sp.speak('いぬ', { onStop: () => log.push('stop いぬ') });
+    sp.stopSpeaking();
+    expect(log).toEqual(['stop 1', 'stop いぬ']);
+    sp.speak('とり', { onStop: () => log.push('stop とり') });
+    spoken[spoken.length - 1].onend?.();
+    sp.speak('さかな');
+    sp.stopSpeaking();
+    expect(log).toEqual(['stop 1', 'stop いぬ']);
+  });
+
   it('線上語音念不出來改用內建語音時，onEnd 等內建語音念完才呼叫一次', async () => {
     const { spoken } = setup([GOOGLE, HARUKA]);
     const sp = await import('../src/lib/speech');

@@ -207,10 +207,6 @@ export function rowById(id: string): KanaRow | undefined {
 /** 46 個清音格子（依五十音順序） */
 export const SEION_CELLS: KanaCell[] = SEION_ROWS.flatMap((r) => r.cells.filter((c): c is KanaCell => !!c));
 
-export function charOf(cell: KanaCell, script: Script): string {
-  return script === 'h' ? cell.h : cell.k;
-}
-
 /** 字源說明，例如「安」的草書 */
 export function originText(cell: KanaCell, script: Script): string {
   if (script === 'h') {
