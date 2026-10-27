@@ -4,7 +4,7 @@ import { NEW_PER_DAY_OPTIONS, lessonStore, settingsStore, srsStore, updateSettin
 import { useStore } from '../state/store';
 import { deckStats } from '../lib/srs';
 import { studyDayKey } from '../lib/date';
-import { courseLessonsDone, courseWords, kanaCourseDone, kanaLessonsDone, nextCourseLesson } from '../lib/progress';
+import { courseWords, kanaCourseDone, kanaLessonsDone, nextCourseLesson } from '../lib/progress';
 import { Meter } from '../components/Controls';
 import { Icon } from '../components/Icon';
 import { usePageTitle } from '../lib/title';
@@ -47,7 +47,7 @@ export default function Vocab() {
         </p>
       </header>
 
-      {kanaLessonsDone(lessons) < 6 && !courseLessonsDone(lessons) ? (
+      {kanaLessonsDone(lessons) < 6 && !kanaCourseDone(lessons) ? (
         <p className="callout callout-soft">
           還沒學完平假名也可以先看看，不過建議完成第 1–6 課再開始背，看得懂假名會輕鬆很多。
         </p>

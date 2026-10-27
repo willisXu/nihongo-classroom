@@ -2,12 +2,15 @@ import { Link } from 'react-router-dom';
 import { useMemo } from 'react';
 import { COURSE_LESSONS, COURSE_LEVELS, KANA_LESSONS, levelLessons, unitOf } from '../data/lessons/meta';
 import type { CourseLevel } from '../data/types';
-import { DECK_META, metaItemIds, unseenWords } from '../data/vocab/meta';
+import { DECK_META, metaItemIds, unseenWords, wordLearned } from '../data/vocab/meta';
 import {
   activityStore, apiKeyStore, kanaLevel, kanaStore, lastExportStore, lessonStore, missStore, settingsStore, srsStore, writingStore,
 } from '../state';
 import { useStore } from '../state/store';
-import { countMastered, courseLessonsDone, HIRA_KEYS, kanaLessonsDone, KATA_KEYS, lessonsDone, nextKanaLesson, nextLesson, streak } from '../lib/progress';
+import {
+  countMastered, HIRA_KEYS, kanaCourseDone, kanaLessonsDone, KATA_KEYS, learnedKanji as learnedKanjiOf, lessonsDone, nextCourseLesson, nextKanaLesson,
+  nextLesson, streak,
+} from '../lib/progress';
 import { todayTasks } from '../lib/today';
 import { mistakeCount, weakKanaKeys } from '../lib/mistakes';
 import { deckStats } from '../lib/srs';
@@ -59,11 +62,11 @@ export default function Home() {
   const next = nextLesson(lessons);
   const done = lessonsDone(lessons);
   const kanaDone = kanaLessonsDone(lessons);
-  const courseDone = courseLessonsDone(lessons);
+  const pastKana = kanaCourseDone(lessons);
   const hira = countMastered(kana, HIRA_KEYS);
   const kata = countMastered(kana, KATA_KEYS);
   const days = streak(activity, now);
-  const tasks = todayTasks({ activity, kana, lessons, srs, newPerDay: settings.newPerDay, now });
+  const tasks = todayTasks({ activity, kana, lessons, srs, writing, newPerDay: settings.newPerDay, now });
   const tasksDone = tasks.filter((t) => t.done).length;
   const allDone = tasks.length > 0 && tasksDone === tasks.length;
   const mistakes = mistakeCount(kana, misses, srs.cards, writing);
@@ -72,10 +75,13 @@ export default function Home() {
     let due = 0;
     let seen = 0;
     const perDeck = DECK_META.map((d) => {
-      const s = deckStats(srs.cards, metaItemIds(d), now);
+      const ids = metaItemIds(d);
+      const s = deckStats(srs.cards, ids, now);
       due += s.due;
       seen += s.seen;
-      return { deck: d, ...s };
+      // 在別的牌組學過的同一個字，這個牌組不會再當新卡出現：「未學」不算它（和單字牌組頁一樣）
+      const fresh = ids.filter((id) => !wordLearned(srs.cards, id)).length;
+      return { deck: d, ...s, fresh };
     });
     const freshToday = srs.days[studyDayKey(now)]?.fresh ?? 0;
     const newLeft = Math.min(unseenWords(srs.cards), Math.max(0, settings.newPerDay - freshToday));
@@ -85,11 +91,12 @@ export default function Home() {
   const weak = useMemo(() => weakKanaKeys(kana).slice(0, 8).map((k) => k.slice(2)), [kana]);
 
   // 手寫建議：目前這一課新教、還沒寫過的字（第 6 課是 ゃ ゅ ょ っ，不是測驗複習的全部平假名）。
-  // 五十音學完之後：N5 這一課的漢字（都有筆順資料，測試會檢查；首頁不載入筆順資料）；
-  // 這一課沒有新漢字（第 30 課起）或全部學完時，複習學過的漢字
+  // 五十音課程學完之後（見 progress.ts 的 kanaCourseDone）：初級課程這一課的漢字（都有筆順資料，測試會檢查；首頁不載入筆順資料）；
+  // 這一課沒有新漢字（第 30–32、55 課）或全部學完時，複習學過的漢字（和今天的任務一樣，見 lib/today.ts）
   const kanaWrite = nextKanaLesson(lessons);
-  const learnedKanji = COURSE_LESSONS.filter((l) => lessons.done[l.id]).map((l) => l.kanji).join('');
-  const courseWrite = next?.kind === 'course' && next.kanji ? next : undefined;
+  const learnedKanji = learnedKanjiOf(lessons);
+  const courseNow = kanaWrite ? undefined : nextCourseLesson(lessons);
+  const courseWrite = courseNow?.kanji ? courseNow : undefined;
   const kanaShown = kanaWrite ?? (courseWrite || learnedKanji ? undefined : KANA_LESSONS[KANA_LESSONS.length - 1]);
   const toWrite = kanaShown ? kanaShown.newKana : [...(courseWrite?.kanji ?? learnedKanji)];
   const writeWhat = kanaShown ? `第 ${kanaShown.id} 課的字` : courseWrite ? `第 ${courseWrite.id} 課的漢字` : '學過的漢字';
@@ -263,12 +270,12 @@ export default function Home() {
                 <li key={d.deck.id}>
                   <Link to={`/review/${d.deck.id}`}>
                     <span>{d.deck.title}</span>
-                    <span className={`pill ${d.due ? 'pill-accent' : ''}`}>{d.due ? `${d.due} 到期` : `${d.unseen} 張未學`}</span>
+                    <span className={`pill ${d.due ? 'pill-accent' : ''}`}>{d.due ? `${d.due} 到期` : `${d.fresh} 張未學`}</span>
                   </Link>
                 </li>
               ))}
             </ul>
-            {kanaDone < 6 && !courseDone ? <p className="small">建議先學完平假名（第 1–6 課）再開始背單字，看得懂假名會輕鬆很多。</p> : null}
+            {kanaDone < 6 && !pastKana ? <p className="small">建議先學完平假名（第 1–6 課）再開始背單字，看得懂假名會輕鬆很多。</p> : null}
           </section>
         </div>
 
