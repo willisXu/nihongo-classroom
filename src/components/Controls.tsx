@@ -8,7 +8,8 @@ export function Segmented<T extends string>({
   label,
   size = 'md',
 }: {
-  value: T;
+  /** null：沒有選任何一個（例如手寫頁在練漢字時，「平假名／片假名」都不算選了）；按任何一個都會換過去 */
+  value: T | null;
   options: { value: T; label: ReactNode }[];
   onChange: (v: T) => void;
   label: string;
