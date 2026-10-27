@@ -163,6 +163,12 @@ export default function Mock() {
         ) : (
           <p className="small">每一題答完就會算進來；每一科正確率 {TARGET * 100}% 以上，代表這一科準備得不錯。</p>
         )}
+        {finished && summary.rows.some((r) => r.id === 'vocab' && r.right / r.count < TARGET) ? (
+          <p>
+            文字・語彙不到 {TARGET * 100}%：考試範圍裡課程沒有教到的詞整理在
+            <Link to="/vocab/n4plus">JLPT N4 補充單字</Link>，背完再做一次。
+          </p>
+        ) : null}
         {summary.review.length ? (
           <p>
             答錯的題目出自：

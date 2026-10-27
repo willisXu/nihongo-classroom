@@ -27,8 +27,8 @@ describe('單字發音', () => {
 
   it('例句指定的念法（say）只把容易念錯的漢字換成假名，其他照原句', () => {
     const withSay = ALL.filter((it) => it.ex?.say);
-    // N4 課程單字的例句是從課文拿的，念法和課文一樣（何→なに、今→いま…，見 lib/ja.ts 的 jaSpeech）；其他牌組只有少數幾句
-    expect(withSay.filter((it) => !it.id.startsWith('n4-')).length).toBe(7);
+    // N4 課程單字、N4 補充單字的例句是用課文的標記寫的，念法和課文一樣（何→なに、今→いま…，見 lib/ja.ts 的 jaSpeech）；其他牌組只有少數幾句
+    expect(withSay.filter((it) => !/^n4(plus)?-/.test(it.id)).length).toBe(7);
     for (const it of withSay) {
       const ex = it.ex!;
       expect(exampleSpeech(ex), it.id).toBe(ex.say);

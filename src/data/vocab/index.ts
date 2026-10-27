@@ -1,12 +1,13 @@
 import type { Deck, DeckId, VocabItem } from '../types';
 import { n5 } from './n5';
 import { n4 } from './n4';
+import { n4plus } from './n4plus';
 import { travel } from './travel';
 import { business } from './business';
 import { anime } from './anime';
 import { course } from './course';
 
-export const DECKS: Deck[] = [n5, n4, travel, business, anime, course];
+export const DECKS: Deck[] = [n5, n4, n4plus, travel, business, anime, course];
 
 export function deckById(id: string): Deck | undefined {
   return DECKS.find((d) => d.id === id);

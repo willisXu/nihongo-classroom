@@ -356,7 +356,7 @@ export interface VocabItem {
   topic?: string;
 }
 
-export type DeckId = 'n5' | 'n4' | 'travel' | 'business' | 'anime' | 'course';
+export type DeckId = 'n5' | 'n4' | 'n4plus' | 'travel' | 'business' | 'anime' | 'course';
 
 export interface Deck {
   id: DeckId;

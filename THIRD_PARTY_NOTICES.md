@@ -8,7 +8,7 @@
 
 | 檔案 | 內容 |
 | --- | --- |
-| `src/data/strokes.json` | 假名和 N5 課程 103 個漢字的筆順資料，由 `scripts/fetch-kanjivg.mjs` 從 KanjiVG 下載後擷取而成 |
+| `src/data/strokes.json` | 假名和初級課程 284 個漢字（N5 103 個、N4 181 個）的筆順資料，由 `scripts/fetch-kanjivg.mjs` 從 KanjiVG 下載後擷取而成 |
 | `public/favicon.svg` | 網站圖示，裡面的三個筆畫是 KanjiVG「あ」（`03042.svg`）的筆畫路徑 |
 | `public/icons/*.png` | 加到主畫面、安裝成 App 用的圖示，由 `public/favicon.svg` 的「あ」筆畫繪製而成 |
 
@@ -16,6 +16,15 @@
 - 著作權：© Ulrich Apel
 - 授權：Creative Commons Attribution-Share Alike 3.0（CC BY-SA 3.0）https://creativecommons.org/licenses/by-sa/3.0/
 - 這些衍生檔案沿用 CC BY-SA 3.0 授權。
+
+## JLPT 單字表（挑詞參考）
+
+「JLPT N4 補充單字」牌組（`src/data/vocab/n4plus.ts`）決定要收哪些詞時，參考了 Jonathan Waller 整理的 JLPT N4 單字表：
+
+- 來源：http://www.tanos.co.uk/jlpt/ （這個專案用的是收錄這份分級的 Open JLPT 資料集：https://pypi.org/project/openjlpt/ ）
+- 著作權：Jonathan Waller
+- 授權：Creative Commons Attribution（CC BY）
+- JLPT 官方沒有公布單字表。牌組只用這份表決定收哪些詞；卡片的讀音、中文意思、例句和說明都是這個課程自己寫的，沒有收錄資料集裡的英文解釋或例句。
 
 ## 字型
 
