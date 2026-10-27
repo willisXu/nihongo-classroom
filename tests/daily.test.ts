@@ -4,7 +4,8 @@ import { todayTasks, KANA_GOAL, WRITING_GOAL, type TodayInput } from '../src/lib
 import { vocabMistakes, weakKanaKeys, writingMistakes } from '../src/lib/mistakes';
 import { foldLine, googleCalendarUrl, reminderIcs } from '../src/lib/reminder';
 import { studyDayKey, DAY_MS } from '../src/lib/date';
-import { HIRA_KEYS, KATA_KEYS } from '../src/lib/progress';
+import { HIRA_KEYS, KATA_KEYS, learnedKanji } from '../src/lib/progress';
+import { LESSON_META } from '../src/data/lessons/meta';
 import type { CardState } from '../src/lib/srs';
 import type { KanaStats } from '../src/state';
 
@@ -17,6 +18,7 @@ function input(patch: Partial<TodayInput> = {}): TodayInput {
     kana: {},
     lessons: { done: {}, hw: {} },
     srs: { cards: {}, days: {} },
+    writing: {},
     newPerDay: 10,
     now: NOW,
     ...patch,
@@ -78,13 +80,63 @@ describe('今天的任務', () => {
     expect(tasks.find((t) => t.id === 'writing')?.to).toBe(`/writing?chars=${encodeURIComponent('日本人名会社')}`);
   });
 
-  it('上到沒有新漢字的課（或全部學完）：只剩單字卡', async () => {
-    const { LESSON_META } = await import('../src/data/lessons/meta');
+  it('上到沒有新漢字的課（或全部學完）：手寫學過、還沒寫過的漢字；都寫過了才不列', () => {
     const upTo = (LESSON_META.find((l) => l.kind === 'course' && !l.kanji)?.id ?? LESSON_META.length + 1) - 1;
     for (const n of [upTo, LESSON_META.length]) {
-      const tasks = todayTasks(input({ lessons: lessonsDone(n), kana: allMastered() }));
-      expect(tasks.map((t) => t.id)).toEqual(['vocab']);
+      const lessons = lessonsDone(n);
+      const learned = [...learnedKanji(lessons)];
+      expect(learned.length).toBeGreaterThan(100);
+      // 寫過第一個字：連結只帶還沒寫過的字
+      const writing = { [learned[0]]: { n: 1, recall: 0, lastMistakes: 0, t: NOW } };
+      const tasks = todayTasks(input({ lessons, kana: allMastered(), writing }));
+      expect(tasks.map((t) => t.id)).toEqual(['vocab', 'writing']);
+      expect(tasks.find((t) => t.id === 'writing')?.to).toBe(`/writing?chars=${encodeURIComponent(learned.slice(1).join(''))}`);
+      // 學過的漢字都寫過了：只剩單字卡
+      const all = Object.fromEntries(learned.map((ch) => [ch, { n: 1, recall: 0, lastMistakes: 0, t: NOW }]));
+      expect(todayTasks(input({ lessons, kana: allMastered(), writing: all })).map((t) => t.id)).toEqual(['vocab']);
     }
+  });
+
+  it('上初級課程以後不再每天假名測驗：只有答錯、還沒練熟的假名時，練那幾個字', () => {
+    const lessons = lessonsDone(LESSON_META.length);
+    // 沒做過假名測驗（會假名、直接上初級課程）：不列
+    expect(todayTasks(input({ lessons })).map((t) => t.id)).not.toContain('kana');
+    // 都熟悉之後答錯一個：練那一個字，連對 3 次的份量
+    const kana = { ...allMastered(), 'k:ヌ': { c: 9, w: 1, s: 0, t: NOW } };
+    const one = todayTasks(input({ lessons, kana })).find((t) => t.id === 'kana')!;
+    expect(one).toMatchObject({ title: '複習答錯的假名', to: '/practice?focus=weak', goal: 3, done: false });
+    expect(one.detail).toBe('還有 1 個字沒練熟，今天答了 0 題');
+    // 答錯很多個：最多每天 20 題
+    const many = { ...kana, 'h:ぬ': { c: 0, w: 2, s: 0, t: NOW }, 'h:め': { c: 0, w: 1, s: 1, t: NOW }, 'h:ね': { c: 1, w: 1, s: 0, t: NOW }, 'h:わ': { c: 0, w: 3, s: 0, t: NOW }, 'k:シ': { c: 0, w: 1, s: 0, t: NOW }, 'k:ツ': { c: 0, w: 1, s: 0, t: NOW }, 'k:ソ': { c: 0, w: 1, s: 0, t: NOW } };
+    expect(todayTasks(input({ lessons, kana: many })).find((t) => t.id === 'kana')?.goal).toBe(KANA_GOAL);
+    // 今天答滿就打勾（還沒練熟也一樣）
+    const done = todayTasks(input({ lessons, kana, activity: { [TODAY]: { kana: 3 } } })).find((t) => t.id === 'kana')!;
+    expect(done.done).toBe(true);
+    // 照錯題練習的方式練熟了（連對 3 次，不再是答錯的字）：任務不消失，留到今天結束打勾
+    const fixed = { ...kana, 'k:ヌ': { c: 12, w: 1, s: 3, t: NOW } };
+    const kept = todayTasks(input({ lessons, kana: fixed, activity: { [TODAY]: { kana: 3 } } })).find((t) => t.id === 'kana');
+    expect(kept).toMatchObject({ done: true, detail: '答錯的假名都練熟了，今天答了 3 題' });
+    // 今天沒練、也沒有答錯的字：不列
+    expect(todayTasks(input({ lessons, kana: fixed })).map((t) => t.id)).not.toContain('kana');
+    // 還在上五十音課程時照舊每天 20 題
+    expect(todayTasks(input({ lessons: lessonsDone(7) })).find((t) => t.id === 'kana')).toMatchObject({ title: `假名測驗 ${KANA_GOAL} 題`, to: '/practice', goal: KANA_GOAL });
+    // 學完第 8 課、還沒上第 9 課：片假名多半還不熟，照舊每天 20 題
+    expect(todayTasks(input({ lessons: lessonsDone(8) })).find((t) => t.id === 'kana')).toMatchObject({ title: `假名測驗 ${KANA_GOAL} 題`, goal: KANA_GOAL });
+  });
+
+  it('沒有按完五十音的 8 課也照初級課程的進度：手寫這一課的漢字，不寫假名', () => {
+    const at = (ids: number[]) => ({ done: Object.fromEntries(ids.map((i) => [i, NOW])), hw: {} });
+    const range = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
+    // 漏按第 7 課、上到第 40 課
+    const gap = todayTasks(input({ lessons: at([1, 2, 3, 4, 5, 6, 8, ...range(9, 40)]) }));
+    const lesson41 = LESSON_META.find((l) => l.id === 41)!;
+    expect(lesson41.kind === 'course' && lesson41.kanji).toBeTruthy();
+    expect(gap.map((t) => t.id)).toEqual(['vocab', 'writing']);
+    expect(gap.find((t) => t.id === 'writing')?.to).toBe(`/writing?chars=${encodeURIComponent(lesson41.kind === 'course' ? lesson41.kanji : '')}`);
+    // 會假名、直接從第 9 課開始
+    const skip = todayTasks(input({ lessons: at([9]) }));
+    expect(skip.map((t) => t.id)).toEqual(['vocab', 'writing']);
+    expect(skip.find((t) => t.id === 'writing')?.to).toBe(`/writing?chars=${encodeURIComponent('何先生')}`);
   });
 });
 

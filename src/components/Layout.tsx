@@ -4,9 +4,10 @@ import { Icon, type IconName } from './Icon';
 import { Meter } from './Controls';
 import { ErrorBoundary } from './ErrorBoundary';
 import { isRemoteVoice, useSpeech } from '../lib/speech';
-import { activityStore, kanaStore, settingsStore, updateSettings } from '../state';
+import { activityStore, kanaStore, lessonStore, settingsStore, updateSettings } from '../state';
 import { readJSON, storageHealth, useStore, writeJSON } from '../state/store';
-import { countMastered, HIRA_KEYS } from '../lib/progress';
+import { countMastered, courseLessonsDone, HIRA_KEYS, kanaCourseDone } from '../lib/progress';
+import { COURSE_LESSONS } from '../data/lessons/meta';
 
 const PRIMARY: { to: string; label: string; icon: IconName; end?: boolean }[] = [
   { to: '/', label: '今日', icon: 'home', end: true },
@@ -130,7 +131,11 @@ export function Layout() {
   const stats = useStore(kanaStore);
   const settings = useStore(settingsStore);
   const activity = useStore(activityStore);
+  const lessons = useStore(lessonStore);
   const mastered = countMastered(stats, HIRA_KEYS);
+  // 頁首的進度：還在學五十音時看平假名熟悉度；上初級課程以後看課程進度（不一定做過假名測驗，平假名會一直是 0）
+  const inCourse = kanaCourseDone(lessons);
+  const courseDone = courseLessonsDone(lessons);
   const prevPath = useRef(loc.pathname);
 
   // 換頁時回到頂端，並把焦點移到主要內容，讀屏軟體才知道換頁了（剛打開網站時不動）
@@ -179,11 +184,21 @@ export function Layout() {
             </span>
           </NavLink>
           <div className="tools">
-            <span className="meter" title="平假名熟悉度">
-              <span className="meter-label">平假名</span>
-              <Meter value={mastered} max={46} label="平假名熟悉" />
-              <span className="meter-num">{mastered}/46</span>
-            </span>
+            {inCourse ? (
+              <span className="meter" title="初級課程完成幾課">
+                <span className="meter-label">課程</span>
+                <Meter value={courseDone} max={COURSE_LESSONS.length} label="初級課程完成" />
+                <span className="meter-num">
+                  {courseDone}/{COURSE_LESSONS.length}
+                </span>
+              </span>
+            ) : (
+              <span className="meter" title="平假名熟悉度">
+                <span className="meter-label">平假名</span>
+                <Meter value={mastered} max={46} label="平假名熟悉" />
+                <span className="meter-num">{mastered}/46</span>
+              </span>
+            )}
             <button
               type="button"
               className="chip-btn"

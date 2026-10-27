@@ -2,14 +2,35 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   activityStore, exportBackup, importBackup, kanaDaysStore, kanaStore, lastExportStore, lessonStore, missStore, peekBackup, preImportStore,
-  resetAllProgress, settingsStore, srsStore, undoImport, updateSettings,
+  MOCK_KEY, resetAllProgress, settingsStore, srsStore, undoImport, updateSettings,
 } from '../src/state';
+import { dayActivity } from '../src/lib/stats';
 
 const card = { due: 1_800_000_000_000, ivl: 3, ease: 2.5, reps: 2, lapses: 0, step: -1, last: 1_790_000_000_000 };
 
 afterEach(() => resetAllProgress());
 
 describe('備份', () => {
+  it('課文練習題的學習紀錄（drill）跟著備份，也算進每天的練習次數', () => {
+    activityStore.set({ '2026-10-28': { drill: 5, kana: 2 } });
+    const text = exportBackup();
+    resetAllProgress();
+    importBackup(text);
+    expect(activityStore.get()['2026-10-28']).toEqual({ drill: 5, kana: 2 });
+    expect(dayActivity(activityStore.get(), '2026-10-28')).toMatchObject({ drill: 5, total: 7 });
+  });
+
+  it('全部清除也清掉模擬考做到一半的作答', () => {
+    const removed: string[] = [];
+    vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: (k: string) => void removed.push(k) });
+    try {
+      resetAllProgress();
+      expect(removed).toContain(MOCK_KEY);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('匯出再匯入，紀錄完全一樣', () => {
     kanaStore.set({ 'h:あ': { c: 3, w: 1, s: 2, t: 5 } });
     srsStore.set({ cards: { 'n5-0001': card }, days: { '2026-10-13': { reviews: 2, fresh: 1, rev: 1, forgot: 0 } } });
@@ -98,6 +119,34 @@ describe('備份', () => {
     importBackup(newer);
     expect(Object.keys(srsStore.get().cards).sort()).toEqual(['n4plus-0001', 'n6-0001', 'n6-0002']);
     expect(peekBackup(exportBackup()).current.words).toBe(1);
+  });
+
+  it('第 9–56 課的完成紀錄（含第一次完成的日期、作業）匯出再匯入都在', () => {
+    lessonStore.set({ done: { 1: 1, 9: 9, 33: 33, 56: 56 }, hw: { '33:0': true, '56:4': true }, first: { 20: 20 } });
+    const before = lessonStore.get();
+    const text = exportBackup();
+    resetAllProgress();
+    importBackup(text);
+    expect(lessonStore.get()).toEqual(before);
+    expect(peekBackup(text).backup.lessons).toBe(4);
+  });
+
+  it('壞掉或手改過的備份：課次不是正整數的不收；比較的數字只算課程裡有的課、認得的單字卡', () => {
+    const junk = JSON.stringify({
+      app: 'nihongo-classroom',
+      version: 1,
+      data: {
+        'nk.lessons': { done: { abc: 1, 0: 2, '-3': 3, 1.5: 4, 57: 5, 1: 6 }, hw: {}, first: { abc: 1, 2: 2 } },
+        'nk.srs': { cards: { 'zzz-0001': card, 'n5-9999': card, 'n4-0001': card }, days: {} },
+      },
+    });
+    const p = peekBackup(junk);
+    expect(p.backup.lessons).toBe(1);
+    expect(p.backup.words).toBe(1);
+    importBackup(junk);
+    // 比現在的課多的課次留著（之後的版本用得到），亂寫的課次不收
+    expect(Object.keys(lessonStore.get().done).sort()).toEqual(['1', '57']);
+    expect(lessonStore.get().first).toEqual({ 2: 2 });
   });
 
   it('匯入錯了可以復原；匯入後從現在起算多久沒備份', () => {

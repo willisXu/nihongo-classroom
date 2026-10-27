@@ -9,7 +9,7 @@ import {
 } from '../lib/srs';
 import { studyDayKey, studyDayStart, addDays } from '../lib/date';
 import { speak } from '../lib/speech';
-import { deckAllLearned, deckItemIds, deckTitle, romajiOf, speechText } from '../lib/vocab';
+import { deckAllLearned, deckExists, deckItemIds, deckTitle, lessonDeckId, missingDeckNote, newCardLimit, romajiOf, speechText } from '../lib/vocab';
 import { SpeakIcon } from '../components/Speak';
 import { CardBack } from '../components/CardBack';
 import { Switch } from '../components/Controls';
@@ -19,18 +19,41 @@ import { focusLost, revealAnswer } from '../lib/flashcard';
 
 const GRADE_LABEL: Record<Grade, string> = { again: '忘記了', hard: '有點難', good: '記得', easy: '很簡單' };
 
-/** 今天還能學幾張新卡 */
-function newLimitNow(now: number): number {
+/** 這一輪還能學幾張新卡（課程某一課的單字不受每天上限限制，見 lib/vocab.ts 的 newCardLimit） */
+function newLimitNow(deck: string, now: number): number {
   const freshToday = srsStore.get().days[studyDayKey(now)]?.fresh ?? 0;
-  return Math.max(0, settingsStore.get().newPerDay - freshToday);
+  return newCardLimit(deck, settingsStore.get().newPerDay, freshToday);
 }
 
 /** 牌組改變或按「繼續複習」時整個重新開始一輪 */
 export default function ReviewRoute() {
   const { deck = 'all' } = useParams();
   const [round, setRound] = useState(0);
-  usePageTitle(`單字複習：${deckTitle(deck)}`);
+  const exists = deckExists(deck);
+  usePageTitle(exists ? `單字複習：${deckTitle(deck)}` : '找不到這個牌組');
+  if (!exists) return <MissingDeck deck={deck} />;
   return <Review key={`${deck}:${round}`} deck={deck} restarted={round > 0} onRestart={() => setRound((r) => r + 1)} />;
+}
+
+/** 網址的牌組不存在（打錯、五十音的課沒有單字卡）：不要顯示成「今天的新卡已經學完」 */
+function MissingDeck({ deck }: { deck: string }) {
+  const note = missingDeckNote(deck);
+  return (
+    <div className="wrap">
+      <header className="ph">
+        <h1>找不到這個牌組</h1>
+        <p className="lede">
+          {note.text}
+          {note.practice ? (
+            <>
+              可以到<Link to={`/practice?lesson=${note.practice}`}>假名測驗</Link>練這一課的假名。
+            </>
+          ) : null}
+          <Link to="/vocab">回單字牌組</Link>
+        </p>
+      </header>
+    </div>
+  );
 }
 
 /**
@@ -67,7 +90,7 @@ function Review({ deck, restarted, onRestart }: { deck: string; restarted: boole
   const [session] = useState(() => {
     const now = Date.now();
     const cards = srsStore.get().cards;
-    const s = buildSession(cards, ids, now, newLimitNow(now));
+    const s = buildSession(cards, ids, now, newLimitNow(deck, now));
     // 每張主要的卡在這一輪開始時的最後複習時間
     return { ...s, base: new Map(s.main.map((id) => [id, cards[id]?.last ?? 0])) };
   });
@@ -124,7 +147,7 @@ function Review({ deck, restarted, onRestart }: { deck: string; restarted: boole
     const m = limitFresh(
       main.filter((id) => !mainTaken(id, session.base, srs.cards)),
       srs.cards,
-      newLimitNow(Date.now()),
+      newLimitNow(deck, Date.now()),
       currentId,
     );
     const l = learning.filter((p) => !learningTaken(p, srs.cards));
@@ -136,7 +159,7 @@ function Review({ deck, restarted, onRestart }: { deck: string; restarted: boole
       setCurrentId(pickNext(m, l, Date.now()));
       setTurn((n) => n + 1);
     }
-  }, [srs, main, learning, currentId, session.base]);
+  }, [srs, main, learning, currentId, session.base, deck]);
 
   const grade = useCallback(
     (g: Grade) => {
@@ -146,7 +169,7 @@ function Review({ deck, restarted, onRestart }: { deck: string; restarted: boole
       const pending = learning.find((p) => p.id === currentId);
       // 剛好在另一個分頁評過分（上面的整理還沒輪到）：這次不算，換下一張
       if (pending ? learningTaken(pending, cardsNow) : mainTaken(currentId, session.base, cardsNow)) {
-        const m = limitFresh(main.filter((x) => x !== currentId), cardsNow, newLimitNow(t));
+        const m = limitFresh(main.filter((x) => x !== currentId), cardsNow, newLimitNow(deck, t));
         const l = learning.filter((p) => p.id !== currentId);
         setMain(m);
         setLearning(l);
@@ -162,7 +185,7 @@ function Review({ deck, restarted, onRestart }: { deck: string; restarted: boole
       // 按「忘記了」的卡片收進錯題本
       if (g === 'again') recordVocabMiss(currentId);
       // 換下一張前再看一次今天的新卡額度（另一個分頁可能也學了新卡）
-      const m = limitFresh(main.filter((x) => x !== currentId), srsStore.get().cards, newLimitNow(t));
+      const m = limitFresh(main.filter((x) => x !== currentId), srsStore.get().cards, newLimitNow(deck, t));
       let l = learning.filter((p) => p.id !== currentId);
       if (after.step >= 0 && after.due <= t + LEARN_AHEAD_MS) l = [...l, { id: currentId, due: after.due }];
       setMain(m);
@@ -173,7 +196,7 @@ function Review({ deck, restarted, onRestart }: { deck: string; restarted: boole
       setCurrentId(pickNext(m, l, t));
       setTurn((n) => n + 1);
     },
-    [currentId, flipped, main, learning, session.base],
+    [currentId, flipped, main, learning, session.base, deck],
   );
 
   useEffect(() => {
@@ -221,9 +244,9 @@ function Review({ deck, restarted, onRestart }: { deck: string; restarted: boole
   const readyNow = useMemo(() => {
     if (item) return 0;
     const t = Date.now();
-    const s = buildSession(srsStore.get().cards, ids, t, newLimitNow(t));
+    const s = buildSession(srsStore.get().cards, ids, t, newLimitNow(deck, t));
     return s.main.length + s.learning.length;
-  }, [item, ids, cards, tick]); // tick：定時重新計算
+  }, [item, ids, cards, tick, deck]); // tick：定時重新計算
 
   // 今天稍晚才會到期的學習中卡片
   const laterToday = useMemo(() => {
@@ -240,6 +263,8 @@ function Review({ deck, restarted, onRestart }: { deck: string; restarted: boole
 
   // 這組的字都學過了（沒有新卡了）：結束畫面不說「今天的新卡學完了、明天再來」
   const allLearned = useMemo(() => !item && deckAllLearned(deck, cards), [item, deck, cards]);
+  // 課程某一課的單字說「這一課」，牌組說「這組」
+  const whose = lessonDeckId(deck) !== null ? '這一課' : '這組';
 
   return (
     <div className="wrap review-wrap">
@@ -280,11 +305,11 @@ function Review({ deck, restarted, onRestart }: { deck: string; restarted: boole
                 複習了 {done.cards.size} 張卡片、作答 {done.total} 次，其中 {done.total - done.again} 次記得（
                 {Math.round(((done.total - done.again) / done.total) * 100)}%）。
               </p>
-              {allLearned && !laterToday && !readyNow ? <p>這組的字都學過了，卡片到期時會再出現在這裡。</p> : null}
+              {allLearned && !laterToday && !readyNow ? <p>{whose}的字都學過了，卡片到期時會再出現在這裡。</p> : null}
             </>
           ) : (
             <>
-              <h2>{readyNow ? '又有卡片可以複習了' : allLearned ? '這組的字都學過了' : '現在沒有要複習的卡片'}</h2>
+              <h2>{readyNow ? '又有卡片可以複習了' : allLearned ? `${whose}的字都學過了` : '現在沒有要複習的卡片'}</h2>
               {!laterToday && !readyNow ? (
                 <p>
                   {allLearned

@@ -41,7 +41,7 @@ describe('安裝成 App', () => {
 /* ---------------- 預先下載清單 ---------------- */
 
 describe('離線快取：要預先下載哪些檔', () => {
-  it('收主程式、樣式、裁切字型、圖示；不收完整字型和授權全文', () => {
+  it('收主程式、樣式、裁切字型、圖示；不收完整字型、裁切字型的「其餘」組和授權全文', () => {
     const list = precacheList([
       'index.html',
       'sw.js',
@@ -54,6 +54,8 @@ describe('離線快取：要預先下載哪些檔', () => {
       'assets/display-0-Xy.woff2',
       'assets/kana-12-Zz.woff2',
       'assets/meaning-3-Qq.woff2',
+      'assets/display-rest-93-Rr.woff2',
+      'assets/kana-rest-88-S-.woff2',
       'assets/klee-one-19-600-normal-MM.woff2',
       'FONT-LICENSES.txt',
       'THIRD-PARTY-LICENSES.md',

@@ -399,6 +399,8 @@ table.jlpt { min-width: 560px; }
 }
 .dlg-who rt { font-size: 0.66em; }
 .furi-off rt { visibility: hidden; }
+/* 答完題的說明、對話聽力的全文：已經作答了，讀音一律顯示（「漢字標讀音」是作答前自我測試用的） */
+.furi-off .drill-verdict rt { visibility: visible; }
 /* 日文句子在詞和詞之間換行（Chrome 支援；其他瀏覽器照一般的規則，在任何字之間換行）。
    一個詞組比一行還長時（手機上、句子裡夾著標讀音的漢字時很常見）也要能在字中間換行：
    不加 overflow-wrap: anywhere 的話，答題後的整句（.dv-sent 是 flex）會把練習題撐得比畫面寬 */
@@ -448,6 +450,9 @@ ruby { ruby-align: center; }
   font-family: var(--font-kana); font-weight: 600; font-size: 20px; line-height: 2.05; overflow-wrap: anywhere;
 }
 .dlg-ja:hover { color: var(--accent); }
+/* 模擬考讀解還沒答完時，段落不能點（不念）：不要看起來像按鈕 */
+p.dlg-ja { cursor: auto; }
+p.dlg-ja:hover { color: var(--ink); }
 .dlg-zh { font-size: 14.5px; color: var(--ink-2); }
 
 /* 考題要考的詞（⟦⟧）：不標讀音、加底線 */
@@ -1136,6 +1141,8 @@ select { min-width: 0; text-overflow: ellipsis; }
   /* 選到的格子、答對的選項：原本靠底色和陰影，高對比下會被拿掉，改用系統強調色框 */
   .gj-cell[aria-pressed='true']:not(:focus-visible), .cs-btn[aria-pressed='true']:not(:focus-visible),
   .opt.is-right, .opt.is-answer, .dq-opt.is-right { outline: 3px solid Highlight; outline-offset: -4px; }
+  /* 整段播放時正在念的那一句（原本只靠底色） */
+  .dlg-line.is-playing, .rd-line.is-playing { outline: 2px solid Highlight; outline-offset: -2px; }
   /* 字源淡字：高對比會把它變得和假名一樣深、假名後面還會墊一塊底色，兩個字疊在一起看不清楚。
      改用系統的灰字再調淡，假名自己用系統文字色、不墊底 */
   .gj-ghost, .masu .ghost { forced-color-adjust: none; color: GrayText; opacity: 0.25; }
@@ -1144,3 +1151,13 @@ select { min-width: 0; text-overflow: ellipsis; }
   .gj-cell.is-written::after, .cs-btn.is-written::after { forced-color-adjust: none; background: CanvasText; }
   .cs-btn.is-recalled::after { forced-color-adjust: none; background: Highlight; }
 }
+
+/* ==================== 字型下載量（第四次 code review 之後的效能調整）：新規則都放在這一段 ==================== */
+/*
+ * 課程列表的課名和文法名稱用系統字型，不用裁切的假名字型：56 課的漢字都用裁切字型的話，這一頁要下載 40 幾個字型檔。
+ * 只寫通用字型：元素標了 lang="ja"，系統會挑日文字型（中文課名照頁面的語言用中文字型）。
+ * 字型裁切（scripts/nk-fonts.mjs）也不再為文法名稱收字。
+ */
+.sys-ja { font-family: sans-serif; }
+/* 系統字型的粗體比原本的教科書體粗很多：課名用中等粗細，看起來和原本差不多；日文課名在詞和詞之間換行（不會剩一個「か」在下一行） */
+.lesson-title .sys-ja { font-weight: 500; word-break: auto-phrase; }

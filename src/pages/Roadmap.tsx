@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { lessonStore } from '../state';
 import { useStore } from '../state/store';
-import { kanaLessonsDone } from '../lib/progress';
+import { kanaLessonsDone, studyPhase } from '../lib/progress';
 import { KANA_LESSONS, levelLessons } from '../data/lessons/meta';
 import { usePageTitle } from '../lib/title';
 
@@ -74,7 +74,8 @@ export default function Roadmap() {
   const n4 = levelLessons('n4');
   const n5Done = n5.filter((l) => progress.done[l.id]).length;
   const n4Done = n4.filter((l) => progress.done[l.id]).length;
-  const phaseNow = kanaDone < KANA_LESSONS.length ? 0 : n5Done < n5.length ? 1 : n4Done < n4.length ? 2 : 3;
+  // 「你在這裡」照現在的程度（見 progress.ts 的 studyPhase）
+  const phaseNow = studyPhase(progress);
 
   return (
     <div className="wrap">

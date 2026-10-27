@@ -24,6 +24,13 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # 裁切過的字型（scripts/nk-fonts.mjs 的快取）：有快取時建置約 3 秒，沒有要多裁 9 秒左右。
+      # 放在 npm ci 後面（npm ci 會刪掉整個 node_modules）；字、字型和裁字工具版本一樣的結果才會沿用，舊的留著不影響
+      - uses: actions/cache@v6
+        with:
+          path: node_modules/.cache/nk-fonts
+          key: nk-fonts-${{ hashFiles('package-lock.json', 'scripts/nk-fonts.mjs', 'src/**/*.ts', 'src/**/*.tsx', 'src/styles/*.css') }}
+          restore-keys: nk-fonts-
       - run: npm test
       - run: npm run build
       - name: 上傳網站檔案

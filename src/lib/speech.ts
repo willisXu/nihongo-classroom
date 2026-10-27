@@ -226,6 +226,43 @@ function utter(text: string, rate: number, onEnd?: () => void, pitch?: number): 
   return true;
 }
 
+/** 長句一次念完，Chrome 的線上語音念到約 15 秒會自己停掉、也不觸發 end：超過這個長度就照句號分開念 */
+export const SPLIT_OVER = 50;
+
+/**
+ * 拆成一句一句念：句尾的「。！？」（連在一起的「！？」「。）」「？」」算同一個句尾）後面切開；
+ * 「」『』（）裡面的不切。只剩標點、沒有字的一段併到前一句（單獨念「？」有些語音會念出符號的名字）。
+ */
+export function speechChunks(text: string): string[] {
+  if (text.length <= SPLIT_OVER) return [text];
+  const END = /[。！？!?]/;
+  const CLOSE = /[」』）)]/;
+  const out: string[] = [];
+  let buf = '';
+  let depth = 0;
+  const chars = [...text];
+  for (let i = 0; i < chars.length; i++) {
+    const c = chars[i];
+    buf += c;
+    if (c === '「' || c === '『' || c === '（' || c === '(') depth++;
+    else if (CLOSE.test(c) && depth > 0) depth--;
+    else if (depth === 0 && END.test(c)) {
+      // 句尾後面緊接著的句尾符號、括號一起帶走
+      while (i + 1 < chars.length && (END.test(chars[i + 1]) || CLOSE.test(chars[i + 1]))) buf += chars[++i];
+      out.push(buf);
+      buf = '';
+    }
+  }
+  if (buf) out.push(buf);
+  // 沒有字（只有標點、空白）的一段併到前一句
+  const merged: string[] = [];
+  for (const part of out) {
+    if (merged.length && !/[\p{L}\p{N}]/u.test(part)) merged[merged.length - 1] += part;
+    else merged.push(part);
+  }
+  return merged.length ? merged : [text];
+}
+
 /** 正在念的那一句的 onStop（念完就清掉） */
 let onStopped: (() => void) | undefined;
 
@@ -239,6 +276,7 @@ function stopped() {
 /** 念出日文。回傳 false 表示這台裝置不能發音（這時 onEnd 不會被呼叫）。 */
 /** pitch：音高（1 是正常；對話聽力用來分出兩個人，見 components/Drill.tsx） */
 /** onStop：還沒念完就被別的 speak()、stopSpeaking() 取代時呼叫（和 onEnd 只會呼叫其中一個） */
+/** 長的文字照句號分開、一句接一句念（見 speechChunks）；被取代時後面的句子就不念了 */
 export function speak(text: string, opts: { rate?: number; pitch?: number; onEnd?: () => void; onStop?: () => void } = {}): boolean {
   if (!text || !supported) return false;
   // 語音清單晚到、又沒觸發 voiceschanged：念之前再讀一次
@@ -250,8 +288,12 @@ export function speak(text: string, opts: { rate?: number; pitch?: number; onEnd
     if (onStopped === onStop) onStopped = undefined;
     onEnd?.();
   };
+  const rate = opts.rate ?? (settingsStore.get().slow ? 0.6 : 0.9);
+  const chunks = speechChunks(speechFor(text));
+  // 前一句念完才念下一句；被取消的那一句不會呼叫 onEnd（見 utter），後面的就停在那裡
+  const sayFrom = (i: number): boolean => utter(chunks[i], rate, i < chunks.length - 1 ? () => void sayFrom(i + 1) : ended, opts.pitch);
   try {
-    return utter(speechFor(text), opts.rate ?? (settingsStore.get().slow ? 0.6 : 0.9), ended, opts.pitch);
+    return sayFrom(0);
   } catch {
     onStopped = undefined;
     return false;

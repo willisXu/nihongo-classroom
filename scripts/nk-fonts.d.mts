@@ -16,6 +16,10 @@ export interface FontFamilyConfig {
   core: number;
   /** 每個檔最多幾個字 */
   chunk: number;
+  /** 不算常用、但幾課都有的字放進「課文共用」組 */
+  lessonCore?: number;
+  /** 課文共用組每個檔最多幾個字 */
+  lessonChunk?: number;
 }
 
 /** 選擇器的一層：標籤（沒有就是 null）和 class */
@@ -43,7 +47,16 @@ export declare function displayHotChars(source: { file: string; text: string }, 
 export declare function groupChars(
   chars: Set<string>,
   files: GroupFile[],
-  options?: { core?: number; chunk?: number; coreChunk?: number; restChunk?: number; base?: 'split' | 'whole'; everywhere?: string[] },
+  options?: {
+    core?: number;
+    chunk?: number;
+    coreChunk?: number;
+    restChunk?: number;
+    lessonCore?: number;
+    lessonChunk?: number;
+    base?: 'split' | 'whole';
+    everywhere?: string[];
+  },
 ): { key: string; chars: string[] }[];
 export declare function toUnicodeRange(codePoints: number[]): string;
 export declare function generateFonts(): Promise<string[]>;

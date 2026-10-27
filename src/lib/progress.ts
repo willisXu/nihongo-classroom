@@ -12,19 +12,34 @@ export function countMastered(stats: KanaStats, keys: string[]): number {
   return keys.filter((k) => kanaLevel(stats, k) === 2).length;
 }
 
-/** 下一堂要上的課（五十音或初級課程，全部完成時回傳 undefined） */
+/**
+ * 現在上到的課（「繼續第 N 課」）：完成的課裡最後面那一課的下一課。
+ * 課可以不照順序完成（會假名的人直接從第 9 課開始、忘了按某一課的「完成」、改回未完成重上），
+ * 所以不是找「第一個還沒完成的課」，而是從上到最遠的地方接著上；前面沒按完成的課在課程列表上看得到。
+ * 後面的課都完成了（只剩前面漏掉的課）才回頭指向第一個還沒完成的課。全部完成時回傳 undefined。
+ * 首頁、課程列表、學習紀錄的「下一課」、今天的任務、學習地圖、AI 家教的程度都照這個算（見下面幾個函式）。
+ */
 export function nextLesson(progress: LessonProgress): LessonMeta | undefined {
-  return LESSON_META.find((l) => !progress.done[l.id]);
+  return after(LESSON_META, progress);
 }
 
-/** 五十音課程（第 1–8 課）的下一課；五十音都學完時回傳 undefined */
+/** list 裡完成的課最後面那一課的下一課；後面都完成了就是第一個還沒完成的課 */
+function after<T extends LessonMeta>(list: T[], progress: LessonProgress): T | undefined {
+  // 最後一課完成的課後面那一課一定還沒完成
+  const last = list.findLastIndex((l) => progress.done[l.id]);
+  return list[last + 1] ?? list.find((l) => !progress.done[l.id]);
+}
+
+/** 五十音課程（第 1–8 課）的下一課；五十音課程算學完了（見 kanaCourseDone）就回傳 undefined */
 export function nextKanaLesson(progress: LessonProgress): KanaLessonMeta | undefined {
-  return KANA_LESSONS.find((l) => !progress.done[l.id]);
+  if (kanaCourseDone(progress)) return undefined;
+  const next = nextLesson(progress);
+  return next?.kind === 'kana' ? next : undefined;
 }
 
-/** 初級課程（N5、N4）的下一課 */
+/** 初級課程（N5、N4）現在上到的課（規則同 nextLesson，只看初級課程的課） */
 export function nextCourseLesson(progress: LessonProgress): CourseLessonMeta | undefined {
-  return COURSE_LESSONS.find((l) => !progress.done[l.id]);
+  return after(COURSE_LESSONS, progress);
 }
 
 /** 完成幾課（五十音和初級課程一起算） */
@@ -40,9 +55,21 @@ export function courseLessonsDone(progress: LessonProgress): number {
   return COURSE_LESSONS.filter((l) => progress.done[l.id]).length;
 }
 
-/** 五十音課程全部完成 */
+/**
+ * 五十音課程算學完了：五十音的最後一課（第 8 課）或任何一課初級課程完成了。
+ * 不要求 8 課都按了完成：會假名、直接從第 9 課開始的人，或漏按一課的人，已經在上初級課程，
+ * 不該再被當成「還在學假名」（AI 家教只用假名、每天寫假名、學習地圖停在五十音）。
+ */
 export function kanaCourseDone(progress: LessonProgress): boolean {
-  return kanaLessonsDone(progress) >= KANA_LESSONS.length;
+  const lastKana = KANA_LESSONS[KANA_LESSONS.length - 1]?.id ?? 0;
+  return LESSON_META.some((l) => l.id >= lastKana && progress.done[l.id]);
+}
+
+/** 初級課程裡完成的課教的漢字（照課的順序） */
+export function learnedKanji(progress: LessonProgress): string {
+  return COURSE_LESSONS.filter((l) => progress.done[l.id])
+    .map((l) => l.kanji)
+    .join('');
 }
 
 /** 到這一課為止學過的假名 */
@@ -103,8 +130,9 @@ function hasActivity(activity: Activity, key: string): boolean {
 }
 
 /**
- * AI 家教的建議程度：五十音還沒學完就用「只用假名」；N5 的課都上完了，或已經完成任何一課 N4 就用 N4
- * （N5 有一課忘了勾完成，不會讓 AI 一直停在 N5）
+ * 現在的程度：還在學五十音 → kana；開始上初級課程 → 至少 n5；
+ * N4 的課完成了任何一課，或 N5 的課都完成了 → n4（N5 有一課忘了勾完成，不會一直停在 N5）。
+ * AI 家教的建議程度、學習地圖的「你在這裡」都照這個。
  */
 export function suggestedLevel(progress: LessonProgress): TutorLevel {
   if (!kanaCourseDone(progress)) return 'kana';
@@ -112,4 +140,17 @@ export function suggestedLevel(progress: LessonProgress): TutorLevel {
   const n5Done = n5.length > 0 && n5.every((l) => progress.done[l.id]);
   const n4Started = COURSE_LESSONS.some((l) => l.level === 'n4' && progress.done[l.id]);
   return n5Done || n4Started ? 'n4' : 'n5';
+}
+
+/**
+ * 學習地圖的階段：0 五十音、1 初級前半（N5）、2 初級後半（N4）、3 課程都學完（中級）。
+ * 和 AI 家教的建議程度一樣照 suggestedLevel：不要求前面每一課都按了完成
+ * （會假名直接從第 9 課開始、漏按一課、改回未完成重上的人，都停在正確的階段）。
+ */
+export function studyPhase(progress: LessonProgress): 0 | 1 | 2 | 3 {
+  const level = suggestedLevel(progress);
+  if (level === 'kana') return 0;
+  if (level === 'n5') return 1;
+  const n4 = COURSE_LESSONS.filter((l) => l.level === 'n4');
+  return n4.length && n4.every((l) => progress.done[l.id]) ? 3 : 2;
 }

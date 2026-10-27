@@ -54,6 +54,10 @@ describe('動詞變化', () => {
     // 敬語動詞：ます形〜います、命令形〜い（くださる → ください）
     expect(['いらっしゃる', 'おっしゃる', 'なさる', 'くださる'].map((w) => conjugate(w, 1, 'masu'))).toEqual(['いらっしゃいます', 'おっしゃいます', 'なさいます', 'くださいます']);
     expect(conjugate('くださる', 1, 'imperative')).toBe('ください');
+    // くれる 的命令形是 くれ（[[力を貸してくれ！]]）；同音的 暮れる 照規則
+    expect(conjugate('くれる', 2, 'imperative')).toBe('くれ');
+    expect(conjugate('暮れる', 2, 'imperative')).toBe('暮れろ');
+    expect(conjugate('くれる', 2, 'te')).toBe('くれて');
     expect(conjugate('なさる', 1, 'te')).toBe('なさって');
     expect(conjugate('いらっしゃる', 1, 'nai')).toBe('いらっしゃらない');
     expect(() => conjugate('ある', 1, 'potential')).toThrow();

@@ -1,7 +1,7 @@
 import type { VocabItem } from '../data/types';
 import { DECKS, vocabById } from '../data/vocab';
 import { learnedInOtherDeck, wordLearned } from '../data/vocab/meta';
-import { courseLessonById } from '../data/lessons/meta';
+import { courseLessonById, COURSE_LESSONS, kanaLessonById } from '../data/lessons/meta';
 
 // 只看一張卡片的函式（顯示、念法、搜尋）在 vocabItem.ts；從這裡 import 的地方照舊可以用
 export * from './vocabItem';
@@ -83,6 +83,34 @@ export function deckAllLearned(deckId: string, cards: Record<string, { reps: num
         ? DECKS.flatMap((d) => d.items.map((it) => it.id))
         : (DECKS.find((d) => d.id === deckId)?.items.map((it) => it.id) ?? []);
   return ids.length > 0 && ids.every((id) => wordLearned(cards, id));
+}
+
+/** 有沒有這個牌組（全部牌組、各牌組，或初級課程某一課的單字 lesson-N） */
+export function deckExists(deckId: string): boolean {
+  const lessonId = lessonDeckId(deckId);
+  if (lessonId !== null) return !!courseLessonById(lessonId);
+  return deckId === 'all' || DECKS.some((d) => d.id === deckId);
+}
+
+/** 找不到牌組時的說明：五十音的課沒有單字卡，改練假名；其他是網址打錯了 */
+export function missingDeckNote(deckId: string): { text: string; practice?: number } {
+  const lessonId = lessonDeckId(deckId);
+  if (lessonId !== null && kanaLessonById(lessonId)) return { text: `第 ${lessonId} 課是五十音課程，沒有單字卡。`, practice: lessonId };
+  if (lessonId !== null) {
+    const first = COURSE_LESSONS[0]?.id;
+    const last = COURSE_LESSONS[COURSE_LESSONS.length - 1]?.id;
+    return { text: `沒有第 ${lessonId} 課。課程的單字卡從第 ${first} 課到第 ${last} 課。` };
+  }
+  return { text: '網址可能打錯了。' };
+}
+
+/**
+ * 這一輪最多學幾張新卡。課程某一課的單字（lesson-N）是學習者自己選要練的，不受每天新卡上限限制；
+ * 在那裡學的新卡照樣算進今天學的新卡（srs.days 的 fresh），所以今天「全部牌組」能學的新卡會跟著變少，每天的份量不會暴增。
+ * 其他牌組：每天的上限扣掉今天已經學的。
+ */
+export function newCardLimit(deckId: string, newPerDay: number, freshToday: number): number {
+  return lessonDeckId(deckId) !== null ? Infinity : Math.max(0, newPerDay - freshToday);
 }
 
 export function deckTitle(deckId: string): string {

@@ -66,10 +66,11 @@ describe('字型瘦身', () => {
     // 日文欄位裡的符號（會話的「―」、表格裡的「→」）也收
     const marks = collectChars([{ file: 'data/lessons/lesson20.ts', text: "{ ja: '元気《げんき》ですか。―はい。', note: '{{楽《たの》しい → 楽《たの》しかった}}' }" }]);
     for (const ch of '―→') expect(marks.ja.has(ch), ch).toBe(true);
-    // 課程摘要的文法名稱：只有漢字的也收（課程列表用假名字型）
-    const meta = collectChars([{ file: 'data/lessons/meta.ts', text: "{ kind: 'course', grammar: ['〜歳', '数字'], headline: '說明' }" }]);
-    for (const ch of '歳数字') expect(meta.ja.has(ch), ch).toBe(true);
-    expect(meta.ja.has('說')).toBe(false);
+    // 課程摘要的文法名稱只在課程列表顯示，用系統字型（app.css 的 .sys-ja）：假名字型不收（有假名的也不收）
+    const meta = collectChars([{ file: 'data/lessons/meta.ts', text: "{ kind: 'course', grammar: ['〜歳', '数字', '家族の言い方'], headline: '說明' }" }]);
+    for (const ch of '歳数字家族言方說') expect(meta.ja.has(ch), ch).toBe(false);
+    // 別的檔的 grammar 欄位（例如 AI 家教的提示）照一般規則收
+    expect(collectChars([{ file: 'data/tutor.ts', text: "{ grammar: ['家族の言い方'] }" }]).ja.has('族')).toBe(true);
     // 課名是日文時（有假名），裡面單獨的漢字也收；中文課名不收
     const titles = collectChars([{ file: 'data/lessons/meta.ts', text: "{ title: '今、何時ですか' }, { title: '片假名（一）' }" }]);
     expect(titles.ja.has('今')).toBe(true);
@@ -150,6 +151,27 @@ describe('字型瘦身', () => {
     expect(groups.flatMap((g) => g.chars).sort()).toEqual([...chars].sort()); // 每個字剛好一組
     // 檔案順序（Windows 和 Linux 列出資料夾的順序不同）、字的順序都不影響結果
     expect(groupChars(new Set([...chars].reverse()), [...files].reverse(), { core: 3, chunk: 2, restChunk: 10 })).toEqual(groups);
+  });
+
+  it('分組：課文 56 個檔算同一頁；好幾課都有的字放「課文共用」組，照第一次出現的課排', () => {
+    const f = (file: string, text: string): GroupFile => ({ file, text, chars: new Set(text), hot: new Set(text) });
+    const files = [
+      f('data/lessons/lesson9.ts', '甲乙'),
+      f('data/lessons/lesson10.ts', '甲乙丙'),
+      f('data/lessons/lesson11.ts', '甲乙丙'),
+      f('data/lessons/lesson12.ts', '丙丁'),
+      f('data/lessons/lesson2.ts', '乙丙'),
+      f('pages/A.tsx', '戊丁'),
+      f('pages/B.tsx', '戊'),
+    ];
+    const groups = groupChars(new Set('甲乙丙丁戊'), files, { core: 2, lessonCore: 3, lessonChunk: 2 });
+    const byKey = (k: string) => groups.filter((g) => g.key === k).map((g) => g.chars.join(''));
+    // 戊：兩頁（A、B）→ 常用；丁：課文和 A 兩頁 → 常用。乙、丙出現在好幾課，但只算課文一頁，不是常用
+    expect(byKey('core')).toEqual(['丁戊']);
+    // 丙、乙（都是第 2 課起、4 課，一樣的照碼位）、甲（第 9 課起，3 課）：照第一次出現的課排，2 個字一個檔
+    expect(byKey('lessons')).toEqual(['丙乙', '甲']);
+    // 沒有設 lessonCore 時不分課文共用組（照舊放在字最少的那個檔）
+    expect(groupChars(new Set('甲'), files, { core: 2 }).map((g) => g.key)).toEqual(['hot:data/lessons/lesson9.ts']);
   });
 
   it('連續的字合成一段 unicode-range', () => {

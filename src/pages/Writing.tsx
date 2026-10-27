@@ -8,7 +8,7 @@ import { lessonStore, recordWriting, writingStore } from '../state';
 import { readJSON, useStore, writeJSON } from '../state/store';
 import { ROW_CHOICES, SEI_ROW_IDS } from '../lib/kanaQuiz';
 import { EXTRA_ROWS, extraOf, lessonWriteRows, normalizeWriteRows, pickedChars, rowsFor, writingChars } from '../lib/writingScope';
-import { kanaCourseDone, nextCourseLesson, nextKanaLesson } from '../lib/progress';
+import { kanaCourseDone, learnedKanji as learnedKanjiOf, nextCourseLesson, nextKanaLesson } from '../lib/progress';
 import { isKanji } from '../lib/ja';
 import { getStrokePaths } from '../lib/strokes';
 import { speak } from '../lib/speech';
@@ -177,7 +177,7 @@ export default function Writing() {
   const kj = kanjiInfo(current);
   const kanjiMode = !!pick && pick.chars.some(isKanji);
   const courseNow = kanaCourseDone(lessons) ? nextCourseLesson(lessons) : undefined;
-  const learnedKanji = COURSE_LESSONS.filter((l) => lessons.done[l.id]).map((l) => l.kanji).join('');
+  const learnedKanji = learnedKanjiOf(lessons);
   const stat = writing[current];
   const strokes = getStrokePaths(current)?.length ?? 0;
   const upcoming = nextKanaLesson(lessons);
@@ -218,7 +218,8 @@ export default function Writing() {
           <span className="set-l">文字</span>
           <Segmented
             label="文字"
-            value={script}
+            // 在練漢字時，平假名、片假名都不算選了（按下去就回到那種假名的範圍）
+            value={kanjiMode ? null : script}
             onChange={(v) => {
               setPick(null);
               setPrefs((p) => {

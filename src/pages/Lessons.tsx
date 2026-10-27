@@ -135,7 +135,8 @@ function LessonItem({ l, progress, isNow }: { l: KanaLessonMeta | CourseLessonMe
         <span className="lesson-body">
           <span className="lesson-title">
             第 {l.id} 課{'　'}
-            <span className="ja" lang={hasKana(l.title) ? 'ja' : undefined}>
+            {/* 課名和文法用系統字型（.sys-ja，lang 標日文就會挑日文字型）：56 課的漢字都用裁切字型的話，這一頁要下載 40 幾個字型檔 */}
+            <span className="sys-ja" lang={hasKana(l.title) ? 'ja' : undefined}>
               {l.title}
             </span>
             {isNow ? <span className="now-pill">下一課</span> : null}
@@ -154,7 +155,7 @@ function LessonItem({ l, progress, isNow }: { l: KanaLessonMeta | CourseLessonMe
               </span>
             </span>
           ) : (
-            <span className="lesson-kana lesson-gram" lang="ja">
+            <span className="lesson-kana lesson-gram sys-ja" lang="ja">
               <span className="sr-only" lang="zh-Hant-TW">
                 文法：
               </span>

@@ -185,7 +185,7 @@ describe('自動程度', () => {
     return { done: Object.fromEntries(LESSON_META.filter((l) => l.id <= n && !skip.includes(l.id)).map((l) => [l.id, 1])), hw: {} };
   };
 
-  it('五十音沒學完是只用假名；N5 全部完成，或已經完成任何一課 N4 就是 N4', async () => {
+  it('還在上五十音是只用假名；N5 全部完成，或已經完成任何一課 N4 就是 N4', async () => {
     const { suggestedLevel, learnedGrammar } = await import('../src/lib/progress');
     expect(suggestedLevel(await upTo(0))).toBe('kana');
     expect(suggestedLevel(await upTo(7))).toBe('kana');
@@ -197,7 +197,8 @@ describe('自動程度', () => {
     expect(suggestedLevel(skipped)).toBe('n4');
     const grammar = learnedGrammar(skipped, 'n4');
     expect(grammar).toEqual(expect.arrayContaining(['受身', '可能形']));
-    // 五十音沒學完時，即使勾了後面的課也還是只用假名
-    expect(suggestedLevel(await upTo(45, [3]))).toBe('kana');
+    // 五十音的課漏按一課、但已經在上初級課程（或會假名、直接從第 9 課開始）：照初級課程的進度，不是只用假名
+    expect(suggestedLevel(await upTo(45, [3]))).toBe('n4');
+    expect(suggestedLevel({ done: { 9: 1, 10: 1 }, hw: {} })).toBe('n5');
   });
 });

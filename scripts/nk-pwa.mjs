@@ -6,8 +6,9 @@
  *   VERSION   這一版的代號：預先下載檔案的內容雜湊。內容沒變就不會變，瀏覽器不會重新下載
  *   PRECACHE  要預先下載的檔案（相對於網站根目錄）
  *
- * 預先下載：index.html、全部的程式和樣式、裁切過的字型、圖示和 manifest（約 2 MB，傳輸時壓縮後更小）。
- * 不預先下載：完整的 Klee One（約 3.4 MB，只有 AI 家教頁用來補罕用字，而 AI 家教本來就要網路）、授權全文。
+ * 預先下載：index.html、全部的程式和樣式、裁切過的字型、圖示和 manifest（約 4.5 MB，傳輸時壓縮後約 2.3 MB）。
+ * 不預先下載：完整的 Klee One（約 3.4 MB，只有 AI 家教頁用來補罕用字，而 AI 家教本來就要網路）、授權全文，
+ * 和裁切字型裡的「其餘」組（display-rest-… 這些：收著備用、畫面上其實用內文字型的字，量過每一頁都不會下載）。
  */
 import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
@@ -16,8 +17,8 @@ import { fileURLToPath } from 'node:url';
 import { FAMILIES } from './nk-fonts.mjs';
 
 const TEMPLATE = fileURLToPath(new URL('./sw-template.js', import.meta.url));
-/** nk-fonts 裁出來的字型（display-…、kana-…、meaning-…） */
-const SUBSET_FONT = new RegExp(`^assets/(?:${FAMILIES.map((f) => f.prefix).join('|')})-[^/]+\\.woff2$`);
+/** nk-fonts 裁出來的字型（display-3-…、kana-12-…、meaning-0-…）；「其餘」組（display-rest-…）不算 */
+const SUBSET_FONT = new RegExp(`^assets/(?:${FAMILIES.map((f) => f.prefix).join('|')})-\\d+-[^/]+\\.woff2$`);
 
 /** 從 dist 的檔案（相對路徑，用 / 分隔）挑出要預先下載的 */
 export function precacheList(files) {

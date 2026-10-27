@@ -122,6 +122,7 @@ export function activityLines(day: CalendarDay): TipLine[] {
     a.kana ? `假名 ${a.kana} 題` : '',
     a.review ? `單字 ${a.review} 次` : '',
     a.writing ? `手寫 ${a.writing} 字` : '',
+    a.drill ? `練習題 ${a.drill} 題` : '',
     a.lesson ? `完成 ${a.lesson} 課` : '',
     a.tutor ? `AI 家教 ${a.tutor} 次` : '',
   ].filter(Boolean);

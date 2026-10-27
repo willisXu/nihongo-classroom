@@ -108,16 +108,16 @@ export default function Stats() {
 
       <section className="block" aria-labelledby="h-cal">
         <h2 id="h-cal">學習日曆</h2>
-        <p className="small">顏色越深，那天練習越多（假名測驗、單字複習、手寫、完成課程、AI 家教的次數加起來）。</p>
+        <p className="small">顏色越深，那天練習越多（假名測驗、單字複習、手寫、課文練習題、完成課程、AI 家教的次數加起來）。</p>
         <Heatmap weeks={cal} todayKey={todayKey} label={`最近 ${CAL_WEEKS} 週的學習日曆，其中 ${calDays.length} 天有學習`} />
         {calDays.length ? (
           <DataTable
             caption="每天的練習次數"
-            head={['日期', '假名', '單字', '手寫', '課程', 'AI 家教', '合計']}
+            head={['日期', '假名', '單字', '手寫', '練習題', '課程', 'AI 家教', '合計']}
             rows={calDays
               .slice()
               .reverse()
-              .map((d) => [mdw(d.date), d.act.kana, d.act.review, d.act.writing, d.act.lesson, d.act.tutor, d.act.total])}
+              .map((d) => [mdw(d.date), d.act.kana, d.act.review, d.act.writing, d.act.drill, d.act.lesson, d.act.tutor, d.act.total])}
           />
         ) : (
           <p className="muted">
