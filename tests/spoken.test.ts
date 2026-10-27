@@ -7,7 +7,9 @@ import { COURSE_LESSON_DATA } from './lessonData';
 import { mock } from '../src/data/mock/n4';
 import type { DrillItem, JaText, LessonBlock } from '../src/data/types';
 import { fillBlank, fillTarget } from '../src/components/Drill';
-import { jaSpeech } from '../src/lib/ja';
+import { inlineSay, jaPlain, jaSpeech } from '../src/lib/ja';
+import { DECKS } from '../src/data/vocab';
+import { exampleSpeech } from '../src/lib/vocab';
 
 type Spoken = { where: string; ja: JaText; say?: string };
 
@@ -63,6 +65,76 @@ describe('會念出來的句子', () => {
     // 課文和模擬考裡有這種句子（例如通知的「午前9時〜12時」），不是什麼都沒檢查到
     expect(withTilde.length).toBeGreaterThan(0);
     const bad = withTilde.filter((s) => jaSpeech(s.ja) !== jaSpeech(midTildesAsKara(s.ja))).map((s) => `${s.where}：${s.ja} → 念成「${jaSpeech(s.ja)}」`);
+    expect(bad).toEqual([]);
+  });
+});
+
+/* ---------------- 念法：片假名讀音的詞、語音引擎常念錯的詞 ---------------- */
+
+/** 一個物件裡所有的字串（課文、模擬考） */
+function strings(o: unknown, out: string[] = []): string[] {
+  if (typeof o === 'string') out.push(o);
+  else if (Array.isArray(o)) for (const v of o) strings(v, out);
+  else if (o && typeof o === 'object') for (const v of Object.values(o)) strings(v, out);
+  return out;
+}
+
+/** 說明文字裡可以點來聽的 [[表記|念法]]：沒有念法時念 inlineSay（見 components/Rich.tsx） */
+const inline: Spoken[] = [
+  ...COURSE_LESSON_DATA.flatMap((l) => strings(l).map((t) => ({ t, where: `第 ${l.id} 課的說明文字` }))),
+  ...strings(mock).map((t) => ({ t, where: '模擬考的說明文字' })),
+].flatMap(({ t, where }) =>
+  [...t.matchAll(/\[\[([^\]]+)\]\]/g)].map((m) => {
+    const [shown, say] = m[1].split('|');
+    return { where, ja: shown, say: say ?? inlineSay(shown) };
+  }),
+);
+
+const cards = DECKS.flatMap((d) => d.items);
+const speechOf = (s: Spoken) => s.say ?? jaSpeech(s.ja);
+
+describe('念法', () => {
+  it('讀音標片假名的詞（台北《タイペイ》…）：指定的念法（say）和單字卡例句不能寫漢字（語音引擎會念成 たいほく）', () => {
+    const kata = new Set<string>();
+    for (const t of [...strings(COURSE_LESSON_DATA), ...strings(mock)]) {
+      for (const m of t.matchAll(/([\p{Script=Han}々]+)《([ァ-ヺー]+)》/gu)) kata.add(m[1]);
+    }
+    expect([...kata]).toContain('台北');
+    const bad: string[] = [];
+    for (const s of [...spoken, ...inline]) {
+      const say = speechOf(s);
+      for (const k of kata) if (say.includes(k)) bad.push(`${s.where}「${jaPlain(s.ja)}」念「${say}」：${k} 要寫讀音`);
+    }
+    for (const it of cards) {
+      if (!it.ex) continue;
+      for (const k of kata) if (exampleSpeech(it.ex).includes(k)) bad.push(`${it.id}「${it.ex.ja}」：${k} 要在 say 寫讀音`);
+    }
+    expect(bad).toEqual([]);
+  });
+
+  /**
+   * 語音引擎常念錯的寫法：課文用 say（或 [[表記|念法]]）改念假名，單字卡例句用 ex.say。
+   * 課文裡單獨一個漢字的 降・開・辛・角 jaSpeech 會自己改念讀音（見 lib/ja.ts 的 SAY_READING_SINGLE），
+   * 單字卡例句是照原句念的，所以例句另外檢查。
+   */
+  const RISKY: { re: RegExp; why: string; lessons: boolean }[] = [
+    { re: /弾け/, why: '弾ける 會被念成 はじける（彈開），要念 ひける', lessons: true },
+    { re: /降り/, why: '降ります 有 ふります（下雨）／おります（下車）兩種念法', lessons: false },
+    { re: /開[かきくこいっ]/, why: '開く 有 あく／ひらく 兩種念法（開ける 只念 あける，不用改）', lessons: false },
+    { re: /辛[いくかけ]/, why: '辛い 有 からい／つらい 兩種念法', lessons: false },
+    { re: /角/, why: '角 有 かど／かく 兩種念法', lessons: false },
+  ];
+
+  it('容易念錯的詞，每一處都指定念法', () => {
+    const bad: string[] = [];
+    for (const r of RISKY) {
+      if (r.lessons) {
+        for (const s of [...spoken, ...inline]) if (r.re.test(jaPlain(s.ja)) && r.re.test(speechOf(s))) bad.push(`${s.where}「${jaPlain(s.ja)}」：${r.why}`);
+      }
+      for (const it of cards) {
+        if (it.ex && r.re.test(it.ex.ja) && r.re.test(exampleSpeech(it.ex))) bad.push(`${it.id}「${it.ex.ja}」：${r.why}，要加 ex.say`);
+      }
+    }
     expect(bad).toEqual([]);
   });
 });

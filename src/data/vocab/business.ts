@@ -38,7 +38,7 @@ export const business: Deck = {
     { id: 'business-0029', kana: 'とりひきさき', kanji: '取引先', zh: '客戶；往來廠商', pos: 'noun', topic: '公司與職位', ex: { ja: '取引先に電話をかけます。', kana: 'とりひきさきにでんわをかけます。', zh: '打電話給客戶。' }, note: '指有生意往來的公司或人，買方、供應商都算' },
     { id: 'business-0030', kana: 'しごと', kanji: '仕事', zh: '工作', pos: 'noun', topic: '公司與職位', ex: { ja: '仕事は何時に終わりますか。', kana: 'しごとはなんじにおわりますか。', zh: '工作幾點結束？' } },
     { id: 'business-0031', kana: 'はたらく', kanji: '働く', zh: '工作；上班', pos: 'verb', verbGroup: 1, topic: '公司與職位', ex: { ja: '東京の会社で働いています。', kana: 'とうきょうのかいしゃではたらいています。', zh: '我在東京的公司上班。' } },
-    { id: 'business-0032', kana: 'にゅうしゃ', kanji: '入社', zh: '進公司；入職', pos: 'noun', topic: '公司與職位', ex: { ja: '去年入社しました。', kana: 'きょねんにゅうしゃしました。', zh: '我去年進公司的。' } },
+    { id: 'business-0032', kana: 'にゅうしゃ', kanji: '入社', zh: '進公司；到職', pos: 'noun', topic: '公司與職位', ex: { ja: '去年入社しました。', kana: 'きょねんにゅうしゃしました。', zh: '我去年進公司的。' } },
     { id: 'business-0033', kana: 'しゅっしゃ', kanji: '出社', zh: '到公司上班', pos: 'noun', topic: '公司與職位', ex: { ja: '明日は九時に出社します。', kana: 'あしたはくじにしゅっしゃします。', zh: '明天九點進公司。' } },
     { id: 'business-0034', kana: 'たいしゃ', kanji: '退社', zh: '下班離開公司；離職', pos: 'noun', topic: '公司與職位', note: '有「下班」和「離職」兩種意思，看上下文判斷' },
     { id: 'business-0035', kana: 'ざんぎょう', kanji: '残業', zh: '加班', pos: 'noun', topic: '公司與職位', ex: { ja: '今日は残業します。', kana: 'きょうはざんぎょうします。', zh: '今天要加班。' } },

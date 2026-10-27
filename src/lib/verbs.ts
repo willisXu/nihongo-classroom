@@ -88,6 +88,8 @@ export function conjugate(word: string, group: VerbGroup, form: VerbForm): strin
   const base = word.slice(0, -1);
   if (group === 2) {
     if (end !== 'る') throw new Error(`第二類動詞要用る結尾：${word}`);
+    // くれる（給我）的命令形是 くれ（不是 くれろ）：「貸してくれ！」。暮れる（天黑）照規則是 暮れろ，所以只認 くれる・呉れる
+    if (form === 'imperative' && (word === 'くれる' || word.endsWith('呉れる'))) return base;
     return base + ICHIDAN[form];
   }
   if (!(end in I_ROW)) throw new Error(`第一類動詞的語尾不對：${word}`);
