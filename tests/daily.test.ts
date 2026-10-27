@@ -109,11 +109,19 @@ describe('今天的任務', () => {
     // 答錯很多個：最多每天 20 題
     const many = { ...kana, 'h:ぬ': { c: 0, w: 2, s: 0, t: NOW }, 'h:め': { c: 0, w: 1, s: 1, t: NOW }, 'h:ね': { c: 1, w: 1, s: 0, t: NOW }, 'h:わ': { c: 0, w: 3, s: 0, t: NOW }, 'k:シ': { c: 0, w: 1, s: 0, t: NOW }, 'k:ツ': { c: 0, w: 1, s: 0, t: NOW }, 'k:ソ': { c: 0, w: 1, s: 0, t: NOW } };
     expect(todayTasks(input({ lessons, kana: many })).find((t) => t.id === 'kana')?.goal).toBe(KANA_GOAL);
-    // 今天答滿就打勾
+    // 今天答滿就打勾（還沒練熟也一樣）
     const done = todayTasks(input({ lessons, kana, activity: { [TODAY]: { kana: 3 } } })).find((t) => t.id === 'kana')!;
     expect(done.done).toBe(true);
+    // 照錯題練習的方式練熟了（連對 3 次，不再是答錯的字）：任務不消失，留到今天結束打勾
+    const fixed = { ...kana, 'k:ヌ': { c: 12, w: 1, s: 3, t: NOW } };
+    const kept = todayTasks(input({ lessons, kana: fixed, activity: { [TODAY]: { kana: 3 } } })).find((t) => t.id === 'kana');
+    expect(kept).toMatchObject({ done: true, detail: '答錯的假名都練熟了，今天答了 3 題' });
+    // 今天沒練、也沒有答錯的字：不列
+    expect(todayTasks(input({ lessons, kana: fixed })).map((t) => t.id)).not.toContain('kana');
     // 還在上五十音課程時照舊每天 20 題
     expect(todayTasks(input({ lessons: lessonsDone(7) })).find((t) => t.id === 'kana')).toMatchObject({ title: `假名測驗 ${KANA_GOAL} 題`, to: '/practice', goal: KANA_GOAL });
+    // 學完第 8 課、還沒上第 9 課：片假名多半還不熟，照舊每天 20 題
+    expect(todayTasks(input({ lessons: lessonsDone(8) })).find((t) => t.id === 'kana')).toMatchObject({ title: `假名測驗 ${KANA_GOAL} 題`, goal: KANA_GOAL });
   });
 
   it('沒有按完五十音的 8 課也照初級課程的進度：手寫這一課的漢字，不寫假名', () => {

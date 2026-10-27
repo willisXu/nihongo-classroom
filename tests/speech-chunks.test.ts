@@ -47,6 +47,25 @@ describe('發音', () => {
     expect(speechChunks(long).join('')).toBe(long);
   });
 
+  it('連在一起的句尾符號、括號算同一個句尾；只有標點的一段併到前一句', async () => {
+    setup();
+    const { speechChunks } = await import('../src/lib/speech');
+    const a = 'あ'.repeat(25);
+    expect(speechChunks(`${a}本当ですか！？${a}。`)).toEqual([`${a}本当ですか！？`, `${a}。`]);
+    expect(speechChunks(`${a}すごい！！${a}。）`)).toEqual([`${a}すごい！！`, `${a}。）`]);
+    // （）裡面的句號不切；最後只剩空白，併到前一句
+    expect(speechChunks(`${a}（注意。）${a}。  `)).toEqual([`${a}（注意。）${a}。  `]);
+    expect(speechChunks(`${a}。」${a}？」`)).toEqual([`${a}。」`, `${a}？」`]);
+    // 沒有句號的長句：不切
+    const noEnd = 'あいうえお、'.repeat(20);
+    expect(speechChunks(noEnd)).toEqual([noEnd]);
+    for (const t of [`${a}本当ですか！？${a}。`, `${a}すごい！！${a}。）`, `${a}「はい。そうです。」と言いました。${a}？」`]) {
+      const parts = speechChunks(t);
+      expect(parts.join('')).toBe(t);
+      for (const p of parts) expect(p).toMatch(/[\p{L}\p{N}]/u);
+    }
+  });
+
   it('分開念的長句：一句接一句，全部念完才呼叫一次 onEnd', async () => {
     const { spoken } = setup();
     const sp = await import('../src/lib/speech');

@@ -2,14 +2,35 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   activityStore, exportBackup, importBackup, kanaDaysStore, kanaStore, lastExportStore, lessonStore, missStore, peekBackup, preImportStore,
-  resetAllProgress, settingsStore, srsStore, undoImport, updateSettings,
+  MOCK_KEY, resetAllProgress, settingsStore, srsStore, undoImport, updateSettings,
 } from '../src/state';
+import { dayActivity } from '../src/lib/stats';
 
 const card = { due: 1_800_000_000_000, ivl: 3, ease: 2.5, reps: 2, lapses: 0, step: -1, last: 1_790_000_000_000 };
 
 afterEach(() => resetAllProgress());
 
 describe('備份', () => {
+  it('課文練習題的學習紀錄（drill）跟著備份，也算進每天的練習次數', () => {
+    activityStore.set({ '2026-10-28': { drill: 5, kana: 2 } });
+    const text = exportBackup();
+    resetAllProgress();
+    importBackup(text);
+    expect(activityStore.get()['2026-10-28']).toEqual({ drill: 5, kana: 2 });
+    expect(dayActivity(activityStore.get(), '2026-10-28')).toMatchObject({ drill: 5, total: 7 });
+  });
+
+  it('全部清除也清掉模擬考做到一半的作答', () => {
+    const removed: string[] = [];
+    vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: (k: string) => void removed.push(k) });
+    try {
+      resetAllProgress();
+      expect(removed).toContain(MOCK_KEY);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('匯出再匯入，紀錄完全一樣', () => {
     kanaStore.set({ 'h:あ': { c: 3, w: 1, s: 2, t: 5 } });
     srsStore.set({ cards: { 'n5-0001': card }, days: { '2026-10-13': { reviews: 2, fresh: 1, rev: 1, forgot: 0 } } });

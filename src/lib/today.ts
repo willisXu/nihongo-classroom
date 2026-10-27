@@ -5,7 +5,7 @@
 import { DECK_META, metaItemIds, unseenWords } from '../data/vocab/meta';
 import type { Activity, KanaStats, LessonProgress, SrsData, WritingStats } from '../state';
 import {
-  countMastered, HIRA_KEYS, kanaCourseDone, kanaLessonsDone, KATA_KEYS, learnedKanji, nextCourseLesson, nextKanaLesson,
+  countMastered, courseLessonsDone, HIRA_KEYS, kanaCourseDone, kanaLessonsDone, KATA_KEYS, learnedKanji, nextCourseLesson, nextKanaLesson,
 } from './progress';
 import { weakKanaKeys } from './mistakes';
 import { deckStats } from './srs';
@@ -80,10 +80,11 @@ export function todayTasks({ activity, kana, lessons, srs, writing, newPerDay, n
     });
   }
 
-  // 假名測驗：還在上五十音課程時每天測，平假名、片假名都熟悉之後就不用；
-  // 上初級課程以後（見 progress.ts 的 kanaCourseDone）不再每天測，只在有答錯、還沒練熟的假名時，練那幾個字
+  // 假名測驗：還沒開始上初級課程（第 9 課起一課都還沒完成）時每天測，平假名、片假名都熟悉之後就不用
+  // （學完第 8 課、還沒上第 9 課的這段時間，片假名多半還不熟，照舊每天測）；
+  // 上初級課程以後不再每天測，只在有答錯、還沒練熟的假名時，練那幾個字
   const kanaN = today.kana ?? 0;
-  if (!kanaCourseDone(lessons)) {
+  if (courseLessonsDone(lessons) === 0) {
     if (countMastered(kana, HIRA_KEYS) < HIRA_KEYS.length || countMastered(kana, KATA_KEYS) < KATA_KEYS.length) {
       tasks.push({
         id: 'kana',
@@ -109,6 +110,18 @@ export function todayTasks({ activity, kana, lessons, srs, writing, newPerDay, n
         action: '去練習',
         value: kanaN,
         goal,
+      });
+    } else if (kanaN > 0) {
+      // 今天練熟了答錯的字（清單變空了）：任務留到今天結束，打勾（不然做完的任務直接消失，看不到花丸）
+      tasks.push({
+        id: 'kana',
+        title: '複習答錯的假名',
+        detail: `答錯的假名都練熟了，今天答了 ${kanaN} 題`,
+        done: true,
+        to: '/practice?focus=weak',
+        action: '去練習',
+        value: kanaN,
+        goal: kanaN,
       });
     }
   }

@@ -6,7 +6,7 @@ import { ReadingBlock } from '../components/Reading';
 import { Rich } from '../components/Rich';
 import { usePageTitle } from '../lib/title';
 import { jumpToElement } from '../lib/jump';
-import { answeredCount, emptyMock, parseMockSaved, partKey, scoreMock, type MockSaved } from '../lib/mockSave';
+import { answeredCount, emptyMock, parseMockSaved, partKey, scoreMock, withPartAnswers, type MockSaved } from '../lib/mockSave';
 import { MOCK_KEY } from '../state';
 import { readJSON, removeKey, writeJSON } from '../state/store';
 
@@ -41,16 +41,34 @@ export default function Mock() {
   const [saved, setSaved] = useState<MockSaved>(() => parseMockSaved(mock, readJSON(MOCK_KEY)));
   /** 打開頁面時接著上次做了幾題（0：從頭開始） */
   const [resumed] = useState(() => answeredCount(saved));
+  // 存檔：只存自己這個分頁改的（從別的分頁讀進來的不再寫回去，免得兩個分頁互相蓋掉）
+  const fromOtherTab = useRef(false);
   useEffect(() => {
+    if (fromOtherTab.current) {
+      fromOtherTab.current = false;
+      return;
+    }
     if (saved.started) writeJSON(MOCK_KEY, saved);
   }, [saved]);
+  // 另一個分頁作答、按了「全部重新做」或在設定頁「全部清除」：這一頁跟著換成存著的作答（題目重新畫）
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== MOCK_KEY && e.key !== null) return;
+      fromOtherTab.current = true;
+      setSaved(parseMockSaved(mock, readJSON(MOCK_KEY)));
+      setRound((r) => r + 1);
+      setConfirming(false);
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
   // 每一個題組一個固定的 callback（DrillBlock 每答一題就回報；固定才不會讓 memo 的題組跟著重畫）
   const handlers = useMemo(() => {
     const h: Record<string, (a: (Answer | null)[]) => void> = {};
     for (const s of mock.sections)
       for (const p of s.parts) {
         const key = partKey(s.id, p.id);
-        h[key] = (a) => setSaved((cur) => ({ ...cur, started: cur.started || Date.now(), answers: { ...cur.answers, [key]: a } }));
+        h[key] = (a) => setSaved((cur) => withPartAnswers(mock, cur, key, a));
       }
     return h;
   }, []);
@@ -66,6 +84,14 @@ export default function Mock() {
   const [round, setRound] = useState(0);
   const [confirming, setConfirming] = useState(false);
   const titleRef = useRef<HTMLHeadingElement>(null);
+  const restartRef = useRef<HTMLButtonElement>(null);
+  // 按「取消」之後焦點回到「全部重新做」（取消按鈕本身不見了）
+  const backToRestart = useRef(false);
+  useEffect(() => {
+    if (confirming || !backToRestart.current) return;
+    backToRestart.current = false;
+    restartRef.current?.focus();
+  }, [confirming]);
   const restart = () => {
     removeKey(MOCK_KEY);
     setSaved(emptyMock(mock));
@@ -221,13 +247,21 @@ export default function Mock() {
             <button type="button" className="btn btn-primary" onClick={restart}>
               清掉，從頭做
             </button>
-            <button type="button" className="btn" onClick={() => setConfirming(false)} autoFocus>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                backToRestart.current = true;
+                setConfirming(false);
+              }}
+              autoFocus
+            >
               取消
             </button>
           </div>
         ) : (
           <div className="btn-row">
-            <button type="button" className="btn" disabled={answeredAll === 0} onClick={() => setConfirming(true)}>
+            <button ref={restartRef} type="button" className="btn" disabled={answeredAll === 0} onClick={() => setConfirming(true)}>
               全部重新做
             </button>
             <Link className="btn" to="/lessons">
