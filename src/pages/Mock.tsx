@@ -1,12 +1,14 @@
-import { memo, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { mock } from '../data/mock/n4';
-import type { DrillItem } from '../data/types';
-import { DrillBlock, type Result } from '../components/Drill';
+import { DrillBlock, type Answer } from '../components/Drill';
 import { ReadingBlock } from '../components/Reading';
 import { Rich } from '../components/Rich';
 import { usePageTitle } from '../lib/title';
 import { jumpToElement } from '../lib/jump';
+import { answeredCount, emptyMock, parseMockSaved, partKey, scoreMock, type MockSaved } from '../lib/mockSave';
+import { MOCK_KEY } from '../state';
+import { readJSON, removeKey, writeJSON } from '../state/store';
 
 /** 這個正確率以上，代表這一科準備得不錯（只是參考：正式考試的分數是換算的） */
 const TARGET = 0.7;
@@ -23,52 +25,52 @@ function jumpTo(id: string) {
 
 const pct = (a: number, b: number) => (b ? Math.round((a * 100) / b) : 0);
 
+const md = (t: number) => {
+  const d = new Date(t);
+  return `${d.getMonth() + 1} 月 ${d.getDate()} 日`;
+};
+
 /**
  * N4 模擬考：照 JLPT N4 的題型（文字・語彙、文法、讀解、聽解）的原創題目。
- * 每一題答完馬上看對錯；最下面照科目算正確率，答錯的題目列出要複習的課。紀錄不存（重新整理就重來）。
+ * 每一題答完馬上看對錯（只算第一次作答）；最下面照科目算正確率，全部做完才列出要複習的課。
+ * 作答存在瀏覽器裡（nk.mock，見 lib/mockSave.ts）：重新整理、去看課文再回來、手機把分頁收掉，都可以接著做；
+ * 按「全部重新做」才清掉。
  */
 export default function Mock() {
   usePageTitle('N4 模擬考');
-  const [results, setResults] = useState<Record<string, Result[]>>({});
-  // 每一個題組一個固定的 callback（DrillBlock 每答一題就回報）
+  const [saved, setSaved] = useState<MockSaved>(() => parseMockSaved(mock, readJSON(MOCK_KEY)));
+  /** 打開頁面時接著上次做了幾題（0：從頭開始） */
+  const [resumed] = useState(() => answeredCount(saved));
+  useEffect(() => {
+    if (saved.started) writeJSON(MOCK_KEY, saved);
+  }, [saved]);
+  // 每一個題組一個固定的 callback（DrillBlock 每答一題就回報；固定才不會讓 memo 的題組跟著重畫）
   const handlers = useMemo(() => {
-    const h: Record<string, (r: Result[]) => void> = {};
-    for (const s of mock.sections) for (const p of s.parts) h[`${s.id}/${p.id}`] = (r) => setResults((all) => ({ ...all, [`${s.id}/${p.id}`]: r }));
+    const h: Record<string, (a: (Answer | null)[]) => void> = {};
+    for (const s of mock.sections)
+      for (const p of s.parts) {
+        const key = partKey(s.id, p.id);
+        h[key] = (a) => setSaved((cur) => ({ ...cur, started: cur.started || Date.now(), answers: { ...cur.answers, [key]: a } }));
+      }
     return h;
   }, []);
   const total = mock.sections.reduce((n, s) => n + s.parts.reduce((m, p) => m + p.items.length, 0), 0);
   const minutes = mock.sections.reduce((n, s) => n + s.minutes, 0);
 
-  const summary = useMemo(() => {
-    const review = new Set<number>();
-    const rows = mock.sections.map((s) => {
-      let answered = 0;
-      let right = 0;
-      let count = 0;
-      for (const p of s.parts) {
-        const r = results[`${s.id}/${p.id}`] ?? [];
-        p.items.forEach((it: DrillItem, i) => {
-          count += 1;
-          if (r[i] === null || r[i] === undefined) return;
-          answered += 1;
-          if (r[i]) right += 1;
-          else if (it.lesson) review.add(it.lesson);
-        });
-      }
-      return { id: s.id, title: s.title, count, answered, right };
-    });
-    return { rows, review: [...review].sort((a, b) => a - b) };
-  }, [results]);
+  const summary = useMemo(() => scoreMock(mock, saved), [saved]);
   const answeredAll = summary.rows.reduce((n, r) => n + r.answered, 0);
   const rightAll = summary.rows.reduce((n, r) => n + r.right, 0);
   const finished = answeredAll === total;
 
-  // 全部重新做：題目換 key 重新出（選項重新打亂），成績清空，回到頁首（不必重新載入整頁）
+  // 全部重新做：先確認（會清掉存著的作答）；題目換 key 重新出（選項重新打亂），回到頁首（不必重新載入整頁）
   const [round, setRound] = useState(0);
+  const [confirming, setConfirming] = useState(false);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const restart = () => {
-    setResults({});
+    removeKey(MOCK_KEY);
+    setSaved(emptyMock(mock));
     setRound((r) => r + 1);
+    setConfirming(false);
     window.scrollTo(0, 0);
     // 按下的按鈕在頁尾：焦點也回到最上面，鍵盤和讀屏軟體從頭開始
     titleRef.current?.focus({ preventScroll: true });
@@ -84,6 +86,12 @@ export default function Mock() {
         <p className="lede">
           <Rich text={mock.intro} />
         </p>
+        <p className="small">作答會存在這個瀏覽器裡：中途離開、重新整理，回來都可以接著做。分數只算每一題第一次的作答。</p>
+        {resumed && round === 0 ? (
+          <p className="tip">
+            接著 {md(saved.started)}開始的作答（做了 {resumed}／{total} 題）。想從頭做，按最下面的「全部重新做」。
+          </p>
+        ) : null}
         <nav className="lesson-jump" aria-label="跳到">
           {mock.sections.map((s) => (
             <button key={s.id} type="button" className="chip-btn" onClick={() => jumpTo(`mock-${s.id}`)}>
@@ -112,7 +120,9 @@ export default function Mock() {
               <Rich text={s.intro} />
             </p>
           ) : null}
-          {s.parts.map((p) => (
+          {s.parts.map((p) => {
+            const key = partKey(s.id, p.id);
+            return (
             <div key={p.id} className="mock-part">
               <h3 className="unit-h">{p.title}</h3>
               {p.intro ? (
@@ -125,12 +135,13 @@ export default function Mock() {
                   title={p.reading.title}
                   lines={p.reading.lines}
                   // 讀解：題目全部答完才可以看中文、聽全文
-                  exam={(results[`${s.id}/${p.id}`] ?? []).filter((r) => r !== null).length < p.items.length}
+                  exam={(saved.answers[key] ?? []).filter((a) => a !== null).length < p.items.length}
                 />
               ) : null}
-              <ExamDrill items={p.items} onResults={handlers[`${s.id}/${p.id}`]} exam />
+              <ExamDrill items={p.items} saved={saved.answers[key]} onAnswers={handlers[key]} exam />
             </div>
-          ))}
+            );
+          })}
         </section>
       ))}
 
@@ -184,7 +195,8 @@ export default function Mock() {
             <Link to="/vocab/n4plus">JLPT N4 補充單字</Link>，背完再做一次。
           </p>
         ) : null}
-        {summary.review.length ? (
+        {/* 做完才列出要複習的課：做到一半就看，等於提示了還沒做的題目考哪一課 */}
+        {finished && summary.review.length ? (
           <p>
             答錯的題目出自：
             {summary.review.map((n, i) => (
@@ -203,14 +215,26 @@ export default function Mock() {
           </a>
           。
         </p>
-        <div className="btn-row">
-          <button type="button" className="btn" onClick={restart}>
-            全部重新做
-          </button>
-          <Link className="btn" to="/lessons">
-            回到課程
-          </Link>
-        </div>
+        {confirming ? (
+          <div className="btn-row" role="group" aria-label="確定要從頭做嗎">
+            <p className="small">要清掉這 {answeredAll} 題的作答，從頭做嗎？</p>
+            <button type="button" className="btn btn-primary" onClick={restart}>
+              清掉，從頭做
+            </button>
+            <button type="button" className="btn" onClick={() => setConfirming(false)} autoFocus>
+              取消
+            </button>
+          </div>
+        ) : (
+          <div className="btn-row">
+            <button type="button" className="btn" disabled={answeredAll === 0} onClick={() => setConfirming(true)}>
+              全部重新做
+            </button>
+            <Link className="btn" to="/lessons">
+              回到課程
+            </Link>
+          </div>
+        )}
       </section>
     </div>
   );

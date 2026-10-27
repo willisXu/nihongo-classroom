@@ -20,6 +20,8 @@ export interface DayActivity {
   writing: number;
   lesson: number;
   tutor: number;
+  /** 課文練習題、單元小測驗、模擬考的題數 */
+  drill: number;
   /** 全部加起來的練習次數 */
   total: number;
 }
@@ -31,7 +33,8 @@ export function dayActivity(activity: Activity, key: string): DayActivity {
   const writing = d.writing ?? 0;
   const lesson = d.lesson ?? 0;
   const tutor = d.tutor ?? 0;
-  return { kana, review, writing, lesson, tutor, total: kana + review + writing + lesson + tutor };
+  const drill = d.drill ?? 0;
+  return { kana, review, writing, lesson, tutor, drill, total: kana + review + writing + lesson + tutor + drill };
 }
 
 /** 日曆格子的深淺：0 沒學；1–9、10–29、30–59、60 以上次練習分成 1～4 */

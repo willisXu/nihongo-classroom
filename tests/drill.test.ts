@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { fillBlank, fillTarget, optionOrder, orderCorrect, shuffled, talkPitch, withResult } from '../src/components/Drill';
+import { fillBlank, fillTarget, grade, optionOrder, orderCorrect, shuffled, talkPitch, validAnswer, withAnswer } from '../src/components/Drill';
+import type { DrillItem } from '../src/data/types';
 import { parseJa } from '../src/lib/ja';
 
 /** 固定的亂數（測試每次結果一樣） */
@@ -71,15 +72,38 @@ describe('課文練習題', () => {
     expect(parseJa(fillTarget('⟦かよって⟧います', '⟦通って⟧'))).toEqual([{ t: '通', r: 'かよ' }, { t: 'っています' }]);
   });
 
-  it('模擬考只算第一次作答；課文的練習題重做時改成新的結果', () => {
+  it('模擬考只算第一次作答；課文的練習題重做時改成新的作答', () => {
     const start = [null, null, null];
-    const first = withResult(start, 1, false, true);
-    expect(first).toEqual([null, false, null]);
-    // 模擬考：看過答案再排一次也不會變成答對（同一個陣列，不必重畫）
-    expect(withResult(first, 1, true, true)).toBe(first);
-    expect(withResult(first, 2, true, true)).toEqual([null, false, true]);
-    // 課文：再排一次排對就算對
-    expect(withResult(first, 1, true)).toEqual([null, true, null]);
+    const first = withAnswer(start, 1, [2, 1, 0], true);
+    expect(first).toEqual([null, [2, 1, 0], null]);
+    // 模擬考：看過答案再排一次也不會變（同一個陣列，不必重畫）
+    expect(withAnswer(first, 1, [0, 1, 2], true)).toBe(first);
+    expect(withAnswer(first, 2, 0, true)).toEqual([null, [2, 1, 0], 0]);
+    // 課文：再排一次就照新的排法算
+    expect(withAnswer(first, 1, [0, 1, 2])).toEqual([null, [0, 1, 2], null]);
+  });
+
+  it('作答的對錯：選擇題比對原本的選項編號，排列題比對排出來的句子（含另一種也對的順序）', () => {
+    const choice: DrillItem = { kind: 'choice', q: '？', options: ['あ', 'い', 'う'], answer: 1 };
+    const order: DrillItem = { kind: 'order', zh: '', tiles: ['A', 'B', 'C'], also: [['B', 'A', 'C']] };
+    expect(grade(choice, null)).toBe(null);
+    expect(grade(choice, 1)).toBe(true);
+    expect(grade(choice, 0)).toBe(false);
+    expect(grade(order, [0, 1, 2])).toBe(true);
+    expect(grade(order, [1, 0, 2])).toBe(true);
+    expect(grade(order, [2, 1, 0])).toBe(false);
+    // 形狀不對的作答不算答了
+    expect(grade(choice, [0])).toBe(null);
+    expect(grade(order, 1)).toBe(null);
+    // 從瀏覽器讀回來的作答要對得上題目
+    expect(validAnswer(choice, 2)).toBe(true);
+    expect(validAnswer(choice, 3)).toBe(false);
+    expect(validAnswer(choice, 1.5)).toBe(false);
+    expect(validAnswer(choice, '1')).toBe(false);
+    expect(validAnswer(order, [2, 0, 1])).toBe(true);
+    expect(validAnswer(order, [0, 0, 1])).toBe(false);
+    expect(validAnswer(order, [0, 1])).toBe(false);
+    expect(validAnswer(order, [0, 1, 3])).toBe(false);
   });
 
   it('選擇題的題目句：＿＿ 換成答案', () => {

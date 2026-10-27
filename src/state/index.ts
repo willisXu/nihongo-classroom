@@ -339,7 +339,8 @@ export function clearVocabMiss(id: string) {
 }
 
 /* ---------------- 每日活動（連續天數） ---------------- */
-export type ActivityKind = 'kana' | 'writing' | 'review' | 'lesson' | 'tutor';
+/** drill：課文的練習題、單元小測驗、模擬考（每一題第一次作答記一次） */
+export type ActivityKind = 'kana' | 'writing' | 'review' | 'lesson' | 'tutor' | 'drill';
 export type Activity = Record<string, Partial<Record<ActivityKind, number>>>;
 
 export const activityStore = createStore<Activity>('nk.activity', () => ({}), (raw) => {
@@ -348,7 +349,7 @@ export const activityStore = createStore<Activity>('nk.activity', () => ({}), (r
   for (const [k, v] of Object.entries(raw)) {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(k) || !isObj(v)) continue;
     const day: Partial<Record<ActivityKind, number>> = {};
-    for (const kind of ['kana', 'writing', 'review', 'lesson', 'tutor'] as const) if (typeof v[kind] === 'number') day[kind] = v[kind] as number;
+    for (const kind of ['kana', 'writing', 'review', 'lesson', 'tutor', 'drill'] as const) if (typeof v[kind] === 'number') day[kind] = v[kind] as number;
     out[k] = day;
   }
   return out;
@@ -578,9 +579,13 @@ export function undoImport(): number {
   return n;
 }
 
+/** 模擬考還沒做完的作答（離開頁面再回來時接著做；不放進備份檔，見 lib/mockSave.ts） */
+export const MOCK_KEY = 'nk.mock';
+
 export function resetAllProgress() {
   for (const s of [kanaStore, kanaDaysStore, lessonStore, writingStore, srsStore, missStore, activityStore, usageStore]) s.reset();
-  // 全部清除就是全部：匯入前留的那一份也不留
+  // 全部清除就是全部：匯入前留的那一份、模擬考做到一半的作答也不留
   setPreImport(null);
+  removeKey(MOCK_KEY);
 }
 

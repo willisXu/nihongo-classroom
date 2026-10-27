@@ -1,11 +1,14 @@
 /**
  * 課文裡的練習題（初級課程）：選擇題、排列句子、聽力。答完馬上看對錯和說明，最後算總分。
- * 答題紀錄不存：課程的練習是當場確認懂了沒有，要長期記住的單字交給單字卡。
+ * 課文的練習不存作答：當場確認懂了沒有，要長期記住的單字交給單字卡。
+ * 模擬考的作答由頁面存起來（saved、onAnswers），離開頁面再回來可以接著做。
+ * 每一題第一次作答記一次學習紀錄（連續天數、學習日曆）。
  */
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode, type Ref } from 'react';
 import type { DrillItem } from '../data/types';
 import { jaSpeech } from '../lib/ja';
 import { speak, stopSpeaking } from '../lib/speech';
+import { logActivity } from '../state';
 import { Ja } from './Ja';
 import { Rich } from './Rich';
 import { Icon } from './Icon';
@@ -82,24 +85,72 @@ export function fillTarget(ja: string, option: string): string {
 
 export type Result = boolean | null;
 
-/** 記下第 i 題答對了沒有。firstOnly（模擬考）：只算第一次作答，之後不能改 */
-export function withResult(results: Result[], i: number, ok: boolean, firstOnly = false): Result[] {
-  if (firstOnly && results[i] !== null) return results;
-  return results.map((r, j) => (j === i ? ok : r));
+/** 一題的作答：選擇題、聽力題是選的選項（原本的編號）；排列題是點的詞的順序（tiles 的編號） */
+export type Answer = number | number[];
+
+/** 作答對不對（還沒作答是 null） */
+export function grade(item: DrillItem, answer: Answer | null | undefined): Result {
+  if (answer === null || answer === undefined) return null;
+  if (item.kind === 'order') return Array.isArray(answer) ? orderCorrect(item.tiles, answer, item.also) : null;
+  return typeof answer === 'number' ? answer === item.answer : null;
+}
+
+/** 從瀏覽器讀回來的作答是不是這一題可能的作答（題目改過、資料壞掉時不用） */
+export function validAnswer(item: DrillItem, a: unknown): a is Answer {
+  if (item.kind === 'order') {
+    return (
+      Array.isArray(a) &&
+      a.length === item.tiles.length &&
+      a.every((x) => Number.isInteger(x) && x >= 0 && x < item.tiles.length) &&
+      new Set(a).size === a.length
+    );
+  }
+  return typeof a === 'number' && Number.isInteger(a) && a >= 0 && a < item.options.length;
+}
+
+/** 記下第 i 題的作答。firstOnly（模擬考）：只算第一次作答，之後不能改（回傳同一個陣列） */
+export function withAnswer(answers: (Answer | null)[], i: number, a: Answer, firstOnly = false): (Answer | null)[] {
+  if (firstOnly && answers[i] !== null) return answers;
+  return answers.map((x, j) => (j === i ? a : x));
 }
 
 /**
  * 一組練習題。exam（模擬考）：只算第一次作答，沒有「再排一次」「全部重做」
  * （看過答案再重答，成績就不準了；要重新做整份考卷用頁面最下面的按鈕）。
+ * saved：之前的作答（模擬考接著做；只在第一次畫出來時讀）；onAnswers：作答改變時通知頁面（存起來、算成績）。
  */
-export function DrillBlock({ title, intro, items, onResults, exam = false }: { title?: string; intro?: string; items: DrillItem[]; onResults?: (results: Result[]) => void; exam?: boolean }) {
+export function DrillBlock({
+  title,
+  intro,
+  items,
+  onAnswers,
+  saved,
+  exam = false,
+}: {
+  title?: string;
+  intro?: string;
+  items: DrillItem[];
+  onAnswers?: (answers: (Answer | null)[]) => void;
+  saved?: (Answer | null)[];
+  exam?: boolean;
+}) {
   const [round, setRound] = useState(0);
-  const [results, setResults] = useState<Result[]>(() => items.map(() => null));
-  // 模擬考：每答一題就把結果交給頁面算總分
-  useEffect(() => onResults?.(results), [results, onResults]);
+  const [answers, setAnswers] = useState<(Answer | null)[]>(() => items.map((_, i) => saved?.[i] ?? null));
+  const latest = useRef(answers);
+  const results = answers.map((a, i) => grade(items[i], a));
   const answered = results.filter((r) => r !== null).length;
   const right = results.filter((r) => r === true).length;
-  const record = (i: number, ok: boolean) => setResults((rs) => withResult(rs, i, ok, exam));
+  const record = (i: number, a: Answer) => {
+    const prev = latest.current;
+    // 模擬考只算第一次作答（課文的練習可以再排一次，照最後一次算）
+    const next = withAnswer(prev, i, a, exam);
+    if (next === prev) return;
+    latest.current = next;
+    setAnswers(next);
+    // 學習紀錄：每一題第一次作答算一題（再排一次不重複算）
+    if (prev[i] === null) logActivity('drill');
+    onAnswers?.(next);
+  };
   // 「全部重做」按下後就消失了：題目重新出好以後，焦點移到第 1 題
   const listRef = useRef<HTMLOListElement>(null);
   const refocus = useRef(false);
@@ -119,7 +170,7 @@ export function DrillBlock({ title, intro, items, onResults, exam = false }: { t
       <ol className="drill-list" key={round} ref={listRef}>
         {items.map((it, i) => (
           <li key={i} className="drill-item card">
-            <DrillQuestion item={it} n={i + 1} exam={exam} onAnswer={(ok) => record(i, ok)} />
+            <DrillQuestion item={it} n={i + 1} exam={exam} initial={answers[i]} onAnswer={(a) => record(i, a)} />
           </li>
         ))}
       </ol>
@@ -139,7 +190,9 @@ export function DrillBlock({ title, intro, items, onResults, exam = false }: { t
             className="linkbtn"
             onClick={() => {
               refocus.current = true;
-              setResults(items.map(() => null));
+              const empty = items.map(() => null);
+              latest.current = empty;
+              setAnswers(empty);
               setRound((r) => r + 1);
             }}
           >
@@ -151,18 +204,28 @@ export function DrillBlock({ title, intro, items, onResults, exam = false }: { t
   );
 }
 
-function DrillQuestion({ item, n, exam, onAnswer }: { item: DrillItem; n: number; exam: boolean; onAnswer: (ok: boolean) => void }) {
+interface QProps<K extends DrillItem['kind']> {
+  item: Extract<DrillItem, { kind: K }>;
+  n: number;
+  /** 之前的作答（模擬考接著做時）：一開始就顯示成答過的樣子 */
+  initial: Answer | null;
+  onAnswer: (a: Answer) => void;
+}
+
+function DrillQuestion({ item, n, exam, initial, onAnswer }: { item: DrillItem; n: number; exam: boolean; initial: Answer | null; onAnswer: (a: Answer) => void }) {
   switch (item.kind) {
     case 'choice':
-      return <ChoiceQ item={item} n={n} onAnswer={onAnswer} />;
+      return <ChoiceQ item={item} n={n} initial={initial} onAnswer={onAnswer} />;
     case 'order':
-      return <OrderQ item={item} n={n} exam={exam} onAnswer={onAnswer} />;
+      return <OrderQ item={item} n={n} exam={exam} initial={initial} onAnswer={onAnswer} />;
     case 'listen':
-      return <ListenQ item={item} n={n} onAnswer={onAnswer} />;
+      return <ListenQ item={item} n={n} initial={initial} onAnswer={onAnswer} />;
     case 'talk':
-      return <TalkQ item={item} n={n} onAnswer={onAnswer} />;
+      return <TalkQ item={item} n={n} initial={initial} onAnswer={onAnswer} />;
   }
 }
+
+const asIndex = (a: Answer | null) => (typeof a === 'number' ? a : null);
 
 /** focusRef：答完要把焦點移過來時才給（排列題按「檢查」以後，原本的按鈕都不見了） */
 function Verdict({ ok, children, focusRef }: { ok: boolean; children?: ReactNode; focusRef?: Ref<HTMLDivElement> }) {
@@ -191,8 +254,8 @@ function AnswerLine({ options, ja, answer }: { options: string[]; ja?: boolean; 
   return <p>答案：{ja ? <Ja text={options[answer]} /> : options[answer]}</p>;
 }
 
-function ChoiceQ({ item, n, onAnswer }: { item: Extract<DrillItem, { kind: 'choice' }>; n: number; onAnswer: (ok: boolean) => void }) {
-  const [picked, setPicked] = useState<number | null>(null);
+function ChoiceQ({ item, n, initial, onAnswer }: QProps<'choice'>) {
+  const [picked, setPicked] = useState<number | null>(() => asIndex(initial));
   const qid = useId();
   const done = picked !== null;
   const ok = picked === item.answer;
@@ -226,7 +289,7 @@ function ChoiceQ({ item, n, onAnswer }: { item: Extract<DrillItem, { kind: 'choi
             onClick={() => {
               if (done) return;
               setPicked(i);
-              onAnswer(i === item.answer);
+              onAnswer(i);
             }}
           >
             <Ja text={item.options[i]} />
@@ -302,8 +365,8 @@ export function talkPitch(lines: { who: string }[]): number[] {
   });
 }
 
-function TalkQ({ item, n, onAnswer }: { item: Extract<DrillItem, { kind: 'talk' }>; n: number; onAnswer: (ok: boolean) => void }) {
-  const [picked, setPicked] = useState<number | null>(null);
+function TalkQ({ item, n, initial, onAnswer }: QProps<'talk'>) {
+  const [picked, setPicked] = useState<number | null>(() => asIndex(initial));
   const [playing, setPlaying] = useState(false);
   const qid = useId();
   const done = picked !== null;
@@ -348,7 +411,7 @@ function TalkQ({ item, n, onAnswer }: { item: Extract<DrillItem, { kind: 'talk' 
       </div>
       <AnswerOptions options={item.options} ja={item.optionsJa} order={order} answer={item.answer} picked={picked} onPick={(i) => {
         setPicked(i);
-        onAnswer(i === item.answer);
+        onAnswer(i);
       }} />
       {done ? (
         <Verdict ok={ok}>
@@ -372,11 +435,11 @@ function TalkQ({ item, n, onAnswer }: { item: Extract<DrillItem, { kind: 'talk' 
   );
 }
 
-function OrderQ({ item, n, exam, onAnswer }: { item: Extract<DrillItem, { kind: 'order' }>; n: number; exam: boolean; onAnswer: (ok: boolean) => void }) {
+function OrderQ({ item, n, exam, initial, onAnswer }: QProps<'order'> & { exam: boolean }) {
   // 第一次畫出來時打亂一次，之後重畫都不變
   const [order] = useState(() => shuffled(item.tiles, Math.random, item.also));
-  const [picked, setPicked] = useState<number[]>([]);
-  const [checked, setChecked] = useState<boolean | null>(null);
+  const [picked, setPicked] = useState<number[]>(() => (Array.isArray(initial) ? initial : []));
+  const [checked, setChecked] = useState<boolean | null>(() => (Array.isArray(initial) ? orderCorrect(item.tiles, initial, item.also) : null));
   const qid = useId();
   const answer = item.tiles.join('');
   // 排對了顯示自己排的句子（可能是另一種也對的順序），排錯了顯示正確答案
@@ -398,7 +461,8 @@ function OrderQ({ item, n, exam, onAnswer }: { item: Extract<DrillItem, { kind: 
   const firstInBank = () => tilesIn(bankRef.current)[0];
   /** 選了第 at 個詞：焦點到同一個位置的下一個詞（選的是最後一個就往前一個），都選完了到「檢查」 */
   const pick = (i: number, at: number) => {
-    setPicked((p) => [...p, i]);
+    // 同一個詞連點兩下（同一個事件迴圈裡）只算一次
+    setPicked((p) => (p.includes(i) ? p : [...p, i]));
     focusNext.current = () => {
       const left = tilesIn(bankRef.current);
       return left.length ? left[Math.min(at, left.length - 1)] : checkRef.current;
@@ -415,7 +479,7 @@ function OrderQ({ item, n, exam, onAnswer }: { item: Extract<DrillItem, { kind: 
   const check = () => {
     const ok = orderCorrect(item.tiles, picked, item.also);
     setChecked(ok);
-    onAnswer(ok);
+    onAnswer(picked);
     focusNext.current = () => verdictRef.current;
   };
   return (
@@ -509,8 +573,8 @@ function OrderQ({ item, n, exam, onAnswer }: { item: Extract<DrillItem, { kind: 
   );
 }
 
-function ListenQ({ item, n, onAnswer }: { item: Extract<DrillItem, { kind: 'listen' }>; n: number; onAnswer: (ok: boolean) => void }) {
-  const [picked, setPicked] = useState<number | null>(null);
+function ListenQ({ item, n, initial, onAnswer }: QProps<'listen'>) {
+  const [picked, setPicked] = useState<number | null>(() => asIndex(initial));
   const qid = useId();
   const done = picked !== null;
   const ok = picked === item.answer;
@@ -532,7 +596,7 @@ function ListenQ({ item, n, onAnswer }: { item: Extract<DrillItem, { kind: 'list
       </div>
       <AnswerOptions options={item.options} ja={item.optionsJa} order={order} answer={item.answer} picked={picked} onPick={(i) => {
         setPicked(i);
-        onAnswer(i === item.answer);
+        onAnswer(i);
       }} />
       {done ? (
         <Verdict ok={ok}>
